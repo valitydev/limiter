@@ -62,6 +62,15 @@ handle_function_('Get', {LimitID}, LimitContext, _Opts) ->
             woody_error:raise(business, #limiter_cfg_LimitConfigNotFound{})
     end.
 
+mk_limit_config(<<"ShopDayTurnover">>) ->
+    {ok, #{
+        processor_type => <<"TurnoverProcessor">>,
+        type => turnover,
+        scope => {scope, shop},
+        shard_size => 12,
+        context_type => payment_processing,
+        time_range_type => {calendar, day}
+    }};
 mk_limit_config(<<"ShopMonthTurnover">>) ->
     {ok, #{
         processor_type => <<"TurnoverProcessor">>,
