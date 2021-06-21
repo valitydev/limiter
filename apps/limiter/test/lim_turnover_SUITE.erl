@@ -286,7 +286,7 @@ refund_ok(C) ->
     ID = lim_time:to_rfc3339(lim_time:now()),
     OwnerID = <<"WWWcool Ltd">>,
     ShopID = <<"shop">>,
-    #{client := Client} = _LimitConfig = prepare_environment(ID, <<"ShopMonthTurnover">>, C),
+    #{client := Client} = _LimitConfig = prepare_environment(ID, <<"ShopDayTurnover">>, C),
     Context0 = ?ctx_invoice_payment(OwnerID, ShopID, ?cash(15), ?cash(15)),
     RefundContext1 = ?ctx_invoice_payment_refund(OwnerID, ShopID, ?cash(10), ?cash(10), ?cash(10)),
     Timestamp = lim_time:to_rfc3339(lim_time:now()),

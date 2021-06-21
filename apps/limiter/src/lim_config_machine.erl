@@ -285,8 +285,8 @@ get_handler(ID, LimitContext) ->
 -spec calculate_time_range(timestamp(), config()) -> time_range().
 calculate_time_range(Timestamp, Config) ->
     StartedAt = started_at(Config),
-    {StartDateTime, USec} = lim_range_codec:parse_timestamp(StartedAt),
-    {CurrentDateTime, USec} = lim_range_codec:parse_timestamp(Timestamp),
+    {StartDateTime, _USec0} = lim_range_codec:parse_timestamp(StartedAt),
+    {CurrentDateTime, _USec1} = lim_range_codec:parse_timestamp(Timestamp),
     CurrentSec = calendar:datetime_to_gregorian_seconds(CurrentDateTime),
     case time_range_type(Config) of
         {calendar, Range} ->
@@ -431,8 +431,8 @@ marshal_timestamp(DateTime) ->
 calculate_shard_id(Timestamp, Config) ->
     StartedAt = started_at(Config),
     ShardSize = shard_size(Config),
-    {StartDateTime, USec} = lim_range_codec:parse_timestamp(StartedAt),
-    {CurrentDateTime, USec} = lim_range_codec:parse_timestamp(Timestamp),
+    {StartDateTime, _USec0} = lim_range_codec:parse_timestamp(StartedAt),
+    {CurrentDateTime, _USec1} = lim_range_codec:parse_timestamp(Timestamp),
     case time_range_type(Config) of
         {calendar, Range} ->
             Units = calculate_time_units(Range, CurrentDateTime, StartDateTime),
