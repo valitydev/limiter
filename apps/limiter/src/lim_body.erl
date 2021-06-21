@@ -30,7 +30,7 @@ get_body(BodyType, Config = #{body_type := {cash, ConfigCurrency}}, LimitContext
     case get_body_for_operation(BodyType, Operation, Config, LimitContext) of
         {ok, {cash, #{currency := ConfigCurrency}}} = Result ->
             Result;
-        {ok, {cash, #{amount := Amount, currency := Currency}}} ->
+        {ok, {cash, #{amount := Amount, currency := Currency}} = _Body} ->
             case lim_rates:get_converted_amount({Amount, Currency}, Config, LimitContext) of
                 {ok, ConvertedAmount} ->
                     {ok, create_body_from_cash(ConvertedAmount, ConfigCurrency)};
@@ -57,7 +57,7 @@ get_body_for_operation(full, invoice_payment_adjustment, Config, LimitContext) -
     lim_context:get_from_context(ContextType, cost, invoice_payment, LimitContext);
 get_body_for_operation(full, invoice_payment_refund, Config, LimitContext) ->
     ContextType = lim_config_machine:context_type(Config),
-    lim_context:get_from_context(ContextType, cost, invoice_payment, LimitContext);
+    lim_context:get_from_context(ContextType, cost, invoice_payment_refund, LimitContext);
 get_body_for_operation(full, invoice_payment_chargeback = Operation, Config, LimitContext) ->
     ContextType = lim_config_machine:context_type(Config),
     lim_context:get_from_context(ContextType, body, Operation, LimitContext);

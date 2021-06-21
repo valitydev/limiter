@@ -2,6 +2,7 @@
 
 -include_lib("stdlib/include/assert.hrl").
 -include_lib("common_test/include/ct.hrl").
+-include_lib("lim_ct_helper.hrl").
 
 -include_lib("limiter_proto/include/lim_configurator_thrift.hrl").
 -include_lib("xrates_proto/include/xrates_rate_thrift.hrl").
@@ -22,6 +23,7 @@
 -export([hold_ok/1]).
 -export([commit_ok/1]).
 -export([rollback_ok/1]).
+-export([refund_ok/1]).
 -export([get_config_ok/1]).
 
 -type test_case_name() :: atom().
@@ -48,7 +50,8 @@ groups() ->
             hold_ok,
             commit_ok,
             rollback_ok,
-            get_config_ok
+            get_config_ok,
+            refund_ok
         ]}
     ].
 
@@ -266,32 +269,45 @@ commit_ok(C) ->
 rollback_ok(C) ->
     ID = <<"ID">>,
     #{client := Client} = prepare_environment(ID, <<"GlobalMonthTurnover">>, C),
-    Context = #limiter_context_LimitContext{
-        payment_processing = #limiter_context_ContextPaymentProcessing{
-            op = {invoice_payment, #limiter_context_PaymentProcessingOperationInvoicePayment{}},
-            invoice = #limiter_context_Invoice{
-                effective_payment = #limiter_context_InvoicePayment{
-                    created_at = <<"2000-01-01T00:00:00Z">>,
-                    cost = #limiter_base_Cash{
-                        amount = 10,
-                        currency = #limiter_base_CurrencyRef{symbolic_code = <<"RUB">>}
-                    },
-                    capture_cost = #limiter_base_Cash{
-                        amount = 0,
-                        currency = #limiter_base_CurrencyRef{symbolic_code = <<"RUB">>}
-                    }
-                }
-            }
-        }
-    },
+    Context0 = ?ctx_invoice_payment(?cash(10), ?cash(10)),
+    Context1 = ?ctx_invoice_payment(?cash(10), ?cash(0)),
+
     Timestamp = lim_time:to_rfc3339(lim_time:now()),
     LimitChangeID = <<Timestamp/binary, "Rollback">>,
     Change = #limiter_LimitChange{
         id = ID,
         change_id = LimitChangeID
     },
-    {ok, {vector, _}} = hold_and_commit(Change, Context, Client),
-    {ok, #limiter_Limit{}} = lim_client:get(ID, Context, Client).
+    {ok, {vector, _}} = lim_client:hold(Change, Context0, Client),
+    {ok, {vector, _}} = lim_client:commit(Change, Context1, Client).
+
+-spec refund_ok(config()) -> _.
+refund_ok(C) ->
+    ID = lim_time:to_rfc3339(lim_time:now()),
+    OwnerID = <<"WWWcool Ltd">>,
+    ShopID = <<"shop">>,
+    #{client := Client} = _LimitConfig = prepare_environment(ID, <<"ShopMonthTurnover">>, C),
+    Context0 = ?ctx_invoice_payment(OwnerID, ShopID, ?cash(15), ?cash(15)),
+    RefundContext1 = ?ctx_invoice_payment_refund(OwnerID, ShopID, ?cash(10), ?cash(10), ?cash(10)),
+    Timestamp = lim_time:to_rfc3339(lim_time:now()),
+    LimitChangeID = <<Timestamp/binary, "Payment">>,
+
+    Change = #limiter_LimitChange{
+        id = ID,
+        change_id = LimitChangeID
+    },
+    {ok, {vector, _}} = hold_and_commit(Change, Context0, Client),
+
+    Timestamp2 = lim_time:to_rfc3339(lim_time:now()),
+    LimitChangeID2 = <<Timestamp2/binary, "Refund">>,
+    Change2 = #limiter_LimitChange{
+        id = ID,
+        change_id = LimitChangeID2
+    },
+
+    {ok, {vector, _}} = hold_and_commit(Change2, RefundContext1, Client),
+    {ok, #limiter_Limit{} = Limit2} = lim_client:get(ID, RefundContext1, Client),
+    ?assertEqual(Limit2#limiter_Limit.amount, 5).
 
 -spec get_config_ok(config()) -> _.
 get_config_ok(C) ->

@@ -69,7 +69,8 @@ mk_limit_config(<<"ShopMonthTurnover">>) ->
         scope => {scope, shop},
         shard_size => 12,
         context_type => payment_processing,
-        time_range_type => {calendar, month}
+        time_range_type => {calendar, month},
+        op_behaviour => #{invoice_payment_refund => subtraction}
     }};
 mk_limit_config(<<"PartyMonthTurnover">>) ->
     {ok, #{

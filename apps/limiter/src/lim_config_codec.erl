@@ -59,8 +59,30 @@ marshal_config(Config) ->
         time_range_type = marshal_time_range_type(lim_config_machine:time_range_type(Config)),
         context_type = marshal_context_type(lim_config_machine:context_type(Config)),
         type = maybe_apply(lim_config_machine:type(Config), fun marshal_type/1),
-        scope = maybe_apply(lim_config_machine:scope(Config), fun marshal_scope/1)
+        scope = maybe_apply(lim_config_machine:scope(Config), fun marshal_scope/1),
+        op_behaviour = maybe_apply(lim_config_machine:op_behaviour(Config), fun marshal_op_behaviour/1)
     }.
+
+marshal_op_behaviour(OpBehaviour) ->
+    Invoice = maps:get(invoice, OpBehaviour, undefined),
+    Payment = maps:get(invoice_payment, OpBehaviour, undefined),
+    Adjustment = maps:get(invoice_adjustment, OpBehaviour, undefined),
+    PaymentAdjustment = maps:get(invoice_payment_adjustment, OpBehaviour, undefined),
+    PaymentRefund = maps:get(invoice_payment_refund, OpBehaviour, undefined),
+    PaymentChargeback = maps:get(invoice_payment_adjustment, OpBehaviour, undefined),
+    #limiter_config_OperationLimitBehaviour{
+        invoice = maybe_apply(Invoice, fun marshal_behaviour/1),
+        invoice_adjustment = maybe_apply(Adjustment, fun marshal_behaviour/1),
+        invoice_payment = maybe_apply(Payment, fun marshal_behaviour/1),
+        invoice_payment_adjustment = maybe_apply(PaymentAdjustment, fun marshal_behaviour/1),
+        invoice_payment_refund = maybe_apply(PaymentRefund, fun marshal_behaviour/1),
+        invoice_payment_chargeback = maybe_apply(PaymentChargeback, fun marshal_behaviour/1)
+    }.
+
+marshal_behaviour(subtraction) ->
+    {subtraction, #limiter_config_Subtraction{}};
+marshal_behaviour(addition) ->
+    {addition, #limiter_config_Addition{}}.
 
 marshal_body_type(amount) ->
     {amount, #limiter_config_LimitBodyTypeAmount{}};
@@ -139,7 +161,8 @@ unmarshal_config(#limiter_config_LimitConfig{
     time_range_type = TimeRangeType,
     context_type = ContextType,
     type = Type,
-    scope = Scope
+    scope = Scope,
+    op_behaviour = OpBehaviour
 }) ->
     genlib_map:compact(#{
         id => ID,
@@ -152,8 +175,32 @@ unmarshal_config(#limiter_config_LimitConfig{
         context_type => unmarshal_context_type(ContextType),
         type => maybe_apply(Type, fun unmarshal_type/1),
         scope => maybe_apply(Scope, fun unmarshal_scope/1),
-        description => Description
+        description => Description,
+        op_behaviour => maybe_apply(OpBehaviour, fun unmarshal_op_behaviour/1)
     }).
+
+unmarshal_op_behaviour(OpBehaviour) ->
+    #limiter_config_OperationLimitBehaviour{
+        invoice = Invoice,
+        invoice_adjustment = Adjustment,
+        invoice_payment = Payment,
+        invoice_payment_adjustment = PaymentAdjustment,
+        invoice_payment_refund = Refund,
+        invoice_payment_chargeback = Chargeback
+    } = OpBehaviour,
+    genlib_map:compact(#{
+        invoice => maybe_apply(Invoice, fun unmarshal_behaviour/1),
+        invoice_adjustment => maybe_apply(Adjustment, fun unmarshal_behaviour/1),
+        invoice_payment => maybe_apply(Payment, fun unmarshal_behaviour/1),
+        invoice_payment_adjustment => maybe_apply(PaymentAdjustment, fun unmarshal_behaviour/1),
+        invoice_payment_refund => maybe_apply(Refund, fun unmarshal_behaviour/1),
+        invoice_payment_chargeback => maybe_apply(Chargeback, fun unmarshal_behaviour/1)
+    }).
+
+unmarshal_behaviour({subtraction, #limiter_config_Subtraction{}}) ->
+    subtraction;
+unmarshal_behaviour({addition, #limiter_config_Addition{}}) ->
+    addition.
 
 -spec unmarshal_body_type(encoded_value()) -> decoded_value().
 unmarshal_body_type({amount, #limiter_config_LimitBodyTypeAmount{}}) ->
