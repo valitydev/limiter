@@ -80,12 +80,13 @@
 }.
 
 -type op_behaviour() :: #{operation_type() := addition | subtraction}.
--type operation_type() :: invoice
-                        | invoice_adjustment
-                        | invoice_payment
-                        | invoice_payment_adjustment
-                        | invoice_payment_refund
-                        | invoice_payment_chargeback.
+-type operation_type() ::
+    invoice
+    | invoice_adjustment
+    | invoice_payment
+    | invoice_payment_adjustment
+    | invoice_payment_refund
+    | invoice_payment_chargeback.
 
 -type lim_id() :: lim_limiter_thrift:'LimitID'().
 -type lim_change() :: lim_limiter_thrift:'LimitChange'().

@@ -8,7 +8,6 @@
     currency = #limiter_base_CurrencyRef{symbolic_code = <<"RUB">>}
 }).
 
-
 -define(ctx_invoice_payment(Cost, CaptureCost), ?ctx_invoice_payment(undefined, undefined, Cost, CaptureCost)).
 
 -define(ctx_invoice_payment(OwnerID, ShopID, Cost, CaptureCost), #limiter_context_LimitContext{
@@ -39,7 +38,6 @@
                 effective_refund = #limiter_context_InvoicePaymentRefund{
                     cost = RefundCost,
                     created_at = <<"2000-01-01T00:00:00Z">>
-
                 }
             }
         }
