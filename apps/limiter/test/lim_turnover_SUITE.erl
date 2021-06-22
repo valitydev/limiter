@@ -331,7 +331,10 @@ prepare_environment(ID, LimitName, _C) ->
         name = LimitName,
         description = <<"description">>,
         started_at = <<"2000-01-01T00:00:00Z">>,
-        body_type = {cash, #limiter_config_LimitBodyTypeCash{currency = <<"RUB">>}}
+        body_type = {cash, #limiter_config_LimitBodyTypeCash{currency = <<"RUB">>}},
+        op_behaviour = #limiter_config_OperationLimitBehaviour{
+            invoice_payment_refund = {subtraction, #limiter_config_Subtraction{}}
+        }
     },
     {ok, LimitConfig} = lim_client:create_config(Params, Client),
     #{config => LimitConfig, client => Client}.

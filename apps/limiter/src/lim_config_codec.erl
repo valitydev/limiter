@@ -6,6 +6,8 @@
 -export([unmarshal/2]).
 -export([marshal_config/1]).
 -export([unmarshal_body_type/1]).
+-export([unmarshal_op_behaviour/1]).
+-export([maybe_apply/2]).
 
 %% Types
 
@@ -17,6 +19,7 @@
 -type decoded_value() :: decoded_value(any()).
 -type decoded_value(T) :: T.
 
+-spec maybe_apply(any(), function()) -> any().
 maybe_apply(undefined, _) ->
     undefined;
 maybe_apply(Value, Fun) ->
@@ -64,19 +67,9 @@ marshal_config(Config) ->
     }.
 
 marshal_op_behaviour(OpBehaviour) ->
-    Invoice = maps:get(invoice, OpBehaviour, undefined),
-    Payment = maps:get(invoice_payment, OpBehaviour, undefined),
-    Adjustment = maps:get(invoice_adjustment, OpBehaviour, undefined),
-    PaymentAdjustment = maps:get(invoice_payment_adjustment, OpBehaviour, undefined),
     PaymentRefund = maps:get(invoice_payment_refund, OpBehaviour, undefined),
-    PaymentChargeback = maps:get(invoice_payment_adjustment, OpBehaviour, undefined),
     #limiter_config_OperationLimitBehaviour{
-        invoice = maybe_apply(Invoice, fun marshal_behaviour/1),
-        invoice_adjustment = maybe_apply(Adjustment, fun marshal_behaviour/1),
-        invoice_payment = maybe_apply(Payment, fun marshal_behaviour/1),
-        invoice_payment_adjustment = maybe_apply(PaymentAdjustment, fun marshal_behaviour/1),
-        invoice_payment_refund = maybe_apply(PaymentRefund, fun marshal_behaviour/1),
-        invoice_payment_chargeback = maybe_apply(PaymentChargeback, fun marshal_behaviour/1)
+        invoice_payment_refund = maybe_apply(PaymentRefund, fun marshal_behaviour/1)
     }.
 
 marshal_behaviour(subtraction) ->
@@ -179,22 +172,13 @@ unmarshal_config(#limiter_config_LimitConfig{
         op_behaviour => maybe_apply(OpBehaviour, fun unmarshal_op_behaviour/1)
     }).
 
+-spec unmarshal_op_behaviour(encoded_value()) -> decoded_value().
 unmarshal_op_behaviour(OpBehaviour) ->
     #limiter_config_OperationLimitBehaviour{
-        invoice = Invoice,
-        invoice_adjustment = Adjustment,
-        invoice_payment = Payment,
-        invoice_payment_adjustment = PaymentAdjustment,
-        invoice_payment_refund = Refund,
-        invoice_payment_chargeback = Chargeback
+        invoice_payment_refund = Refund
     } = OpBehaviour,
     genlib_map:compact(#{
-        invoice => maybe_apply(Invoice, fun unmarshal_behaviour/1),
-        invoice_adjustment => maybe_apply(Adjustment, fun unmarshal_behaviour/1),
-        invoice_payment => maybe_apply(Payment, fun unmarshal_behaviour/1),
-        invoice_payment_adjustment => maybe_apply(PaymentAdjustment, fun unmarshal_behaviour/1),
-        invoice_payment_refund => maybe_apply(Refund, fun unmarshal_behaviour/1),
-        invoice_payment_chargeback => maybe_apply(Chargeback, fun unmarshal_behaviour/1)
+        invoice_payment_refund => maybe_apply(Refund, fun unmarshal_behaviour/1)
     }).
 
 unmarshal_behaviour({subtraction, #limiter_config_Subtraction{}}) ->

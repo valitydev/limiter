@@ -76,7 +76,8 @@
     context_type := context_type(),
     type => limit_type(),
     scope => limit_scope(),
-    description => description()
+    description => description(),
+    op_behaviour => op_behaviour()
 }.
 
 -type op_behaviour() :: #{operation_type() := addition | subtraction}.

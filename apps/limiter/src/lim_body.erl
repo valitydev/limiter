@@ -57,7 +57,7 @@ get_body_for_operation(full, invoice_payment_adjustment, Config, LimitContext) -
     lim_context:get_from_context(ContextType, cost, invoice_payment, LimitContext);
 get_body_for_operation(full, invoice_payment_refund, Config, LimitContext) ->
     ContextType = lim_config_machine:context_type(Config),
-    lim_context:get_from_context(ContextType, cost, invoice_payment_refund, LimitContext);
+    lim_context:get_from_context(ContextType, cost, invoice_payment, LimitContext);
 get_body_for_operation(full, invoice_payment_chargeback = Operation, Config, LimitContext) ->
     ContextType = lim_config_machine:context_type(Config),
     lim_context:get_from_context(ContextType, body, Operation, LimitContext);

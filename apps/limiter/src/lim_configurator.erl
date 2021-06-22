@@ -30,7 +30,8 @@ handle_function_(
         name = Name,
         description = Description,
         started_at = StartedAt,
-        body_type = BodyType
+        body_type = BodyType,
+        op_behaviour = OpBehaviour
     }},
     LimitContext,
     _Opts
@@ -39,11 +40,15 @@ handle_function_(
         {ok, Config} ->
             {ok, LimitConfig} = lim_config_machine:start(
                 ID,
-                Config#{
+                genlib_map:compact(Config#{
                     description => Description,
                     started_at => StartedAt,
-                    body_type => lim_config_codec:unmarshal_body_type(BodyType)
-                },
+                    body_type => lim_config_codec:unmarshal_body_type(BodyType),
+                    op_behaviour => lim_config_codec:maybe_apply(
+                        OpBehaviour,
+                        fun lim_config_codec:unmarshal_op_behaviour/1
+                    )
+                }),
                 LimitContext
             ),
             {ok, lim_config_codec:marshal_config(LimitConfig)};
@@ -69,8 +74,7 @@ mk_limit_config(<<"ShopDayTurnover">>) ->
         scope => {scope, shop},
         shard_size => 7,
         context_type => payment_processing,
-        time_range_type => {calendar, day},
-        op_behaviour => #{invoice_payment_refund => subtraction}
+        time_range_type => {calendar, day}
     }};
 mk_limit_config(<<"ShopMonthTurnover">>) ->
     {ok, #{
