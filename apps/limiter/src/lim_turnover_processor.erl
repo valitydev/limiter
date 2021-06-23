@@ -84,7 +84,8 @@ hold(LimitChange = #limiter_LimitChange{id = LimitID}, Config = #{body_type := B
         {ok, #{account_id_from := AccountIDFrom, account_id_to := AccountIDTo}} =
             lim_range_machine:ensure_range_exist_in_state(TimeRange, LimitRangeState, LimitContext),
         Postings = lim_p_transfer:construct_postings(AccountIDFrom, AccountIDTo, Body),
-        lim_accounting:hold(construct_plan_id(LimitChange), {1, Postings}, LimitContext)
+        Postings1 = apply_op_behaviour(Postings, LimitContext, Config),
+        lim_accounting:hold(construct_plan_id(LimitChange), {1, Postings1}, LimitContext)
     end).
 
 -spec commit(lim_change(), config(), lim_context()) -> ok | {error, commit_error()}.
@@ -130,15 +131,26 @@ partial_commit(PartialBody, LimitChange = #limiter_LimitChange{id = LimitID}, Co
         TimeRange = lim_config_machine:calculate_time_range(Timestamp, Config),
         {ok, #{account_id_from := AccountIDFrom, account_id_to := AccountIDTo}} =
             lim_range_machine:get_range(TimeRange, LimitRangeState),
-
-        PartialPostings = lim_p_transfer:construct_postings(AccountIDFrom, AccountIDTo, PartialBody),
-        FullPostings = lim_p_transfer:construct_postings(AccountIDFrom, AccountIDTo, FullBody),
-        NewBatchList = [{2, lim_p_transfer:reverse_postings(FullPostings)} | [{3, PartialPostings}]],
-
+        PartialPostings0 = lim_p_transfer:construct_postings(AccountIDFrom, AccountIDTo, PartialBody),
+        FullPostings0 = lim_p_transfer:construct_postings(AccountIDFrom, AccountIDTo, FullBody),
+        PartialPostings1 = apply_op_behaviour(PartialPostings0, LimitContext, Config),
+        FullPostings1 = apply_op_behaviour(FullPostings0, LimitContext, Config),
+        NewBatchList = [{2, lim_p_transfer:reverse_postings(FullPostings1)} | [{3, PartialPostings1}]],
         PlanID = construct_plan_id(LimitChange),
         unwrap(lim_accounting:plan(PlanID, NewBatchList, LimitContext)),
-        unwrap(lim_accounting:commit(PlanID, [{1, FullPostings} | NewBatchList], LimitContext))
+        unwrap(lim_accounting:commit(PlanID, [{1, FullPostings1} | NewBatchList], LimitContext))
     end).
+
+apply_op_behaviour(Posting, LimitContext, #{op_behaviour := ComputationConfig}) ->
+    {ok, Operation} = lim_context:get_operation(payment_processing, LimitContext),
+    case maps:get(Operation, ComputationConfig, undefined) of
+        subtraction ->
+            lim_p_transfer:reverse_postings(Posting);
+        Type when Type =:= undefined orelse Type =:= additional ->
+            Posting
+    end;
+apply_op_behaviour(Body, _LimitContext, _Config) ->
+    Body.
 
 assert_partial_body(
     {cash, #{amount := Partial, currency := Currency}},

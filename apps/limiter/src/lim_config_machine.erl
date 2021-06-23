@@ -16,6 +16,7 @@
 -export([type/1]).
 -export([scope/1]).
 -export([context_type/1]).
+-export([op_behaviour/1]).
 
 %% API
 
@@ -62,7 +63,8 @@
     context_type := context_type(),
     type => limit_type(),
     scope => limit_scope(),
-    description => description()
+    description => description(),
+    op_behaviour => op_behaviour()
 }.
 
 -type create_params() :: #{
@@ -74,8 +76,12 @@
     context_type := context_type(),
     type => limit_type(),
     scope => limit_scope(),
-    description => description()
+    description => description(),
+    op_behaviour => op_behaviour()
 }.
+
+-type op_behaviour() :: #{operation_type() := addition | subtraction}.
+-type operation_type() :: invoice_payment_refund.
 
 -type lim_id() :: lim_limiter_thrift:'LimitID'().
 -type lim_change() :: lim_limiter_thrift:'LimitChange'().
@@ -208,6 +214,12 @@ scope(_) ->
 -spec context_type(config()) -> context_type().
 context_type(#{context_type := Value}) ->
     Value.
+
+-spec op_behaviour(config()) -> lim_maybe:maybe(op_behaviour()).
+op_behaviour(#{op_behaviour := Value}) ->
+    Value;
+op_behaviour(_) ->
+    undefined.
 
 %%
 
