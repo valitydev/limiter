@@ -1,8 +1,6 @@
 -module(lim_turnover_processor).
 
--include_lib("limiter_proto/include/lim_base_thrift.hrl").
 -include_lib("limiter_proto/include/lim_limiter_thrift.hrl").
--include_lib("damsel/include/dmsl_accounter_thrift.hrl").
 
 -behaviour(lim_config_machine).
 
@@ -48,12 +46,9 @@
 -spec get_limit(lim_id(), config(), lim_context()) -> {ok, limit()} | {error, get_limit_error()}.
 get_limit(LimitID, Config, LimitContext) ->
     do(fun() ->
-        {ok, Timestamp} = lim_context:get_from_context(payment_processing, created_at, LimitContext),
-        LimitRangeID = construct_range_id(LimitID, Timestamp, Config, LimitContext),
-        LimitRange = unwrap(limit, lim_range_machine:get(LimitRangeID, LimitContext)),
-        TimeRange = lim_config_machine:calculate_time_range(Timestamp, Config),
+        {LimitRangeID, TimeRange} = find_limit_range(LimitID, Config, LimitContext),
         #{max_available_amount := Amount} =
-            unwrap(lim_range_machine:get_range_balance(TimeRange, LimitRange, LimitContext)),
+            unwrap(range, lim_range_machine:get_range_balance(LimitRangeID, TimeRange, LimitContext)),
         #limiter_Limit{
             id = LimitRangeID,
             amount = Amount,
@@ -63,53 +58,66 @@ get_limit(LimitID, Config, LimitContext) ->
     end).
 
 -spec hold(lim_change(), config(), lim_context()) -> ok | {error, hold_error()}.
-hold(LimitChange = #limiter_LimitChange{id = LimitID}, Config = #{body_type := BodyType}, LimitContext) ->
+hold(LimitChange = #limiter_LimitChange{id = LimitID}, Config, LimitContext) ->
     do(fun() ->
-        {ok, Timestamp} = lim_context:get_from_context(payment_processing, created_at, LimitContext),
-        {ok, Body} = lim_body:get_body(full, Config, LimitContext),
-        LimitRangeID = construct_range_id(LimitID, Timestamp, Config, LimitContext),
-        Currency =
-            case BodyType of
-                {cash, CashCurrency} -> CashCurrency;
-                amount -> undefined
-            end,
-        CreateParams = genlib_map:compact(#{
-            id => LimitRangeID,
-            type => lim_config_machine:time_range_type(Config),
-            created_at => Timestamp,
-            currency => Currency
-        }),
-        {ok, LimitRangeState} = lim_range_machine:ensure_exist(CreateParams, LimitContext),
-        TimeRange = lim_config_machine:calculate_time_range(Timestamp, Config),
-        {ok, #{account_id_from := AccountIDFrom, account_id_to := AccountIDTo}} =
-            lim_range_machine:ensure_range_exist_in_state(TimeRange, LimitRangeState, LimitContext),
-        Postings = lim_p_transfer:construct_postings(AccountIDFrom, AccountIDTo, Body),
-        Postings1 = apply_op_behaviour(Postings, LimitContext, Config),
-        lim_accounting:hold(construct_plan_id(LimitChange), {1, Postings1}, LimitContext)
+        TimeRangeAccount = ensure_limit_time_range(LimitID, Config, LimitContext),
+        Body = unwrap(lim_body:get_body(full, Config, LimitContext)),
+        Posting = construct_posting(TimeRangeAccount, Body, Config, LimitContext),
+        unwrap(lim_accounting:hold(construct_plan_id(LimitChange), {1, [Posting]}, LimitContext))
     end).
 
 -spec commit(lim_change(), config(), lim_context()) -> ok | {error, commit_error()}.
-commit(LimitChange, Config, LimitContext) ->
+commit(LimitChange = #limiter_LimitChange{id = LimitID}, Config, LimitContext) ->
     do(fun() ->
-        case lim_body:get_body(partial, Config, LimitContext) of
-            {ok, Body} ->
-                unwrap(partial_commit(Body, LimitChange, Config, LimitContext));
-            {error, notfound} ->
-                PlanID = construct_plan_id(LimitChange),
-                [Batch] = unwrap(plan, lim_accounting:get_plan(PlanID, LimitContext)),
-                unwrap(lim_accounting:commit(PlanID, [Batch], LimitContext))
-        end
+        TimeRangeAccount = ensure_limit_time_range(LimitID, Config, LimitContext),
+        PlanID = construct_plan_id(LimitChange),
+        Operations = construct_commit_plan(TimeRangeAccount, Config, LimitContext),
+        ok = lists:foreach(
+            fun
+                ({hold, Batch}) ->
+                    % NOTE
+                    % This operation **can** fail with `InvalidRequest` when the plan is already
+                    % committed, yet we knowingly ignore any them. Instead we rely on the fact that
+                    % accounter guarantees us that it commits **only** when submitted plan consists
+                    % of exactly the same set of batches which were held before.
+                    lim_accounting:hold(PlanID, Batch, LimitContext);
+                ({commit, Batches}) ->
+                    unwrap(lim_accounting:commit(PlanID, Batches, LimitContext));
+                ({rollback, Batches}) ->
+                    unwrap(lim_accounting:rollback(PlanID, Batches, LimitContext))
+            end,
+            Operations
+        )
     end).
 
 -spec rollback(lim_change(), config(), lim_context()) -> ok | {error, rollback_error()}.
-rollback(LimitChange, _Config, LimitContext) ->
+rollback(LimitChange = #limiter_LimitChange{id = LimitID}, Config, LimitContext) ->
     do(fun() ->
-        PlanID = construct_plan_id(LimitChange),
-        BatchList = unwrap(plan, lim_accounting:get_plan(PlanID, LimitContext)),
-        unwrap(lim_accounting:rollback(PlanID, BatchList, LimitContext))
+        TimeRangeAccount = ensure_limit_time_range(LimitID, Config, LimitContext),
+        Body = unwrap(lim_body:get_body(full, Config, LimitContext)),
+        Posting = construct_posting(TimeRangeAccount, Body, Config, LimitContext),
+        unwrap(lim_accounting:rollback(construct_plan_id(LimitChange), [{1, [Posting]}], LimitContext))
     end).
 
+find_limit_range(LimitID, Config, LimitContext) ->
+    {ok, Timestamp} = lim_context:get_from_context(payment_processing, created_at, LimitContext),
+    LimitRangeID = construct_range_id(LimitID, Timestamp, Config, LimitContext),
+    TimeRange = lim_config_machine:calculate_time_range(Timestamp, Config),
+    {LimitRangeID, TimeRange}.
+
+ensure_limit_time_range(LimitID, Config, LimitContext) ->
+    {ok, Timestamp} = lim_context:get_from_context(payment_processing, created_at, LimitContext),
+    {LimitRangeID, TimeRange} = find_limit_range(LimitID, Config, LimitContext),
+    CreateParams = genlib_map:compact(#{
+        id => LimitRangeID,
+        type => lim_config_machine:time_range_type(Config),
+        created_at => Timestamp,
+        currency => lim_config_machine:currency(Config)
+    }),
+    unwrap(lim_range_machine:ensure_range_exists(CreateParams, TimeRange, LimitContext)).
+
 construct_plan_id(#limiter_LimitChange{change_id = ChangeID}) ->
+    % DISCUSS
     ChangeID.
 
 construct_range_id(LimitID, Timestamp, Config, LimitContext) ->
@@ -117,39 +125,53 @@ construct_range_id(LimitID, Timestamp, Config, LimitContext) ->
     ShardID = lim_config_machine:calculate_shard_id(Timestamp, Config),
     <<LimitID/binary, Prefix/binary, "/", ShardID/binary>>.
 
-partial_commit(PartialBody, LimitChange = #limiter_LimitChange{id = LimitID}, Config, LimitContext) ->
-    do(fun() ->
-        {ok, Timestamp} = lim_context:get_from_context(payment_processing, created_at, LimitContext),
-        {ok, FullBody} = lim_body:get_body(full, Config, LimitContext),
-        ok = unwrap(assert_partial_body(PartialBody, FullBody)),
+construct_commit_plan(TimeRangeAccount, Config, LimitContext) ->
+    Body = unwrap(lim_body:get_body(full, Config, LimitContext)),
+    MaybePartialBody = lim_body:get_body(partial, Config, LimitContext),
+    construct_commit_postings(TimeRangeAccount, Body, MaybePartialBody, Config, LimitContext).
 
-        LimitRangeID = construct_range_id(LimitID, Timestamp, Config, LimitContext),
-        {ok, LimitRangeState} = lim_range_machine:get(
-            LimitRangeID,
-            LimitContext
-        ),
-        TimeRange = lim_config_machine:calculate_time_range(Timestamp, Config),
-        {ok, #{account_id_from := AccountIDFrom, account_id_to := AccountIDTo}} =
-            lim_range_machine:get_range(TimeRange, LimitRangeState),
-        PartialPostings0 = lim_p_transfer:construct_postings(AccountIDFrom, AccountIDTo, PartialBody),
-        FullPostings0 = lim_p_transfer:construct_postings(AccountIDFrom, AccountIDTo, FullBody),
-        PartialPostings1 = apply_op_behaviour(PartialPostings0, LimitContext, Config),
-        FullPostings1 = apply_op_behaviour(FullPostings0, LimitContext, Config),
-        NewBatchList = [{2, lim_p_transfer:reverse_postings(FullPostings1)} | [{3, PartialPostings1}]],
-        PlanID = construct_plan_id(LimitChange),
-        unwrap(lim_accounting:plan(PlanID, NewBatchList, LimitContext)),
-        unwrap(lim_accounting:commit(PlanID, [{1, FullPostings1} | NewBatchList], LimitContext))
-    end).
+construct_commit_postings(TimeRangeAccount, Full, MaybePartialBody, Config, LimitContext) ->
+    OriginalHoldPosting = construct_posting(TimeRangeAccount, Full, Config, LimitContext),
+    case MaybePartialBody of
+        {error, notfound} ->
+            % No partial body specified
+            [{commit, [{1, [OriginalHoldPosting]}]}];
+        {ok, Full} ->
+            % Partial body is equal to full body
+            [{commit, [{1, [OriginalHoldPosting]}]}];
+        {ok, {amount, 0}} ->
+            % Partial body is 0, this is rollback
+            [{rollback, [{1, [OriginalHoldPosting]}]}];
+        {ok, {cash, #{amount := 0}}} ->
+            % Partial body is 0, this is rollback
+            [{rollback, [{1, [OriginalHoldPosting]}]}];
+        {ok, Partial} ->
+            % Partial body is less than full body
+            ok = unwrap(assert_partial_body(Partial, Full)),
+            ReverseHoldPosting = lim_p_transfer:reverse_posting(OriginalHoldPosting),
+            PartialHoldPosting = construct_posting(TimeRangeAccount, Partial, Config, LimitContext),
+            PartialBatch = [ReverseHoldPosting, PartialHoldPosting],
+            [
+                {hold, {2, PartialBatch}},
+                {commit, [
+                    {1, [OriginalHoldPosting]},
+                    {2, PartialBatch}
+                ]}
+            ]
+    end.
 
-apply_op_behaviour(Posting, LimitContext, #{op_behaviour := ComputationConfig}) ->
+construct_posting(TimeRangeAccount, Body, Config, LimitContext) ->
+    apply_op_behaviour(lim_p_transfer:construct_posting(TimeRangeAccount, Body), Config, LimitContext).
+
+apply_op_behaviour(Posting, #{op_behaviour := ComputationConfig}, LimitContext) ->
     {ok, Operation} = lim_context:get_operation(payment_processing, LimitContext),
     case maps:get(Operation, ComputationConfig, undefined) of
         subtraction ->
-            lim_p_transfer:reverse_postings(Posting);
+            lim_p_transfer:reverse_posting(Posting);
         Type when Type =:= undefined orelse Type =:= additional ->
             Posting
     end;
-apply_op_behaviour(Body, _LimitContext, _Config) ->
+apply_op_behaviour(Body, _Config, _LimitContext) ->
     Body.
 
 assert_partial_body(
@@ -164,7 +186,7 @@ assert_partial_body(
     erlang:error({invalid_partial_cash, {Partial, PartialCurrency}, {Full, FullCurrency}}).
 
 compare_amount(Partial, Full, Currency) when Full > 0 ->
-    case Partial =< Full of
+    case Partial < Full of
         true ->
             ok;
         false ->
@@ -178,7 +200,7 @@ compare_amount(Partial, Full, Currency) when Full > 0 ->
                     })}}
     end;
 compare_amount(Partial, Full, Currency) when Full < 0 ->
-    case Partial >= Full of
+    case Partial > Full of
         true ->
             ok;
         false ->
