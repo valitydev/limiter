@@ -1,7 +1,6 @@
 -module(lim_config_machine).
 
 -include_lib("limiter_proto/include/lim_limiter_thrift.hrl").
--include_lib("limiter_proto/include/lim_base_thrift.hrl").
 
 %% Accessors
 

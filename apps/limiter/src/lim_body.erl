@@ -1,8 +1,5 @@
 -module(lim_body).
 
--include_lib("limiter_proto/include/lim_base_thrift.hrl").
--include_lib("limiter_proto/include/lim_limiter_thrift.hrl").
-
 -export([get_body/3]).
 -export([create_body_from_cash/2]).
 

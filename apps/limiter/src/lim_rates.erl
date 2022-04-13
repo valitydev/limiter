@@ -1,8 +1,6 @@
 -module(lim_rates).
 
 -include_lib("xrates_proto/include/xrates_rate_thrift.hrl").
--include_lib("limiter_proto/include/lim_base_thrift.hrl").
--include_lib("limiter_proto/include/lim_limiter_thrift.hrl").
 
 -export([get_converted_amount/3]).
 
