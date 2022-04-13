@@ -9,9 +9,9 @@
 -type limit_context() :: lim_context:t().
 -type config() :: lim_config_machine:config().
 
--type convertation_error() :: quote_not_found | currency_not_found.
+-type conversion_error() :: quote_not_found | currency_not_found.
 
--export_type([convertation_error/0]).
+-export_type([conversion_error/0]).
 
 -define(APP, limiter).
 -define(DEFAULT_FACTOR, 1.1).
@@ -19,7 +19,7 @@
 
 -spec get_converted_amount({amount(), currency()}, config(), limit_context()) ->
     {ok, amount()}
-    | {error, convertation_error()}.
+    | {error, conversion_error()}.
 get_converted_amount(Cash = {_Amount, Currency}, Config, LimitContext) ->
     Factor = get_exchange_factor(Currency),
     case
