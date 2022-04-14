@@ -281,15 +281,18 @@ get_handler(ID, LimitContext) ->
 -spec calculate_time_range(timestamp(), config()) -> time_range().
 calculate_time_range(Timestamp, Config) ->
     StartedAt = started_at(Config),
-    {StartDateTime, _USec0} = lim_range_codec:parse_timestamp(StartedAt),
-    {CurrentDateTime, _USec1} = lim_range_codec:parse_timestamp(Timestamp),
-    CurrentSec = calendar:datetime_to_gregorian_seconds(CurrentDateTime),
     case time_range_type(Config) of
         {calendar, Range} ->
-            calculate_calendar_time_range(Range, CurrentSec, CurrentDateTime, StartDateTime);
+            calculate_calendar_time_range(Range, Timestamp, StartedAt);
         {interval, _Interval} ->
             erlang:error({interval_time_range_not_implemented, Config})
     end.
+
+calculate_calendar_time_range(Range, Timestamp, StartedAt) ->
+    {StartDatetime, _USec0} = lim_range_codec:parse_timestamp(StartedAt),
+    {CurrentDatetime, _USec1} = lim_range_codec:parse_timestamp(Timestamp),
+    CurrentSec = calendar:datetime_to_gregorian_seconds(CurrentDatetime),
+    calculate_calendar_time_range(Range, CurrentSec, CurrentDatetime, StartDatetime).
 
 calculate_calendar_time_range(year, CurrentSec, {CurrentDate, _CurrentTime}, {StartDate, StartTime}) ->
     {_StartYear, StartMonth, StartDay} = StartDate,
@@ -427,17 +430,20 @@ marshal_timestamp(DateTime) ->
 calculate_shard_id(Timestamp, Config) ->
     StartedAt = started_at(Config),
     ShardSize = shard_size(Config),
-    {StartDateTime, _USec0} = lim_range_codec:parse_timestamp(StartedAt),
-    {CurrentDateTime, _USec1} = lim_range_codec:parse_timestamp(Timestamp),
     case time_range_type(Config) of
         {calendar, Range} ->
-            Units = calculate_time_units(Range, CurrentDateTime, StartDateTime),
-            SignPrefix = mk_sign_prefix(Units),
-            RangePrefix = mk_prefix(Range),
-            mk_shard_id(<<SignPrefix/binary, "/", RangePrefix/binary>>, Units, ShardSize);
+            calculate_calendar_shard_id(Range, Timestamp, StartedAt, ShardSize);
         {interval, _Interval} ->
             erlang:error({interval_time_range_not_implemented, Config})
     end.
+
+calculate_calendar_shard_id(Range, Timestamp, StartedAt, ShardSize) ->
+    {StartDatetime, _USec0} = lim_range_codec:parse_timestamp(StartedAt),
+    {CurrentDatetime, _USec1} = lim_range_codec:parse_timestamp(Timestamp),
+    Units = calculate_time_units(Range, CurrentDatetime, StartDatetime),
+    SignPrefix = mk_sign_prefix(Units),
+    RangePrefix = mk_prefix(Range),
+    mk_shard_id(<<SignPrefix/binary, "/", RangePrefix/binary>>, Units, ShardSize).
 
 calculate_time_units(year, {CurrentDate, CurrentTime}, {StartDate, StartTime}) ->
     {StartYear, _, _} = StartDate,
@@ -614,167 +620,135 @@ check_sign_prefix_test() ->
 
 -spec check_calculate_day_time_range_test() -> _.
 check_calculate_day_time_range_test() ->
-    Config0 = #{
-        started_at => <<"2000-01-01T00:00:00Z">>,
-        time_range_type => {calendar, day}
-    },
+    StartedAt1 = <<"2000-01-01T00:00:00Z">>,
     ?assertEqual(
         #{lower => <<"2000-01-01T00:00:00Z">>, upper => <<"2000-01-02T00:00:00Z">>},
-        calculate_time_range(<<"2000-01-01T02:00:00Z">>, Config0)
+        calculate_calendar_time_range(day, <<"2000-01-01T02:00:00Z">>, StartedAt1)
     ),
     ?assertEqual(
         #{lower => <<"1999-12-31T00:00:00Z">>, upper => <<"2000-01-01T00:00:00Z">>},
-        calculate_time_range(<<"1999-12-31T02:00:00Z">>, Config0)
+        calculate_calendar_time_range(day, <<"1999-12-31T02:00:00Z">>, StartedAt1)
     ),
     ?assertEqual(
         #{lower => <<"2000-01-10T00:00:00Z">>, upper => <<"2000-01-11T00:00:00Z">>},
-        calculate_time_range(<<"2000-01-10T02:00:00Z">>, Config0)
+        calculate_calendar_time_range(day, <<"2000-01-10T02:00:00Z">>, StartedAt1)
     ),
-    Config1 = Config0#{started_at => <<"2000-01-01T03:00:00Z">>},
     ?assertEqual(
         #{lower => <<"1999-12-31T03:00:00Z">>, upper => <<"2000-01-01T03:00:00Z">>},
-        calculate_time_range(<<"2000-01-01T02:00:00Z">>, Config1)
+        calculate_calendar_time_range(day, <<"2000-01-01T02:00:00Z">>, <<"2000-01-01T03:00:00Z">>)
     ).
 
 -spec check_calculate_week_time_range_test() -> _.
 check_calculate_week_time_range_test() ->
-    Config0 = #{
-        started_at => <<"2000-01-01T00:00:00Z">>,
-        time_range_type => {calendar, week}
-    },
+    StartedAt = <<"2000-01-01T00:00:00Z">>,
     ?assertEqual(
         #{lower => <<"2000-01-01T00:00:00Z">>, upper => <<"2000-01-08T00:00:00Z">>},
-        calculate_time_range(<<"2000-01-01T02:00:00Z">>, Config0)
+        calculate_calendar_time_range(week, <<"2000-01-01T02:00:00Z">>, StartedAt)
     ),
     ?assertEqual(
         #{lower => <<"1999-12-25T00:00:00Z">>, upper => <<"2000-01-01T00:00:00Z">>},
-        calculate_time_range(<<"1999-12-31T02:00:00Z">>, Config0)
+        calculate_calendar_time_range(week, <<"1999-12-31T02:00:00Z">>, StartedAt)
     ),
     ?assertEqual(
         #{lower => <<"2000-09-30T00:00:00Z">>, upper => <<"2000-10-07T00:00:00Z">>},
-        calculate_time_range(<<"2000-10-03T02:00:00Z">>, Config0)
+        calculate_calendar_time_range(week, <<"2000-10-03T02:00:00Z">>, StartedAt)
     ),
-    Config1 = Config0#{started_at => <<"2000-01-01T03:00:00Z">>},
     ?assertEqual(
         #{lower => <<"1999-12-25T03:00:00Z">>, upper => <<"2000-01-01T03:00:00Z">>},
-        calculate_time_range(<<"2000-01-01T02:00:00Z">>, Config1)
+        calculate_calendar_time_range(week, <<"2000-01-01T02:00:00Z">>, <<"2000-01-01T03:00:00Z">>)
     ).
 
 -spec check_calculate_month_time_range_test() -> _.
 check_calculate_month_time_range_test() ->
-    Config0 = #{
-        started_at => <<"2000-01-01T00:00:00Z">>,
-        time_range_type => {calendar, month}
-    },
+    StartedAt = <<"2000-01-01T00:00:00Z">>,
     ?assertEqual(
         #{lower => <<"2000-01-01T00:00:00Z">>, upper => <<"2000-02-01T00:00:00Z">>},
-        calculate_time_range(<<"2000-01-01T02:00:00Z">>, Config0)
+        calculate_calendar_time_range(month, <<"2000-01-01T02:00:00Z">>, StartedAt)
     ),
     ?assertEqual(
         #{lower => <<"1999-12-01T00:00:00Z">>, upper => <<"2000-01-01T00:00:00Z">>},
-        calculate_time_range(<<"1999-12-31T02:00:00Z">>, Config0)
+        calculate_calendar_time_range(month, <<"1999-12-31T02:00:00Z">>, StartedAt)
     ),
     ?assertEqual(
         #{lower => <<"2000-10-01T00:00:00Z">>, upper => <<"2000-11-01T00:00:00Z">>},
-        calculate_time_range(<<"2000-10-03T02:00:00Z">>, Config0)
+        calculate_calendar_time_range(month, <<"2000-10-03T02:00:00Z">>, StartedAt)
     ),
-    Config1 = Config0#{started_at => <<"2000-01-01T03:00:00Z">>},
     ?assertEqual(
         #{lower => <<"1999-12-01T03:00:00Z">>, upper => <<"2000-01-01T03:00:00Z">>},
-        calculate_time_range(<<"2000-01-01T02:00:00Z">>, Config1)
+        calculate_calendar_time_range(month, <<"2000-01-01T02:00:00Z">>, <<"2000-01-01T03:00:00Z">>)
     ).
 
 -spec check_calculate_year_time_range_test() -> _.
 check_calculate_year_time_range_test() ->
-    Config0 = #{
-        started_at => <<"2000-01-01T00:00:00Z">>,
-        time_range_type => {calendar, year}
-    },
+    StartedAt = <<"2000-01-01T00:00:00Z">>,
     ?assertEqual(
         #{lower => <<"2000-01-01T00:00:00Z">>, upper => <<"2001-01-01T00:00:00Z">>},
-        calculate_time_range(<<"2000-01-01T02:00:00Z">>, Config0)
+        calculate_calendar_time_range(year, <<"2000-01-01T02:00:00Z">>, StartedAt)
     ),
     ?assertEqual(
         #{lower => <<"1999-01-01T00:00:00Z">>, upper => <<"2000-01-01T00:00:00Z">>},
-        calculate_time_range(<<"1999-12-31T02:00:00Z">>, Config0)
+        calculate_calendar_time_range(year, <<"1999-12-31T02:00:00Z">>, StartedAt)
     ),
     ?assertEqual(
         #{lower => <<"2010-01-01T00:00:00Z">>, upper => <<"2011-01-01T00:00:00Z">>},
-        calculate_time_range(<<"2010-10-03T02:00:00Z">>, Config0)
+        calculate_calendar_time_range(year, <<"2010-10-03T02:00:00Z">>, StartedAt)
     ),
-    Config1 = Config0#{started_at => <<"2000-01-01T03:00:00Z">>},
     ?assertEqual(
         #{lower => <<"1999-01-01T03:00:00Z">>, upper => <<"2000-01-01T03:00:00Z">>},
-        calculate_time_range(<<"2000-01-01T02:00:00Z">>, Config1)
+        calculate_calendar_time_range(year, <<"2000-01-01T02:00:00Z">>, <<"2000-01-01T03:00:00Z">>)
     ).
 
 -spec check_calculate_day_shard_id_test() -> _.
 check_calculate_day_shard_id_test() ->
-    Config0 = #{
-        started_at => <<"2000-01-01T00:00:00Z">>,
-        shard_size => 1,
-        time_range_type => {calendar, day}
-    },
-    ?assertEqual(<<"future/day/0">>, calculate_shard_id(<<"2000-01-01T00:00:00Z">>, Config0)),
-    ?assertEqual(<<"future/day/2">>, calculate_shard_id(<<"2000-01-03T00:00:00Z">>, Config0)),
-    ?assertEqual(<<"past/day/1">>, calculate_shard_id(<<"1999-12-31T00:00:00Z">>, Config0)),
-    ?assertEqual(<<"future/day/1">>, calculate_shard_id(<<"2000-01-02T23:59:59Z">>, Config0)),
-    ?assertEqual(<<"future/day/1">>, calculate_shard_id(<<"2000-01-04T00:00:00Z">>, Config0#{shard_size => 2})),
-    ?assertEqual(<<"future/day/366">>, calculate_shard_id(<<"2001-01-01T00:00:00Z">>, Config0)),
-    ?assertEqual(<<"future/day/12">>, calculate_shard_id(<<"2001-01-01T00:00:00Z">>, Config0#{shard_size => 30})),
-    Config1 = Config0#{started_at => <<"2000-01-01T03:00:00Z">>},
-    ?assertEqual(<<"past/day/1">>, calculate_shard_id(<<"2000-01-01T00:00:00Z">>, Config1)),
-    ?assertEqual(<<"future/day/1">>, calculate_shard_id(<<"2000-01-03T00:00:00Z">>, Config1)).
+    StartedAt1 = <<"2000-01-01T00:00:00Z">>,
+    ?assertEqual(<<"future/day/0">>, calculate_calendar_shard_id(day, <<"2000-01-01T00:00:00Z">>, StartedAt1, 1)),
+    ?assertEqual(<<"future/day/2">>, calculate_calendar_shard_id(day, <<"2000-01-03T00:00:00Z">>, StartedAt1, 1)),
+    ?assertEqual(<<"past/day/1">>, calculate_calendar_shard_id(day, <<"1999-12-31T00:00:00Z">>, StartedAt1, 1)),
+    ?assertEqual(<<"future/day/1">>, calculate_calendar_shard_id(day, <<"2000-01-02T23:59:59Z">>, StartedAt1, 1)),
+    ?assertEqual(<<"future/day/1">>, calculate_calendar_shard_id(day, <<"2000-01-04T00:00:00Z">>, StartedAt1, 2)),
+    ?assertEqual(<<"future/day/366">>, calculate_calendar_shard_id(day, <<"2001-01-01T00:00:00Z">>, StartedAt1, 1)),
+    ?assertEqual(<<"future/day/12">>, calculate_calendar_shard_id(day, <<"2001-01-01T00:00:00Z">>, StartedAt1, 30)),
+    StartedAt2 = <<"2000-01-01T03:00:00Z">>,
+    ?assertEqual(<<"past/day/1">>, calculate_calendar_shard_id(day, <<"2000-01-01T00:00:00Z">>, StartedAt2, 1)),
+    ?assertEqual(<<"future/day/1">>, calculate_calendar_shard_id(day, <<"2000-01-03T00:00:00Z">>, StartedAt2, 1)).
 
 -spec check_calculate_week_shard_id_test() -> _.
 check_calculate_week_shard_id_test() ->
-    Config0 = #{
-        started_at => <<"2000-01-01T00:00:00Z">>,
-        shard_size => 1,
-        time_range_type => {calendar, week}
-    },
-    ?assertEqual(<<"future/week/0">>, calculate_shard_id(<<"2000-01-01T00:00:00Z">>, Config0)),
-    ?assertEqual(<<"past/week/1">>, calculate_shard_id(<<"1999-12-31T00:00:00Z">>, Config0)),
-    ?assertEqual(<<"future/week/1">>, calculate_shard_id(<<"2000-01-08T00:00:00Z">>, Config0)),
-    ?assertEqual(<<"future/week/1">>, calculate_shard_id(<<"2000-01-15T00:00:00Z">>, Config0#{shard_size => 2})),
-    ?assertEqual(<<"future/week/52">>, calculate_shard_id(<<"2001-01-01T00:00:00Z">>, Config0)),
-    ?assertEqual(<<"future/week/13">>, calculate_shard_id(<<"2001-01-01T00:00:00Z">>, Config0#{shard_size => 4})),
-    Config1 = Config0#{started_at => <<"2000-01-02T03:00:00Z">>},
-    ?assertEqual(<<"past/week/1">>, calculate_shard_id(<<"2000-01-02T00:00:00Z">>, Config1)),
-    ?assertEqual(<<"future/week/0">>, calculate_shard_id(<<"2000-01-09T00:00:00Z">>, Config1)).
+    StartedAt1 = <<"2000-01-01T00:00:00Z">>,
+    ?assertEqual(<<"future/week/0">>, calculate_calendar_shard_id(week, <<"2000-01-01T00:00:00Z">>, StartedAt1, 1)),
+    ?assertEqual(<<"past/week/1">>, calculate_calendar_shard_id(week, <<"1999-12-31T00:00:00Z">>, StartedAt1, 1)),
+    ?assertEqual(<<"future/week/1">>, calculate_calendar_shard_id(week, <<"2000-01-08T00:00:00Z">>, StartedAt1, 1)),
+    ?assertEqual(<<"future/week/1">>, calculate_calendar_shard_id(week, <<"2000-01-15T00:00:00Z">>, StartedAt1, 2)),
+    ?assertEqual(<<"future/week/52">>, calculate_calendar_shard_id(week, <<"2001-01-01T00:00:00Z">>, StartedAt1, 1)),
+    ?assertEqual(<<"future/week/13">>, calculate_calendar_shard_id(week, <<"2001-01-01T00:00:00Z">>, StartedAt1, 4)),
+    StartedAt2 = <<"2000-01-02T03:00:00Z">>,
+    ?assertEqual(<<"past/week/1">>, calculate_calendar_shard_id(week, <<"2000-01-02T00:00:00Z">>, StartedAt2, 1)),
+    ?assertEqual(<<"future/week/0">>, calculate_calendar_shard_id(week, <<"2000-01-09T00:00:00Z">>, StartedAt2, 1)).
 
 -spec check_calculate_month_shard_id_test() -> _.
 check_calculate_month_shard_id_test() ->
-    Config0 = #{
-        started_at => <<"2000-01-01T00:00:00Z">>,
-        shard_size => 1,
-        time_range_type => {calendar, month}
-    },
-    ?assertEqual(<<"future/month/0">>, calculate_shard_id(<<"2000-01-01T00:00:00Z">>, Config0)),
-    ?assertEqual(<<"past/month/1">>, calculate_shard_id(<<"1999-12-31T00:00:00Z">>, Config0)),
-    ?assertEqual(<<"future/month/1">>, calculate_shard_id(<<"2000-02-01T00:00:00Z">>, Config0)),
-    ?assertEqual(<<"future/month/1">>, calculate_shard_id(<<"2000-03-01T00:00:00Z">>, Config0#{shard_size => 2})),
-    ?assertEqual(<<"future/month/12">>, calculate_shard_id(<<"2001-01-01T00:00:00Z">>, Config0)),
-    ?assertEqual(<<"future/month/1">>, calculate_shard_id(<<"2001-01-01T00:00:00Z">>, Config0#{shard_size => 12})),
-    Config1 = Config0#{started_at => <<"2000-01-02T03:00:00Z">>},
-    ?assertEqual(<<"past/month/1">>, calculate_shard_id(<<"2000-01-02T00:00:00Z">>, Config1)),
-    ?assertEqual(<<"future/month/0">>, calculate_shard_id(<<"2000-02-02T00:00:00Z">>, Config1)).
+    StartedAt1 = <<"2000-01-01T00:00:00Z">>,
+    ?assertEqual(<<"future/month/0">>, calculate_calendar_shard_id(month, <<"2000-01-01T00:00:00Z">>, StartedAt1, 1)),
+    ?assertEqual(<<"past/month/1">>, calculate_calendar_shard_id(month, <<"1999-12-31T00:00:00Z">>, StartedAt1, 1)),
+    ?assertEqual(<<"future/month/1">>, calculate_calendar_shard_id(month, <<"2000-02-01T00:00:00Z">>, StartedAt1, 1)),
+    ?assertEqual(<<"future/month/1">>, calculate_calendar_shard_id(month, <<"2000-03-01T00:00:00Z">>, StartedAt1, 2)),
+    ?assertEqual(<<"future/month/12">>, calculate_calendar_shard_id(month, <<"2001-01-01T00:00:00Z">>, StartedAt1, 1)),
+    ?assertEqual(<<"future/month/1">>, calculate_calendar_shard_id(month, <<"2001-01-01T00:00:00Z">>, StartedAt1, 12)),
+    StartedAt2 = <<"2000-01-02T03:00:00Z">>,
+    ?assertEqual(<<"past/month/1">>, calculate_calendar_shard_id(month, <<"2000-01-02T00:00:00Z">>, StartedAt2, 1)),
+    ?assertEqual(<<"future/month/0">>, calculate_calendar_shard_id(month, <<"2000-02-02T00:00:00Z">>, StartedAt2, 1)).
 
 -spec check_calculate_year_shard_id_test() -> _.
 check_calculate_year_shard_id_test() ->
-    Config0 = #{
-        started_at => <<"2000-01-01T00:00:00Z">>,
-        shard_size => 1,
-        time_range_type => {calendar, year}
-    },
-    ?assertEqual(<<"future/year/0">>, calculate_shard_id(<<"2000-01-01T00:00:00Z">>, Config0)),
-    ?assertEqual(<<"past/year/1">>, calculate_shard_id(<<"1999-12-31T00:00:00Z">>, Config0)),
-    ?assertEqual(<<"future/year/1">>, calculate_shard_id(<<"2001-01-01T00:00:00Z">>, Config0)),
-    ?assertEqual(<<"future/year/1">>, calculate_shard_id(<<"2003-01-01T00:00:00Z">>, Config0#{shard_size => 2})),
-    ?assertEqual(<<"future/year/10">>, calculate_shard_id(<<"2010-01-01T00:00:00Z">>, Config0)),
-    ?assertEqual(<<"future/year/2">>, calculate_shard_id(<<"2020-01-01T00:00:00Z">>, Config0#{shard_size => 10})),
-    Config1 = Config0#{started_at => <<"2000-01-02T03:00:00Z">>},
-    ?assertEqual(<<"past/year/1">>, calculate_shard_id(<<"2000-01-01T00:00:00Z">>, Config1)),
-    ?assertEqual(<<"future/year/0">>, calculate_shard_id(<<"2001-01-01T00:00:00Z">>, Config1)).
+    StartedAt1 = <<"2000-01-01T00:00:00Z">>,
+    ?assertEqual(<<"future/year/0">>, calculate_calendar_shard_id(year, <<"2000-01-01T00:00:00Z">>, StartedAt1, 1)),
+    ?assertEqual(<<"past/year/1">>, calculate_calendar_shard_id(year, <<"1999-12-31T00:00:00Z">>, StartedAt1, 1)),
+    ?assertEqual(<<"future/year/1">>, calculate_calendar_shard_id(year, <<"2001-01-01T00:00:00Z">>, StartedAt1, 1)),
+    ?assertEqual(<<"future/year/1">>, calculate_calendar_shard_id(year, <<"2003-01-01T00:00:00Z">>, StartedAt1, 2)),
+    ?assertEqual(<<"future/year/10">>, calculate_calendar_shard_id(year, <<"2010-01-01T00:00:00Z">>, StartedAt1, 1)),
+    ?assertEqual(<<"future/year/2">>, calculate_calendar_shard_id(year, <<"2020-01-01T00:00:00Z">>, StartedAt1, 10)),
+    StartedAt2 = <<"2000-01-02T03:00:00Z">>,
+    ?assertEqual(<<"past/year/1">>, calculate_calendar_shard_id(year, <<"2000-01-01T00:00:00Z">>, StartedAt2, 1)),
+    ?assertEqual(<<"future/year/0">>, calculate_calendar_shard_id(year, <<"2001-01-01T00:00:00Z">>, StartedAt2, 1)).
 
 -endif.

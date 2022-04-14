@@ -4,6 +4,10 @@
 
 -export([handle_function/4]).
 
--spec handle_function(woody:func(), woody:args(), woody_context:ctx(), #{}) -> {ok, term()}.
+-type opts() :: #{
+    function := fun((woody:func(), woody:args()) -> woody:result())
+}.
+
+-spec handle_function(woody:func(), woody:args(), woody_context:ctx(), opts()) -> {ok, term()}.
 handle_function(FunName, Args, _, #{function := Fun}) ->
     Fun(FunName, Args).

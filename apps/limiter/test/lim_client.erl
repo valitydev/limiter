@@ -1,7 +1,6 @@
 -module(lim_client).
 
 -include_lib("limiter_proto/include/lim_limiter_thrift.hrl").
--include_lib("limiter_proto/include/lim_configurator_thrift.hrl").
 
 -export([new/0]).
 -export([get/3]).
@@ -18,7 +17,8 @@
 -type limit_change() :: lim_limiter_thrift:'LimitChange'().
 -type limit_context() :: lim_limiter_thrift:'LimitContext'().
 -type clock() :: lim_limiter_thrift:'Clock'().
--type limit_config_params() :: lim_limiter_config_thrift:'LimitCreateParams'().
+-type legacy_create_params() :: lim_configurator_thrift:'LimitCreateParams'().
+-type limit_config_params() :: lim_limiter_config_thrift:'LimitConfigParams'().
 
 %%% API
 
@@ -40,7 +40,7 @@ commit(LimitChange, Context, Client) ->
 
 %%
 
--spec legacy_create_config(limit_config_params(), client()) -> woody:result() | no_return().
+-spec legacy_create_config(legacy_create_params(), client()) -> woody:result() | no_return().
 legacy_create_config(LimitCreateParams, Client) ->
     call_configurator('CreateLegacy', {LimitCreateParams}, Client).
 
