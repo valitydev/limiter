@@ -1,4 +1,0 @@
-[submodule "build_utils"]
-	path = build_utils
-	url = ../build_utils.git
-	branch = master
