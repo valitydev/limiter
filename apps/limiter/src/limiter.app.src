@@ -12,9 +12,7 @@
         woody,
         how_are_you,  % must be after ranch and before any woody usage
         scoper,  % should be before any scoper event handler usage
-        erl_health,
-        prometheus,
-        prometheus_cowboy
+        erl_health
     ]},
     {mod, {limiter, []}},
     {env, []}

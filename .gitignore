@@ -11,3 +11,7 @@ erl_crash.dump
 /.idea/
 *.beam
 rebar3.crashdump
+
+# make stuff
+/.image.*
+Makefile.env
