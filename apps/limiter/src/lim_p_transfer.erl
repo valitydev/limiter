@@ -56,13 +56,13 @@ reverse_postings(Postings) ->
 
 -spec assert_partial_posting_amount([posting()], [posting()]) -> ok | {error, forbidden_operation_amount_error()}.
 assert_partial_posting_amount(
-    [#accounter_Posting{amount = Partial, currency_sym_code = Currency} | _Rest],
-    [#accounter_Posting{amount = Full, currency_sym_code = Currency} | _Rest]
+    [#accounter_Posting{amount = Partial, currency_sym_code = Currency} | _],
+    [#accounter_Posting{amount = Full, currency_sym_code = Currency} | _]
 ) ->
     compare_amount(Partial, Full, Currency);
 assert_partial_posting_amount(
-    [#accounter_Posting{amount = Partial, currency_sym_code = PartialCurrency} | _Rest],
-    [#accounter_Posting{amount = Full, currency_sym_code = FullCurrency} | _Rest]
+    [#accounter_Posting{amount = Partial, currency_sym_code = PartialCurrency} | _],
+    [#accounter_Posting{amount = Full, currency_sym_code = FullCurrency} | _]
 ) ->
     erlang:error({invalid_partial_cash, {Partial, PartialCurrency}, {Full, FullCurrency}}).
 
