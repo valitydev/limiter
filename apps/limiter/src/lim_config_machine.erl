@@ -445,45 +445,28 @@ calculate_calendar_shard_id(Range, Timestamp, StartedAt, ShardSize) ->
     RangePrefix = mk_prefix(Range),
     mk_shard_id(<<SignPrefix/binary, "/", RangePrefix/binary>>, Units, ShardSize).
 
-calculate_time_units(year, {CurrentDate, CurrentTime}, {StartDate, StartTime}) ->
-    {StartYear, _, _} = StartDate,
-    {CurrentYear, _, _} = CurrentDate,
+calculate_time_units(year, CurrentDatetime, StartDatetime) ->
+    StartSecBase = calculate_start_of_year_seconds(StartDatetime),
+    StartSec = calendar:datetime_to_gregorian_seconds(StartDatetime),
+    CurrentSecBase = calculate_start_of_year_seconds(CurrentDatetime),
+    CurrentSec = calendar:datetime_to_gregorian_seconds(CurrentDatetime),
 
-    StartSecBase = calendar:datetime_to_gregorian_seconds({{StartYear, 1, 1}, {0, 0, 0}}),
-    StartSec = calendar:datetime_to_gregorian_seconds({StartDate, StartTime}),
-    CurrentSecBase = calendar:datetime_to_gregorian_seconds({{CurrentYear, 1, 1}, {0, 0, 0}}),
-    CurrentSec = calendar:datetime_to_gregorian_seconds({CurrentDate, CurrentTime}),
+    StartDelta = StartSec - StartSecBase,
+    CurrentDelta = CurrentSec - (CurrentSecBase + StartDelta),
+    maybe_previous_unit(CurrentDelta, year(CurrentDatetime) - year(StartDatetime));
+calculate_time_units(month, CurrentDatetime, StartDatetime) ->
+    StartSecBase = calculate_start_of_month_seconds(StartDatetime),
+    StartSec = calendar:datetime_to_gregorian_seconds(StartDatetime),
+    CurrentSecBase = calculate_start_of_month_seconds(CurrentDatetime),
+    CurrentSec = calendar:datetime_to_gregorian_seconds(CurrentDatetime),
 
     StartDelta = StartSec - StartSecBase,
     CurrentDelta = CurrentSec - (CurrentSecBase + StartDelta),
 
-    case CurrentDelta >= 0 of
-        true ->
-            CurrentYear - StartYear;
-        false ->
-            CurrentYear - StartYear - 1
-    end;
-calculate_time_units(month, {CurrentDate, CurrentTime}, {StartDate, StartTime}) ->
-    {StartYear, StartMonth, _} = StartDate,
-    {CurrentYear, CurrentMonth, _} = CurrentDate,
+    YearDiff = year(CurrentDatetime) - year(StartDatetime),
+    MonthDiff = month(CurrentDatetime) - month(StartDatetime),
 
-    StartSecBase = calendar:datetime_to_gregorian_seconds({{StartYear, StartMonth, 1}, {0, 0, 0}}),
-    StartSec = calendar:datetime_to_gregorian_seconds({StartDate, StartTime}),
-    CurrentSecBase = calendar:datetime_to_gregorian_seconds({{CurrentYear, CurrentMonth, 1}, {0, 0, 0}}),
-    CurrentSec = calendar:datetime_to_gregorian_seconds({CurrentDate, CurrentTime}),
-
-    StartDelta = StartSec - StartSecBase,
-    CurrentDelta = CurrentSec - (CurrentSecBase + StartDelta),
-
-    YearDiff = CurrentYear - StartYear,
-    MonthDiff = CurrentMonth - StartMonth,
-
-    case CurrentDelta >= 0 of
-        true ->
-            YearDiff * 12 + MonthDiff;
-        false ->
-            YearDiff * 12 + MonthDiff - 1
-    end;
+    maybe_previous_unit(CurrentDelta, YearDiff * 12 + MonthDiff);
 calculate_time_units(week, {CurrentDate, CurrentTime}, {StartDate, StartTime}) ->
     StartWeekRem = calendar:date_to_gregorian_days(StartDate) rem 7,
     StartWeekBase = (calendar:date_to_gregorian_days(StartDate) div 7) * 7,
@@ -507,12 +490,7 @@ calculate_time_units(week, {CurrentDate, CurrentTime}, {StartDate, StartTime}) -
 
     StartWeeks = calendar:date_to_gregorian_days(StartDate) div 7,
     CurrentWeeks = calendar:date_to_gregorian_days(CurrentDate) div 7,
-    case CurrentDelta >= 0 of
-        true ->
-            CurrentWeeks - StartWeeks;
-        false ->
-            CurrentWeeks - StartWeeks - 1
-    end;
+    maybe_previous_unit(CurrentDelta, CurrentWeeks - StartWeeks);
 calculate_time_units(day, {CurrentDate, CurrentTime}, {StartDate, StartTime}) ->
     StartSecBase = calendar:datetime_to_gregorian_seconds({StartDate, {0, 0, 0}}),
     StartSec = calendar:datetime_to_gregorian_seconds({StartDate, StartTime}),
@@ -522,12 +500,24 @@ calculate_time_units(day, {CurrentDate, CurrentTime}, {StartDate, StartTime}) ->
     CurrentDelta = CurrentSec - (CurrentSecBase + StartDelta),
     StartDays = calendar:date_to_gregorian_days(StartDate),
     CurrentDays = calendar:date_to_gregorian_days(CurrentDate),
-    case CurrentDelta >= 0 of
-        true ->
-            CurrentDays - StartDays;
-        false ->
-            CurrentDays - StartDays - 1
-    end.
+    maybe_previous_unit(CurrentDelta, CurrentDays - StartDays).
+
+maybe_previous_unit(Delta, Unit) when Delta < 0 ->
+    Unit - 1;
+maybe_previous_unit(_Delta, Unit) ->
+    Unit.
+
+calculate_start_of_year_seconds({{Year, _, _}, _Time}) ->
+    calendar:datetime_to_gregorian_seconds({{Year, 1, 1}, {0, 0, 0}}).
+
+calculate_start_of_month_seconds({{Year, Month, _}, _Time}) ->
+    calendar:datetime_to_gregorian_seconds({{Year, Month, 1}, {0, 0, 0}}).
+
+year({{Year, _, _}, _Time}) ->
+    Year.
+
+month({{_Year, Month, _}, _Time}) ->
+    Month.
 
 mk_prefix(day) -> <<"day">>;
 mk_prefix(week) -> <<"week">>;
