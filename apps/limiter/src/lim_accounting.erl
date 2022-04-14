@@ -109,7 +109,7 @@ construct_plan(PlanID, Batches) ->
                 id = BatchID,
                 postings = Postings
             }
-            || {BatchID, Postings} <- Batches
+         || {BatchID, Postings} <- Batches
         ]
     }.
 

@@ -51,7 +51,7 @@ reverse_postings(Postings) ->
             from_id = AccountTo,
             to_id = AccountFrom
         }
-        || Posting = #accounter_Posting{from_id = AccountFrom, to_id = AccountTo} <- Postings
+     || Posting = #accounter_Posting{from_id = AccountFrom, to_id = AccountTo} <- Postings
     ].
 
 -spec assert_partial_posting_amount([posting()], [posting()]) -> ok | {error, forbidden_operation_amount_error()}.
