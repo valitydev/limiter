@@ -133,20 +133,12 @@ construct_commit_plan(TimeRangeAccount, Config, LimitContext) ->
 
 construct_commit_postings(TimeRangeAccount, Full, MaybePartialBody, Config, LimitContext) ->
     OriginalHoldPosting = construct_posting(TimeRangeAccount, Full, Config, LimitContext),
-    case MaybePartialBody of
-        {error, notfound} ->
-            % No partial body specified
+    case determine_commit_intent(MaybePartialBody, Full) of
+        commit ->
             [{commit, [{1, [OriginalHoldPosting]}]}];
-        {ok, Full} ->
-            % Partial body is equal to full body
-            [{commit, [{1, [OriginalHoldPosting]}]}];
-        {ok, {amount, 0}} ->
-            % Partial body is 0, this is rollback
+        rollback ->
             [{rollback, [{1, [OriginalHoldPosting]}]}];
-        {ok, {cash, #{amount := 0}}} ->
-            % Partial body is 0, this is rollback
-            [{rollback, [{1, [OriginalHoldPosting]}]}];
-        {ok, Partial} ->
+        {commit, Partial} ->
             % Partial body is less than full body
             ok = unwrap(assert_partial_body(Partial, Full)),
             ReverseHoldPosting = lim_p_transfer:reverse_posting(OriginalHoldPosting),
@@ -160,6 +152,21 @@ construct_commit_postings(TimeRangeAccount, Full, MaybePartialBody, Config, Limi
                 ]}
             ]
     end.
+
+determine_commit_intent({error, notfound}, _FullBody) ->
+    % No partial body specified
+    commit;
+determine_commit_intent({ok, FullBody}, FullBody) ->
+    % Partial body is equal to full body
+    commit;
+determine_commit_intent({ok, {amount, 0}}, _FullBody) ->
+    % Partial body is 0, this is rollback
+    rollback;
+determine_commit_intent({ok, {cash, #{amount := 0}}}, _FullBody) ->
+    % Partial body is 0, this is rollback
+    rollback;
+determine_commit_intent({ok, Partial}, _FullBody) ->
+    {commit, Partial}.
 
 construct_posting(TimeRangeAccount, Body, Config, LimitContext) ->
     apply_op_behaviour(lim_p_transfer:construct_posting(TimeRangeAccount, Body), Config, LimitContext).
