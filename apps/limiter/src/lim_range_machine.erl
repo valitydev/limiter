@@ -11,8 +11,7 @@
 %% API
 
 -export([get/2]).
--export([ensure_exists/2]).
--export([ensure_range_exists/3]).
+-export([ensure_exists/3]).
 -export([get_range/2]).
 -export([get_range_balance/3]).
 
@@ -123,20 +122,8 @@ get(ID, LimitContext) ->
     {ok, WoodyCtx} = lim_context:woody_context(LimitContext),
     get_state(ID, WoodyCtx).
 
--spec ensure_exists(create_params(), lim_context()) -> {ok, limit_range_state()}.
-ensure_exists(Params = #{id := ID}, LimitContext) ->
-    {ok, WoodyCtx} = lim_context:woody_context(LimitContext),
-    case get_state(ID, WoodyCtx) of
-        {ok, State} ->
-            {ok, State};
-        {error, notfound} ->
-            _ = start(ID, Params, [], WoodyCtx),
-            {ok, State} = get_state(ID, WoodyCtx),
-            {ok, State}
-    end.
-
--spec ensure_range_exists(create_params(), time_range(), lim_context()) -> {ok, time_range_ext()}.
-ensure_range_exists(Params = #{id := ID, currency := Currency}, TimeRange, LimitContext) ->
+-spec ensure_exists(create_params(), time_range(), lim_context()) -> {ok, time_range_ext()}.
+ensure_exists(Params = #{id := ID, currency := Currency}, TimeRange, LimitContext) ->
     {ok, WoodyCtx} = lim_context:woody_context(LimitContext),
     case get_state(ID, WoodyCtx) of
         {ok, State} ->

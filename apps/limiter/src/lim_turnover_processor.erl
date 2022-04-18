@@ -115,7 +115,7 @@ ensure_limit_time_range(LimitID, Config, LimitContext) ->
         created_at => Timestamp,
         currency => lim_config_machine:currency(Config)
     }),
-    unwrap(lim_range_machine:ensure_range_exists(CreateParams, TimeRange, LimitContext)).
+    unwrap(lim_range_machine:ensure_exists(CreateParams, TimeRange, LimitContext)).
 
 construct_plan_id(#limiter_LimitChange{change_id = ChangeID}) ->
     % DISCUSS
