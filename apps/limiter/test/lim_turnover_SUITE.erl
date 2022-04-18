@@ -25,6 +25,8 @@
 -export([rollback_ok/1]).
 -export([refund_ok/1]).
 -export([get_config_ok/1]).
+-export([commit_inexistent_hold_fails/1]).
+-export([partial_commit_inexistent_hold_fails/1]).
 
 -export([commit_processes_idempotently/1]).
 -export([full_commit_processes_idempotently/1]).
@@ -58,7 +60,9 @@ groups() ->
             commit_ok,
             rollback_ok,
             get_config_ok,
-            refund_ok
+            refund_ok,
+            commit_inexistent_hold_fails,
+            partial_commit_inexistent_hold_fails
         ]},
         {idempotency, [parallel], [
             commit_processes_idempotently,
@@ -284,6 +288,27 @@ get_config_ok(C) ->
     _ = prepare_environment(<<"GlobalMonthTurnover">>, C),
     {ok, #limiter_config_LimitConfig{}} = lim_client:get_config(?config(id, C), ?config(client, C)).
 
+-spec commit_inexistent_hold_fails(config()) -> _.
+commit_inexistent_hold_fails(C) ->
+    ID = ?config(id, C),
+    _ = prepare_environment(<<"GlobalMonthTurnover">>, C),
+    Context = ?ctx_invoice_payment(?cash(42), undefined),
+    % NOTE
+    % We do not expect `LimitChangeNotFound` here because we no longer reconcile with accounter
+    % before requesting him to hold / commit.
+    {exception, #limiter_base_InvalidRequest{}} =
+        lim_client:commit(?LIMIT_CHANGE(ID), Context, ?config(client, C)).
+
+-spec partial_commit_inexistent_hold_fails(config()) -> _.
+partial_commit_inexistent_hold_fails(C) ->
+    ID = ?config(id, C),
+    _ = prepare_environment(<<"GlobalMonthTurnover">>, C),
+    Context = ?ctx_invoice_payment(?cash(42), ?cash(21)),
+    % NOTE
+    % We do not expect `LimitChangeNotFound` here because we no longer reconcile with accounter
+    % before requesting him to hold / commit.
+    {exception, #limiter_base_InvalidRequest{}} =
+        lim_client:commit(?LIMIT_CHANGE(ID), Context, ?config(client, C)).
 
 %%
 

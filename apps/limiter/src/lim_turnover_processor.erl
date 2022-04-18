@@ -22,7 +22,7 @@
     full := amount()
 }.
 
--type get_limit_error() :: {limit | range, notfound}.
+-type get_limit_error() :: {range, notfound}.
 
 -type hold_error() ::
     lim_body:get_body_error()
@@ -30,11 +30,12 @@
 
 -type commit_error() ::
     {forbidden_operation_amount, forbidden_operation_amount_error()}
-    | {plan, notfound}
-    | {full | partial, lim_body:get_body_error()}
+    | lim_body:get_body_error()
     | lim_accounting:invalid_request_error().
 
--type rollback_error() :: {plan, notfound} | lim_accounting:invalid_request_error().
+-type rollback_error() ::
+    lim_body:get_body_error()
+    | lim_accounting:invalid_request_error().
 
 -export_type([get_limit_error/0]).
 -export_type([hold_error/0]).
