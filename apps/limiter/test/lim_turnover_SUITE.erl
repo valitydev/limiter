@@ -26,13 +26,14 @@
 -export([refund_ok/1]).
 -export([get_config_ok/1]).
 
+-type group_name() :: atom().
 -type test_case_name() :: atom().
 
 -define(RATE_SOURCE_ID, <<"dummy_source_id">>).
 
 %% tests descriptions
 
--spec all() -> [test_case_name()].
+-spec all() -> [{group, group_name()}].
 all() ->
     [
         {group, default}
@@ -84,16 +85,16 @@ init_per_suite(Config) ->
 
 -spec end_per_suite(config()) -> _.
 end_per_suite(Config) ->
-    [application:stop(App) || App <- proplists:get_value(apps, Config)],
+    _ = [application:stop(App) || App <- proplists:get_value(apps, Config)],
     Config.
 
 -spec init_per_testcase(test_case_name(), config()) -> config().
 init_per_testcase(_Name, C) ->
     [{test_sup, lim_mock:start_mocked_service_sup()} | C].
 
--spec end_per_testcase(test_case_name(), config()) -> config().
+-spec end_per_testcase(test_case_name(), config()) -> ok.
 end_per_testcase(_Name, C) ->
-    lim_mock:stop_mocked_service_sup(?config(test_sup, C)),
+    _ = lim_mock:stop_mocked_service_sup(?config(test_sup, C)),
     ok.
 
 %%
@@ -101,7 +102,7 @@ end_per_testcase(_Name, C) ->
 -spec commit_with_default_exchange(config()) -> _.
 commit_with_default_exchange(C) ->
     Rational = #base_Rational{p = 1000000, q = 100},
-    mock_exchange(Rational, C),
+    _ = mock_exchange(Rational, C),
     ID = lim_time:to_rfc3339(lim_time:now()),
     #{client := Client} = prepare_environment(ID, <<"GlobalMonthTurnover">>, C),
     Context = #limiter_context_LimitContext{
@@ -128,7 +129,7 @@ commit_with_default_exchange(C) ->
 -spec partial_commit_with_exchange(config()) -> _.
 partial_commit_with_exchange(C) ->
     Rational = #base_Rational{p = 800000, q = 100},
-    mock_exchange(Rational, C),
+    _ = mock_exchange(Rational, C),
     ID = lim_time:to_rfc3339(lim_time:now()),
     #{client := Client} = prepare_environment(ID, <<"GlobalMonthTurnover">>, C),
     Context = #limiter_context_LimitContext{
@@ -161,7 +162,7 @@ partial_commit_with_exchange(C) ->
 -spec commit_with_exchange(config()) -> _.
 commit_with_exchange(C) ->
     Rational = #base_Rational{p = 1000000, q = 100},
-    mock_exchange(Rational, C),
+    _ = mock_exchange(Rational, C),
     ID = lim_time:to_rfc3339(lim_time:now()),
     #{client := Client} = prepare_environment(ID, <<"GlobalMonthTurnover">>, C),
     Context = #limiter_context_LimitContext{
@@ -188,7 +189,7 @@ commit_with_exchange(C) ->
 -spec get_rate(config()) -> _.
 get_rate(C) ->
     Rational = #base_Rational{p = 10, q = 10},
-    mock_exchange(Rational, C),
+    _ = mock_exchange(Rational, C),
     Request = #rate_ConversionRequest{
         source = <<"RUB">>,
         destination = <<"USD">>,

@@ -17,13 +17,14 @@
 -export([create_config/1]).
 -export([get_config/1]).
 
+-type group_name() :: atom().
 -type test_case_name() :: atom().
 
 -define(RATE_SOURCE_ID, <<"dummy_source_id">>).
 
 %% tests descriptions
 
--spec all() -> [test_case_name()].
+-spec all() -> [{group, group_name()}].
 all() ->
     [
         {group, default}
@@ -60,14 +61,13 @@ init_per_suite(Config) ->
 
 -spec end_per_suite(config()) -> _.
 end_per_suite(Config) ->
-    [application:stop(App) || App <- proplists:get_value(apps, Config)],
-    Config.
+    _ = [application:stop(App) || App <- proplists:get_value(apps, Config)].
 
 -spec init_per_testcase(test_case_name(), config()) -> config().
 init_per_testcase(_Name, C) ->
     C.
 
--spec end_per_testcase(test_case_name(), config()) -> config().
+-spec end_per_testcase(test_case_name(), config()) -> ok.
 end_per_testcase(_Name, _C) ->
     ok.
 

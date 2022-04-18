@@ -3,6 +3,9 @@ service_name: machinegun
 erlang:
     secret_cookie_file: "/opt/machinegun/etc/cookie"
 
+logging:
+    out_type: stdout
+
 namespaces:
     lim/config_v1:
         processor:

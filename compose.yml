@@ -1,0 +1,60 @@
+version: '3'
+services:
+
+  testrunner:
+    image: $DEV_IMAGE_TAG
+    build:
+      dockerfile: Dockerfile.dev
+      context: .
+      args:
+        OTP_VERSION: $OTP_VERSION
+        THRIFT_VERSION: $THRIFT_VERSION
+    volumes:
+      - .:$PWD
+    hostname: $SERVICE_NAME
+    working_dir: $PWD
+    command: /sbin/init
+    depends_on:
+      machinegun:
+        condition: service_healthy
+      shumway:
+        condition: service_healthy
+
+  machinegun:
+    image: ghcr.io/valitydev/machinegun:sha-7e785cd
+    volumes:
+      - ./test/machinegun/config.yaml:/opt/machinegun/etc/config.yaml
+      - ./test/log/machinegun:/var/log/machinegun
+      - ./test/machinegun/cookie:/opt/machinegun/etc/cookie
+    healthcheck:
+      test: "/opt/machinegun/bin/machinegun ping"
+      interval: 5s
+      timeout: 1s
+      retries: 10
+
+  shumway:
+    image: docker.io/rbkmoney/shumway:44eb989065b27be619acd16b12ebdb2288b46c36
+    restart: unless-stopped
+    entrypoint:
+      - java
+      - -Xmx512m
+      - -jar
+      - /opt/shumway/shumway.jar
+      - --spring.datasource.url=jdbc:postgresql://shumway-db:5432/shumway
+      - --spring.datasource.username=postgres
+      - --spring.datasource.password=postgres
+      - --management.metrics.export.statsd.enabled=false
+    depends_on:
+      - shumway-db
+    healthcheck:
+      test: "curl http://localhost:8022/actuator/health"
+      interval: 5s
+      timeout: 1s
+      retries: 20
+
+  shumway-db:
+    image: docker.io/library/postgres:9.6
+    environment:
+      - POSTGRES_DB=shumway
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres

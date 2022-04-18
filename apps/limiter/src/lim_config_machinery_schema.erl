@@ -90,9 +90,10 @@ unmarshal_event(1, EncodedChange, Context) ->
 -spec marshal_unmarshal_created_test() -> _.
 
 marshal_unmarshal_created_test() ->
+    ID = <<"id">>,
     Created =
         {created, #{
-            id => <<"id">>,
+            id => ID,
             processor_type => <<"type">>,
             created_at => lim_time:now(),
             body_type => {cash, <<"RUB">>},
@@ -104,9 +105,10 @@ marshal_unmarshal_created_test() ->
             scope => {scope, party},
             description => <<"description">>
         }},
+    Context = #{machine_ref => ID, machine_ns => config},
     Event = {ev, lim_time:machinery_now(), Created},
-    {Marshaled, _} = marshal_event(1, Event, {}),
-    {Unmarshaled, _} = unmarshal_event(1, Marshaled, {}),
+    {Marshaled, _} = marshal_event(1, Event, Context),
+    {Unmarshaled, _} = unmarshal_event(1, Marshaled, Context),
     ?assertEqual(Event, Unmarshaled).
 
 -endif.
