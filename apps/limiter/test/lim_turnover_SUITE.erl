@@ -27,6 +27,7 @@
 -export([get_config_ok/1]).
 -export([commit_inexistent_hold_fails/1]).
 -export([partial_commit_inexistent_hold_fails/1]).
+-export([commit_multirange_limit_ok/1]).
 
 -export([commit_processes_idempotently/1]).
 -export([full_commit_processes_idempotently/1]).
@@ -62,7 +63,8 @@ groups() ->
             get_config_ok,
             refund_ok,
             commit_inexistent_hold_fails,
-            partial_commit_inexistent_hold_fails
+            partial_commit_inexistent_hold_fails,
+            commit_multirange_limit_ok
         ]},
         {idempotency, [parallel], [
             commit_processes_idempotently,
@@ -309,6 +311,44 @@ partial_commit_inexistent_hold_fails(C) ->
     % before requesting him to hold / commit.
     {exception, #limiter_base_InvalidRequest{}} =
         lim_client:commit(?LIMIT_CHANGE(ID), Context, ?config(client, C)).
+
+-spec commit_multirange_limit_ok(config()) -> _.
+commit_multirange_limit_ok(C) ->
+    ID = ?config(id, C),
+    Client = ?config(client, C),
+    Params = #limiter_config_LimitConfigParams{
+        id = ID,
+        body_type = {cash, #limiter_config_LimitBodyTypeCash{currency = <<"RUB">>}},
+        started_at = <<"2000-01-01T00:00:00Z">>,
+        shard_size = 12,
+        time_range_type = {calendar, {month, #time_range_TimeRangeTypeCalendarMonth{}}},
+        context_type = {payment_processing, #limiter_config_LimitContextTypePaymentProcessing{}},
+        type = {turnover, #limiter_config_LimitTypeTurnover{}},
+        scope = {scope_global, #limiter_config_LimitScopeGlobal{}},
+        op_behaviour = #limiter_config_OperationLimitBehaviour{}
+    },
+    {ok, _LimitConfig} = lim_client:create_config(Params, Client),
+    % NOTE
+    % Expecting those 3 changes will be accounted in the same limit range machine.
+    % We have no way to verify it here though.
+    PaymentJan = #limiter_context_InvoicePayment{
+        created_at = <<"2020-01-01T00:00:00Z">>,
+        cost = ?cash(42)
+    },
+    {ok, _} = hold_and_commit(?LIMIT_CHANGE(ID, 1), ?ctx_invoice_payment(PaymentJan), Client),
+    PaymentFeb = #limiter_context_InvoicePayment{
+        created_at = <<"2020-02-01T00:00:00Z">>,
+        cost = ?cash(43)
+    },
+    {ok, _} = hold_and_commit(?LIMIT_CHANGE(ID, 2), ?ctx_invoice_payment(PaymentFeb), Client),
+    PaymentApr = #limiter_context_InvoicePayment{
+        created_at = <<"2020-04-01T00:00:00Z">>,
+        cost = ?cash(44)
+    },
+    {ok, _} = hold_and_commit(?LIMIT_CHANGE(ID, 3), ?ctx_invoice_payment(PaymentApr), Client),
+    {ok, #limiter_Limit{amount = 42}} = lim_client:get(ID, ?ctx_invoice_payment(PaymentJan), Client),
+    {ok, #limiter_Limit{amount = 43}} = lim_client:get(ID, ?ctx_invoice_payment(PaymentFeb), Client),
+    {ok, #limiter_Limit{amount = 44}} = lim_client:get(ID, ?ctx_invoice_payment(PaymentApr), Client).
 
 %%
 
