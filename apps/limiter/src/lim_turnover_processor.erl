@@ -47,7 +47,7 @@
 -spec get_limit(lim_id(), config(), lim_context()) -> {ok, limit()} | {error, get_limit_error()}.
 get_limit(LimitID, Config, LimitContext) ->
     do(fun() ->
-        {LimitRangeID, TimeRange} = find_limit_range(LimitID, Config, LimitContext),
+        {LimitRangeID, TimeRange} = compute_limit_time_range_location(LimitID, Config, LimitContext),
         #{max_available_amount := Amount} =
             unwrap(range, lim_range_machine:get_range_balance(LimitRangeID, TimeRange, LimitContext)),
         #limiter_Limit{
@@ -100,7 +100,7 @@ rollback(LimitChange = #limiter_LimitChange{id = LimitID}, Config, LimitContext)
         unwrap(lim_accounting:rollback(construct_plan_id(LimitChange), [{1, [Posting]}], LimitContext))
     end).
 
-find_limit_range(LimitID, Config, LimitContext) ->
+compute_limit_time_range_location(LimitID, Config, LimitContext) ->
     {ok, Timestamp} = lim_context:get_from_context(payment_processing, created_at, LimitContext),
     LimitRangeID = construct_range_id(LimitID, Timestamp, Config, LimitContext),
     TimeRange = lim_config_machine:calculate_time_range(Timestamp, Config),
@@ -108,7 +108,7 @@ find_limit_range(LimitID, Config, LimitContext) ->
 
 ensure_limit_time_range(LimitID, Config, LimitContext) ->
     {ok, Timestamp} = lim_context:get_from_context(payment_processing, created_at, LimitContext),
-    {LimitRangeID, TimeRange} = find_limit_range(LimitID, Config, LimitContext),
+    {LimitRangeID, TimeRange} = compute_limit_time_range_location(LimitID, Config, LimitContext),
     CreateParams = genlib_map:compact(#{
         id => LimitRangeID,
         type => lim_config_machine:time_range_type(Config),
