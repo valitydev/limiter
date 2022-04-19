@@ -1,8 +1,5 @@
 -module(lim_body).
 
--include_lib("limiter_proto/include/lim_base_thrift.hrl").
--include_lib("limiter_proto/include/lim_limiter_thrift.hrl").
-
 -export([get_body/3]).
 -export([create_body_from_cash/2]).
 
@@ -17,7 +14,7 @@
 -type currency() :: lim_base_thrift:'CurrencySymbolicCode'().
 -type config() :: lim_config_machine:config().
 -type body_type() :: full | partial.
--type get_body_error() :: notfound | lim_rates:convertation_error().
+-type get_body_error() :: notfound | lim_rates:conversion_error().
 
 -export_type([t/0]).
 -export_type([cash/0]).

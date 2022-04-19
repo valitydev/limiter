@@ -1,7 +1,6 @@
 -module(lim_config_machine).
 
 -include_lib("limiter_proto/include/lim_limiter_thrift.hrl").
--include_lib("limiter_proto/include/lim_base_thrift.hrl").
 
 %% Accessors
 
@@ -9,6 +8,7 @@
 -export([id/1]).
 -export([description/1]).
 -export([body_type/1]).
+-export([currency/1]).
 -export([started_at/1]).
 -export([shard_size/1]).
 -export([time_range_type/1]).
@@ -182,6 +182,12 @@ description(_) ->
 -spec body_type(config()) -> body_type().
 body_type(#{body_type := BodyType}) ->
     BodyType.
+
+-spec currency(config()) -> currency() | undefined.
+currency(#{body_type := {cash, Currency}}) ->
+    Currency;
+currency(#{body_type := amount}) ->
+    undefined.
 
 -spec started_at(config()) -> timestamp().
 started_at(#{started_at := Value}) ->

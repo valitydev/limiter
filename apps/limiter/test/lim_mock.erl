@@ -19,9 +19,7 @@ stop_mocked_service_sup(SupPid) ->
     exit(SupPid, shutdown).
 
 -define(HOST_IP, "::").
--define(HOST_PORT, 8080).
 -define(HOST_NAME, "localhost").
--define(HOST_URL, ?HOST_NAME ++ ":" ++ integer_to_list(?HOST_PORT)).
 
 -spec mock_services(_, _) -> _.
 mock_services(Services, SupOrConfig) ->

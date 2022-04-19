@@ -11,11 +11,9 @@
 %% API
 
 -export([get/2]).
--export([ensure_exist/2]).
+-export([ensure_exists/3]).
 -export([get_range/2]).
 -export([get_range_balance/3]).
--export([ensure_range_exist/3]).
--export([ensure_range_exist_in_state/3]).
 
 %% Machinery callbacks
 
@@ -38,13 +36,13 @@
 -type woody_context() :: woody_context:ctx().
 -type lim_context() :: lim_context:t().
 -type timestamp() :: lim_config_machine:timestamp().
--type lim_id() :: lim_config_machine:lim_id().
+-type id() :: binary().
 -type time_range_type() :: lim_config_machine:time_range_type().
 -type time_range() :: lim_config_machine:time_range().
 -type currency() :: lim_config_machine:currency().
 
 -type limit_range_state() :: #{
-    id := lim_id(),
+    id := id(),
     type := time_range_type(),
     created_at := timestamp(),
     currency => currency(),
@@ -59,7 +57,7 @@
     | {time_range_created, time_range_ext()}.
 
 -type limit_range() :: #{
-    id := lim_id(),
+    id := id(),
     type := time_range_type(),
     created_at := timestamp(),
     currency => currency()
@@ -73,7 +71,7 @@
 }.
 
 -type create_params() :: #{
-    id := lim_id(),
+    id := id(),
     type := time_range_type(),
     created_at := timestamp(),
     currency => currency()
@@ -82,16 +80,18 @@
 -type range_call() ::
     {add_range, time_range()}.
 
+-export_type([time_range_ext/0]).
+
 -export_type([timestamped_event/1]).
 -export_type([event/0]).
 
 -define(NS, 'lim/range_v1').
 
--import(lim_pipeline, [do/1, unwrap/1, unwrap/2]).
+-import(lim_pipeline, [do/1, unwrap/1]).
 
 %% Accessors
 
--spec id(limit_range_state()) -> lim_id().
+-spec id(limit_range_state()) -> id().
 id(State) ->
     maps:get(id, State).
 
@@ -117,60 +117,46 @@ currency(_State) ->
 
 %%% API
 
--spec get(lim_id(), lim_context()) -> {ok, limit_range_state()} | {error, notfound}.
+-spec get(id(), lim_context()) -> {ok, limit_range_state()} | {error, notfound}.
 get(ID, LimitContext) ->
     {ok, WoodyCtx} = lim_context:woody_context(LimitContext),
     get_state(ID, WoodyCtx).
 
--spec ensure_exist(create_params(), lim_context()) -> {ok, limit_range_state()}.
-ensure_exist(Params = #{id := ID}, LimitContext) ->
+-spec ensure_exists(create_params(), time_range(), lim_context()) -> {ok, time_range_ext()}.
+ensure_exists(Params = #{id := ID, currency := Currency}, TimeRange, LimitContext) ->
     {ok, WoodyCtx} = lim_context:woody_context(LimitContext),
     case get_state(ID, WoodyCtx) of
         {ok, State} ->
-            {ok, State};
+            ensure_range_exist_in_state(TimeRange, State, WoodyCtx);
         {error, notfound} ->
-            _ = start(ID, Params, WoodyCtx),
-            case get_state(ID, WoodyCtx) of
-                {ok, State} ->
-                    {ok, State};
-                {error, notfound} ->
-                    erlang:error({cant_get_after_start, ID})
-            end
+            _ = start(ID, Params, [new_time_range_ext(TimeRange, Currency, WoodyCtx)], WoodyCtx),
+            {ok, State} = get_state(ID, WoodyCtx),
+            get_range(TimeRange, State)
     end.
 
--spec get_range(time_range(), limit_range_state()) -> {ok, time_range_ext()} | {error, notfound}.
-get_range(TimeRange, State) ->
-    find_time_range(TimeRange, ranges(State)).
-
--spec get_range_balance(time_range(), limit_range_state(), lim_context()) ->
-    {ok, lim_accounting:balance()}
-    | {error, {range, notfound}}.
-get_range_balance(TimeRange, State, LimitContext) ->
-    do(fun() ->
-        #{account_id_to := AccountID} = unwrap(range, find_time_range(TimeRange, ranges(State))),
-        {ok, Balance} = lim_accounting:get_balance(AccountID, LimitContext),
-        Balance
-    end).
-
--spec ensure_range_exist(lim_id(), time_range(), lim_context()) ->
-    {ok, time_range_ext()}
-    | {error, {limit_range, notfound}}.
-ensure_range_exist(ID, TimeRange, LimitContext) ->
-    do(fun() ->
-        {ok, WoodyCtx} = lim_context:woody_context(LimitContext),
-        State = unwrap(limit_range, get_state(ID, WoodyCtx)),
-        unwrap(ensure_range_exist_in_state(TimeRange, State, LimitContext))
-    end).
-
--spec ensure_range_exist_in_state(time_range(), limit_range_state(), lim_context()) -> {ok, time_range_ext()}.
-ensure_range_exist_in_state(TimeRange, State, LimitContext) ->
-    {ok, WoodyCtx} = lim_context:woody_context(LimitContext),
+-spec ensure_range_exist_in_state(time_range(), limit_range_state(), woody_context()) -> {ok, time_range_ext()}.
+ensure_range_exist_in_state(TimeRange, State, WoodyCtx) ->
     case find_time_range(TimeRange, ranges(State)) of
         {error, notfound} ->
             call(id(State), {add_range, TimeRange}, WoodyCtx);
         {ok, Range} ->
             {ok, Range}
     end.
+
+-spec get_range(time_range(), limit_range_state()) -> {ok, time_range_ext()} | {error, notfound}.
+get_range(TimeRange, State) ->
+    find_time_range(TimeRange, ranges(State)).
+
+-spec get_range_balance(id(), time_range(), lim_context()) ->
+    {ok, lim_accounting:balance()}
+    | {error, notfound}.
+get_range_balance(ID, TimeRange, LimitContext) ->
+    do(fun() ->
+        State = unwrap(get(ID, LimitContext)),
+        #{account_id_to := AccountID} = unwrap(get_range(TimeRange, State)),
+        {ok, Balance} = lim_accounting:get_balance(AccountID, LimitContext),
+        Balance
+    end).
 
 %%% Machinery callbacks
 
@@ -182,21 +168,14 @@ init(Events, _Machine, _HandlerArgs, _HandlerOpts) ->
 
 -spec process_call(args(range_call()), machine(), handler_args(), handler_opts()) ->
     {response(time_range_ext()), result()} | no_return().
-process_call({add_range, TimeRange0}, Machine, _HandlerArgs, #{woody_ctx := WoodyCtx}) ->
+process_call({add_range, TimeRange}, Machine, _HandlerArgs, #{woody_ctx := WoodyCtx}) ->
     State = collapse(Machine),
-    case find_time_range(TimeRange0, ranges(State)) of
+    case find_time_range(TimeRange, ranges(State)) of
         {error, notfound} ->
-            Currency = currency(State),
-            {ok, LimitContext} = lim_context:create(WoodyCtx),
-            {ok, AccountIDFrom} = lim_accounting:create_account(Currency, LimitContext),
-            {ok, AccountIDTo} = lim_accounting:create_account(Currency, LimitContext),
-            TimeRange1 = TimeRange0#{
-                account_id_from => AccountIDFrom,
-                account_id_to => AccountIDTo
-            },
-            {TimeRange1, #{events => emit_events([{time_range_created, TimeRange1}])}};
-        {ok, Range} ->
-            {Range, #{}}
+            TimeRangeExt = new_time_range_ext(TimeRange, currency(State), WoodyCtx),
+            {TimeRangeExt, #{events => emit_events([{time_range_created, TimeRangeExt}])}};
+        {ok, TimeRangeExt} ->
+            {ok, TimeRangeExt}
     end.
 
 -spec process_timeout(machine(), handler_args(), handler_opts()) -> no_return().
@@ -216,17 +195,27 @@ find_time_range(#{lower := Lower}, [Head = #{lower := Lower} | _Rest]) ->
 find_time_range(TimeRange, [_Head | Rest]) ->
     find_time_range(TimeRange, Rest).
 
+new_time_range_ext(TimeRange, Currency, WoodyCtx) ->
+    {ok, LimitContext} = lim_context:create(WoodyCtx),
+    {ok, AccountIDFrom} = lim_accounting:create_account(Currency, LimitContext),
+    {ok, AccountIDTo} = lim_accounting:create_account(Currency, LimitContext),
+    TimeRange#{
+        account_id_from => AccountIDFrom,
+        account_id_to => AccountIDTo
+    }.
+
 %%
 
--spec start(lim_id(), create_params(), woody_context()) -> ok | {error, exists}.
-start(ID, Params, WoodyCtx) ->
-    machinery:start(?NS, ID, [{created, Params}], get_backend(WoodyCtx)).
+-spec start(id(), create_params(), [time_range_ext()], woody_context()) -> ok | {error, exists}.
+start(ID, Params, TimeRanges, WoodyCtx) ->
+    TimeRangeEvents = [{time_range_created, TR} || TR <- TimeRanges],
+    machinery:start(?NS, ID, [{created, Params} | TimeRangeEvents], get_backend(WoodyCtx)).
 
--spec call(lim_id(), range_call(), woody_context()) -> {ok, response(_)} | {error, notfound}.
+-spec call(id(), range_call(), woody_context()) -> {ok, response(_)} | {error, notfound}.
 call(ID, Msg, WoodyCtx) ->
     machinery:call(?NS, ID, Msg, get_backend(WoodyCtx)).
 
--spec get_state(lim_id(), woody_context()) -> {ok, limit_range_state()} | {error, notfound}.
+-spec get_state(id(), woody_context()) -> {ok, limit_range_state()} | {error, notfound}.
 get_state(ID, WoodyCtx) ->
     case machinery:get(?NS, ID, get_backend(WoodyCtx)) of
         {ok, Machine} ->

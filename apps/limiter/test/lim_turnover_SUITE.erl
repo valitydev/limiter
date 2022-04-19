@@ -25,6 +25,14 @@
 -export([rollback_ok/1]).
 -export([refund_ok/1]).
 -export([get_config_ok/1]).
+-export([commit_inexistent_hold_fails/1]).
+-export([partial_commit_inexistent_hold_fails/1]).
+-export([commit_multirange_limit_ok/1]).
+
+-export([commit_processes_idempotently/1]).
+-export([full_commit_processes_idempotently/1]).
+-export([partial_commit_processes_idempotently/1]).
+-export([rollback_processes_idempotently/1]).
 
 -type group_name() :: atom().
 -type test_case_name() :: atom().
@@ -36,7 +44,8 @@
 -spec all() -> [{group, group_name()}].
 all() ->
     [
-        {group, default}
+        {group, default},
+        {group, idempotency}
     ].
 
 -spec groups() -> [{atom(), list(), [test_case_name()]}].
@@ -52,7 +61,16 @@ groups() ->
             commit_ok,
             rollback_ok,
             get_config_ok,
-            refund_ok
+            refund_ok,
+            commit_inexistent_hold_fails,
+            partial_commit_inexistent_hold_fails,
+            commit_multirange_limit_ok
+        ]},
+        {idempotency, [parallel], [
+            commit_processes_idempotently,
+            full_commit_processes_idempotently,
+            partial_commit_processes_idempotently,
+            rollback_processes_idempotently
         ]}
     ].
 
@@ -85,12 +103,16 @@ init_per_suite(Config) ->
 
 -spec end_per_suite(config()) -> _.
 end_per_suite(Config) ->
-    _ = [application:stop(App) || App <- proplists:get_value(apps, Config)],
-    Config.
+    genlib_app:test_application_stop(?config(apps, Config)).
 
 -spec init_per_testcase(test_case_name(), config()) -> config().
-init_per_testcase(_Name, C) ->
-    [{test_sup, lim_mock:start_mocked_service_sup()} | C].
+init_per_testcase(Name, C) ->
+    [
+        {id, gen_unique_id(Name)},
+        {client, lim_client:new()},
+        {test_sup, lim_mock:start_mocked_service_sup()}
+        | C
+    ].
 
 -spec end_per_testcase(test_case_name(), config()) -> ok.
 end_per_testcase(_Name, C) ->
@@ -99,12 +121,16 @@ end_per_testcase(_Name, C) ->
 
 %%
 
+-define(CHANGE_ID, 42).
+-define(LIMIT_CHANGE(ID), ?LIMIT_CHANGE(ID, ?CHANGE_ID)).
+-define(LIMIT_CHANGE(ID, ChangeID), #limiter_LimitChange{id = ID, change_id = gen_change_id(ID, ChangeID)}).
+
 -spec commit_with_default_exchange(config()) -> _.
 commit_with_default_exchange(C) ->
     Rational = #base_Rational{p = 1000000, q = 100},
     _ = mock_exchange(Rational, C),
-    ID = lim_time:to_rfc3339(lim_time:now()),
-    #{client := Client} = prepare_environment(ID, <<"GlobalMonthTurnover">>, C),
+    _ = prepare_environment(<<"GlobalMonthTurnover">>, C),
+    ID = ?config(id, C),
     Context = #limiter_context_LimitContext{
         payment_processing = #limiter_context_ContextPaymentProcessing{
             op = {invoice, #limiter_context_PaymentProcessingOperationInvoice{}},
@@ -117,21 +143,15 @@ commit_with_default_exchange(C) ->
             }
         }
     },
-    Timestamp = lim_time:to_rfc3339(lim_time:now()),
-    LimitChangeID = <<Timestamp/binary, "Commit">>,
-    Change = #limiter_LimitChange{
-        id = ID,
-        change_id = LimitChangeID
-    },
-    {ok, {vector, _}} = hold_and_commit(Change, Context, Client),
-    {ok, #limiter_Limit{amount = 10000}} = lim_client:get(ID, Context, Client).
+    {ok, {vector, _}} = hold_and_commit(?LIMIT_CHANGE(ID), Context, ?config(client, C)),
+    {ok, #limiter_Limit{amount = 10000}} = lim_client:get(ID, Context, ?config(client, C)).
 
 -spec partial_commit_with_exchange(config()) -> _.
 partial_commit_with_exchange(C) ->
     Rational = #base_Rational{p = 800000, q = 100},
     _ = mock_exchange(Rational, C),
-    ID = lim_time:to_rfc3339(lim_time:now()),
-    #{client := Client} = prepare_environment(ID, <<"GlobalMonthTurnover">>, C),
+    _ = prepare_environment(<<"GlobalMonthTurnover">>, C),
+    ID = ?config(id, C),
     Context = #limiter_context_LimitContext{
         payment_processing = #limiter_context_ContextPaymentProcessing{
             op = {invoice_payment, #limiter_context_PaymentProcessingOperationInvoicePayment{}},
@@ -150,21 +170,15 @@ partial_commit_with_exchange(C) ->
             }
         }
     },
-    Timestamp = lim_time:to_rfc3339(lim_time:now()),
-    LimitChangeID = <<Timestamp/binary, "PartialCommit">>,
-    Change = #limiter_LimitChange{
-        id = ID,
-        change_id = LimitChangeID
-    },
-    {ok, {vector, _}} = hold_and_commit(Change, Context, Client),
-    {ok, #limiter_Limit{amount = 8400}} = lim_client:get(ID, Context, Client).
+    {ok, {vector, _}} = hold_and_commit(?LIMIT_CHANGE(ID), Context, ?config(client, C)),
+    {ok, #limiter_Limit{amount = 8400}} = lim_client:get(ID, Context, ?config(client, C)).
 
 -spec commit_with_exchange(config()) -> _.
 commit_with_exchange(C) ->
     Rational = #base_Rational{p = 1000000, q = 100},
     _ = mock_exchange(Rational, C),
-    ID = lim_time:to_rfc3339(lim_time:now()),
-    #{client := Client} = prepare_environment(ID, <<"GlobalMonthTurnover">>, C),
+    _ = prepare_environment(<<"GlobalMonthTurnover">>, C),
+    ID = ?config(id, C),
     Context = #limiter_context_LimitContext{
         payment_processing = #limiter_context_ContextPaymentProcessing{
             op = {invoice, #limiter_context_PaymentProcessingOperationInvoice{}},
@@ -177,14 +191,8 @@ commit_with_exchange(C) ->
             }
         }
     },
-    Timestamp = lim_time:to_rfc3339(lim_time:now()),
-    LimitChangeID = <<Timestamp/binary, "Commit">>,
-    Change = #limiter_LimitChange{
-        id = ID,
-        change_id = LimitChangeID
-    },
-    {ok, {vector, _}} = hold_and_commit(Change, Context, Client),
-    {ok, #limiter_Limit{amount = 10500}} = lim_client:get(ID, Context, Client).
+    {ok, {vector, _}} = hold_and_commit(?LIMIT_CHANGE(ID), Context, ?config(client, C)),
+    {ok, #limiter_Limit{amount = 10500}} = lim_client:get(ID, Context, ?config(client, C)).
 
 -spec get_rate(config()) -> _.
 get_rate(C) ->
@@ -206,20 +214,19 @@ get_rate(C) ->
 
 -spec get_limit_notfound(config()) -> _.
 get_limit_notfound(C) ->
-    ID = lim_time:to_rfc3339(lim_time:now()),
-    #{client := Client} = prepare_environment(ID, <<"GlobalMonthTurnover">>, C),
+    _ = prepare_environment(<<"GlobalMonthTurnover">>, C),
     Context = #limiter_context_LimitContext{
         payment_processing = #limiter_context_ContextPaymentProcessing{
             op = {invoice, #limiter_context_PaymentProcessingOperationInvoice{}},
             invoice = #limiter_context_Invoice{created_at = <<"2000-01-01T00:00:00Z">>}
         }
     },
-    {exception, #limiter_LimitNotFound{}} = lim_client:get(ID, Context, Client).
+    {exception, #limiter_LimitNotFound{}} = lim_client:get(?config(id, C), Context, ?config(client, C)).
 
 -spec hold_ok(config()) -> _.
 hold_ok(C) ->
-    ID = <<"ID">>,
-    #{client := Client} = prepare_environment(ID, <<"GlobalMonthTurnover">>, C),
+    _ = prepare_environment(<<"GlobalMonthTurnover">>, C),
+    ID = ?config(id, C),
     Context = #limiter_context_LimitContext{
         payment_processing = #limiter_context_ContextPaymentProcessing{
             op = {invoice, #limiter_context_PaymentProcessingOperationInvoice{}},
@@ -232,19 +239,13 @@ hold_ok(C) ->
             }
         }
     },
-    Timestamp = lim_time:to_rfc3339(lim_time:now()),
-    LimitChangeID = <<Timestamp/binary, "Hold">>,
-    Change = #limiter_LimitChange{
-        id = ID,
-        change_id = LimitChangeID
-    },
-    {ok, {vector, #limiter_VectorClock{}}} = lim_client:hold(Change, Context, Client),
-    {ok, #limiter_Limit{}} = lim_client:get(ID, Context, Client).
+    {ok, {vector, #limiter_VectorClock{}}} = lim_client:hold(?LIMIT_CHANGE(ID), Context, ?config(client, C)),
+    {ok, #limiter_Limit{}} = lim_client:get(ID, Context, ?config(client, C)).
 
 -spec commit_ok(config()) -> _.
 commit_ok(C) ->
-    ID = <<"ID">>,
-    #{client := Client} = prepare_environment(ID, <<"GlobalMonthTurnover">>, C),
+    _ = prepare_environment(<<"GlobalMonthTurnover">>, C),
+    ID = ?config(id, C),
     Context = #limiter_context_LimitContext{
         payment_processing = #limiter_context_ContextPaymentProcessing{
             op = {invoice, #limiter_context_PaymentProcessingOperationInvoice{}},
@@ -257,66 +258,161 @@ commit_ok(C) ->
             }
         }
     },
-    Timestamp = lim_time:to_rfc3339(lim_time:now()),
-    LimitChangeID = <<Timestamp/binary, "Commit">>,
-    Change = #limiter_LimitChange{
-        id = ID,
-        change_id = LimitChangeID
-    },
-    {ok, {vector, _}} = hold_and_commit(Change, Context, Client),
-    {ok, #limiter_Limit{}} = lim_client:get(ID, Context, Client).
+    {ok, {vector, _}} = hold_and_commit(?LIMIT_CHANGE(ID), Context, ?config(client, C)),
+    {ok, #limiter_Limit{}} = lim_client:get(ID, Context, ?config(client, C)).
 
 -spec rollback_ok(config()) -> _.
 rollback_ok(C) ->
-    ID = <<"ID">>,
-    #{client := Client} = prepare_environment(ID, <<"GlobalMonthTurnover">>, C),
+    _ = prepare_environment(<<"GlobalMonthTurnover">>, C),
+    ID = ?config(id, C),
     Context0 = ?ctx_invoice_payment(?cash(10), ?cash(10)),
     Context1 = ?ctx_invoice_payment(?cash(10), ?cash(0)),
-
-    Timestamp = lim_time:to_rfc3339(lim_time:now()),
-    LimitChangeID = <<Timestamp/binary, "Rollback">>,
-    Change = #limiter_LimitChange{
-        id = ID,
-        change_id = LimitChangeID
-    },
-    {ok, {vector, _}} = lim_client:hold(Change, Context0, Client),
-    {ok, {vector, _}} = lim_client:commit(Change, Context1, Client).
+    Change = ?LIMIT_CHANGE(ID),
+    {ok, {vector, _}} = lim_client:hold(Change, Context0, ?config(client, C)),
+    {ok, {vector, _}} = lim_client:commit(Change, Context1, ?config(client, C)).
 
 -spec refund_ok(config()) -> _.
 refund_ok(C) ->
-    ID = lim_time:to_rfc3339(lim_time:now()),
+    ID = ?config(id, C),
+    Client = ?config(client, C),
     OwnerID = <<"WWWcool Ltd">>,
     ShopID = <<"shop">>,
-    #{client := Client} = _LimitConfig = prepare_environment(ID, <<"ShopDayTurnover">>, C),
+    _ = prepare_environment(<<"ShopDayTurnover">>, C),
     Context0 = ?ctx_invoice_payment(OwnerID, ShopID, ?cash(15), ?cash(15)),
     RefundContext1 = ?ctx_invoice_payment_refund(OwnerID, ShopID, ?cash(10), ?cash(10), ?cash(10)),
-    Timestamp = lim_time:to_rfc3339(lim_time:now()),
-    LimitChangeID = <<Timestamp/binary, "Payment">>,
-
-    Change = #limiter_LimitChange{
-        id = ID,
-        change_id = LimitChangeID
-    },
-    {ok, {vector, _}} = hold_and_commit(Change, Context0, Client),
-
-    Timestamp2 = lim_time:to_rfc3339(lim_time:now()),
-    LimitChangeID2 = <<Timestamp2/binary, "Refund">>,
-    Change2 = #limiter_LimitChange{
-        id = ID,
-        change_id = LimitChangeID2
-    },
-
-    {ok, {vector, _}} = hold_and_commit(Change2, RefundContext1, Client),
+    {ok, {vector, _}} = hold_and_commit(?LIMIT_CHANGE(ID, <<"Payment">>), Context0, Client),
+    {ok, {vector, _}} = hold_and_commit(?LIMIT_CHANGE(ID, <<"Refund">>), RefundContext1, Client),
     {ok, #limiter_Limit{} = Limit2} = lim_client:get(ID, RefundContext1, Client),
     ?assertEqual(Limit2#limiter_Limit.amount, 5).
 
 -spec get_config_ok(config()) -> _.
 get_config_ok(C) ->
-    ID = <<"ID">>,
-    #{client := Client} = prepare_environment(ID, <<"GlobalMonthTurnover">>, C),
-    {ok, #limiter_config_LimitConfig{}} = lim_client:get_config(ID, Client).
+    _ = prepare_environment(<<"GlobalMonthTurnover">>, C),
+    {ok, #limiter_config_LimitConfig{}} = lim_client:get_config(?config(id, C), ?config(client, C)).
+
+-spec commit_inexistent_hold_fails(config()) -> _.
+commit_inexistent_hold_fails(C) ->
+    ID = ?config(id, C),
+    _ = prepare_environment(<<"GlobalMonthTurnover">>, C),
+    Context = ?ctx_invoice_payment(?cash(42), undefined),
+    % NOTE
+    % We do not expect `LimitChangeNotFound` here because we no longer reconcile with accounter
+    % before requesting him to hold / commit.
+    {exception, #limiter_base_InvalidRequest{}} =
+        lim_client:commit(?LIMIT_CHANGE(ID), Context, ?config(client, C)).
+
+-spec partial_commit_inexistent_hold_fails(config()) -> _.
+partial_commit_inexistent_hold_fails(C) ->
+    ID = ?config(id, C),
+    _ = prepare_environment(<<"GlobalMonthTurnover">>, C),
+    Context = ?ctx_invoice_payment(?cash(42), ?cash(21)),
+    % NOTE
+    % We do not expect `LimitChangeNotFound` here because we no longer reconcile with accounter
+    % before requesting him to hold / commit.
+    {exception, #limiter_base_InvalidRequest{}} =
+        lim_client:commit(?LIMIT_CHANGE(ID), Context, ?config(client, C)).
+
+-spec commit_multirange_limit_ok(config()) -> _.
+commit_multirange_limit_ok(C) ->
+    ID = ?config(id, C),
+    Client = ?config(client, C),
+    Params = #limiter_config_LimitConfigParams{
+        id = ID,
+        body_type = {cash, #limiter_config_LimitBodyTypeCash{currency = <<"RUB">>}},
+        started_at = <<"2000-01-01T00:00:00Z">>,
+        shard_size = 12,
+        time_range_type = {calendar, {month, #time_range_TimeRangeTypeCalendarMonth{}}},
+        context_type = {payment_processing, #limiter_config_LimitContextTypePaymentProcessing{}},
+        type = {turnover, #limiter_config_LimitTypeTurnover{}},
+        scope = {scope_global, #limiter_config_LimitScopeGlobal{}},
+        op_behaviour = #limiter_config_OperationLimitBehaviour{}
+    },
+    {ok, _LimitConfig} = lim_client:create_config(Params, Client),
+    % NOTE
+    % Expecting those 3 changes will be accounted in the same limit range machine.
+    % We have no way to verify it here though.
+    PaymentJan = #limiter_context_InvoicePayment{
+        created_at = <<"2020-01-01T00:00:00Z">>,
+        cost = ?cash(42)
+    },
+    {ok, _} = hold_and_commit(?LIMIT_CHANGE(ID, 1), ?ctx_invoice_payment(PaymentJan), Client),
+    PaymentFeb = #limiter_context_InvoicePayment{
+        created_at = <<"2020-02-01T00:00:00Z">>,
+        cost = ?cash(43)
+    },
+    {ok, _} = hold_and_commit(?LIMIT_CHANGE(ID, 2), ?ctx_invoice_payment(PaymentFeb), Client),
+    PaymentApr = #limiter_context_InvoicePayment{
+        created_at = <<"2020-04-01T00:00:00Z">>,
+        cost = ?cash(44)
+    },
+    {ok, _} = hold_and_commit(?LIMIT_CHANGE(ID, 3), ?ctx_invoice_payment(PaymentApr), Client),
+    {ok, #limiter_Limit{amount = 42}} = lim_client:get(ID, ?ctx_invoice_payment(PaymentJan), Client),
+    {ok, #limiter_Limit{amount = 43}} = lim_client:get(ID, ?ctx_invoice_payment(PaymentFeb), Client),
+    {ok, #limiter_Limit{amount = 44}} = lim_client:get(ID, ?ctx_invoice_payment(PaymentApr), Client).
 
 %%
+
+-spec commit_processes_idempotently(config()) -> _.
+commit_processes_idempotently(C) ->
+    ID = ?config(id, C),
+    Client = ?config(client, C),
+    _ = prepare_environment(<<"GlobalMonthTurnover">>, C),
+    Context = ?ctx_invoice_payment(?cash(42), undefined),
+    Change = ?LIMIT_CHANGE(ID),
+    {ok, _} = lim_client:hold(Change, Context, Client),
+    {ok, _} = lim_client:hold(Change, Context, Client),
+    {ok, _} = lim_client:commit(Change, Context, Client),
+    {ok, Limit = #limiter_Limit{amount = 42}} = lim_client:get(ID, Context, Client),
+    {ok, _} = lim_client:commit(Change, Context, Client),
+    {ok, Limit} = lim_client:get(ID, Context, Client).
+
+-spec full_commit_processes_idempotently(config()) -> _.
+full_commit_processes_idempotently(C) ->
+    ID = ?config(id, C),
+    Client = ?config(client, C),
+    _ = prepare_environment(<<"GlobalMonthTurnover">>, C),
+    Cost = ?cash(42),
+    Context = ?ctx_invoice_payment(Cost, Cost),
+    Change = ?LIMIT_CHANGE(ID),
+    {ok, _} = lim_client:hold(Change, Context, Client),
+    {ok, _} = lim_client:hold(Change, Context, Client),
+    {ok, _} = lim_client:commit(Change, Context, Client),
+    {ok, Limit = #limiter_Limit{amount = 42}} = lim_client:get(ID, Context, Client),
+    {ok, _} = lim_client:commit(Change, Context, Client),
+    {ok, Limit} = lim_client:get(ID, Context, Client).
+
+-spec partial_commit_processes_idempotently(config()) -> _.
+partial_commit_processes_idempotently(C) ->
+    ID = ?config(id, C),
+    Client = ?config(client, C),
+    _ = prepare_environment(<<"GlobalMonthTurnover">>, C),
+    Context = ?ctx_invoice_payment(?cash(42), ?cash(40)),
+    Change = ?LIMIT_CHANGE(ID),
+    {ok, _} = lim_client:hold(Change, Context, Client),
+    {ok, _} = lim_client:hold(Change, Context, Client),
+    {ok, _} = lim_client:commit(Change, Context, Client),
+    {ok, Limit = #limiter_Limit{amount = 40}} = lim_client:get(ID, Context, Client),
+    {ok, _} = lim_client:commit(Change, Context, Client),
+    {ok, Limit = #limiter_Limit{amount = 40}} = lim_client:get(ID, Context, Client).
+
+-spec rollback_processes_idempotently(config()) -> _.
+rollback_processes_idempotently(C) ->
+    ID = ?config(id, C),
+    Client = ?config(client, C),
+    _ = prepare_environment(<<"GlobalMonthTurnover">>, C),
+    Context = ?ctx_invoice_payment(?cash(42), ?cash(0)),
+    Change = ?LIMIT_CHANGE(ID),
+    {ok, _} = lim_client:hold(Change, Context, Client),
+    {ok, _} = lim_client:hold(Change, Context, Client),
+    {ok, _} = lim_client:commit(Change, Context, Client),
+    {ok, Limit = #limiter_Limit{amount = 0}} = lim_client:get(ID, Context, Client),
+    {ok, _} = lim_client:commit(Change, Context, Client),
+    {ok, Limit = #limiter_Limit{amount = 0}} = lim_client:get(ID, Context, Client).
+
+%%
+
+gen_change_id(LimitID, ChangeID) ->
+    genlib:format("~s/~p", [LimitID, ChangeID]).
 
 hold_and_commit(Change, Context, Client) ->
     {ok, {vector, _}} = lim_client:hold(Change, Context, Client),
@@ -325,8 +421,8 @@ hold_and_commit(Change, Context, Client) ->
 mock_exchange(Rational, C) ->
     lim_mock:mock_services([{xrates, fun('GetConvertedAmount', _) -> {ok, Rational} end}], C).
 
-prepare_environment(ID, LimitName, _C) ->
-    Client = lim_client:new(),
+prepare_environment(LimitName, C) ->
+    ID = ?config(id, C),
     Params = #limiter_cfg_LimitCreateParams{
         id = ID,
         name = LimitName,
@@ -337,5 +433,7 @@ prepare_environment(ID, LimitName, _C) ->
             invoice_payment_refund = {subtraction, #limiter_config_Subtraction{}}
         }
     },
-    {ok, LimitConfig} = lim_client:legacy_create_config(Params, Client),
-    #{config => LimitConfig, client => Client}.
+    {ok, _LimitConfig} = lim_client:legacy_create_config(Params, ?config(client, C)).
+
+gen_unique_id(Prefix) ->
+    genlib:format("~s/~B", [Prefix, lim_time:now()]).

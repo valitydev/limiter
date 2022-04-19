@@ -8,11 +8,13 @@
     currency = #limiter_base_CurrencyRef{symbolic_code = <<"RUB">>}
 }).
 
+-define(op_invoice_payment(), {invoice_payment, #limiter_context_PaymentProcessingOperationInvoicePayment{}}).
+
 -define(ctx_invoice_payment(Cost, CaptureCost), ?ctx_invoice_payment(undefined, undefined, Cost, CaptureCost)).
 
 -define(ctx_invoice_payment(OwnerID, ShopID, Cost, CaptureCost), #limiter_context_LimitContext{
     payment_processing = #limiter_context_ContextPaymentProcessing{
-        op = {invoice_payment, #limiter_context_PaymentProcessingOperationInvoicePayment{}},
+        op = ?op_invoice_payment(),
         invoice = #limiter_context_Invoice{
             owner_id = OwnerID,
             shop_id = ShopID,
@@ -21,6 +23,15 @@
                 cost = Cost,
                 capture_cost = CaptureCost
             }
+        }
+    }
+}).
+
+-define(ctx_invoice_payment(Payment), #limiter_context_LimitContext{
+    payment_processing = #limiter_context_ContextPaymentProcessing{
+        op = ?op_invoice_payment(),
+        invoice = #limiter_context_Invoice{
+            effective_payment = Payment
         }
     }
 }).

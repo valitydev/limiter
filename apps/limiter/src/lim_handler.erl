@@ -86,8 +86,6 @@ handle_function_('Rollback', {LimitChange = ?LIMIT_CHANGE(LimitID), Clock, Conte
     end.
 
 -spec handle_get_error(_) -> no_return().
-handle_get_error({_, {limit, notfound}}) ->
-    woody_error:raise(business, #limiter_LimitNotFound{});
 handle_get_error({_, {range, notfound}}) ->
     woody_error:raise(business, #limiter_LimitNotFound{});
 handle_get_error(Error) ->
@@ -102,16 +100,12 @@ handle_hold_error(Error) ->
 -spec handle_commit_error(_) -> no_return().
 handle_commit_error({_, {forbidden_operation_amount, Error}}) ->
     handle_forbidden_operation_amount_error(Error);
-handle_commit_error({_, {plan, notfound}}) ->
-    woody_error:raise(business, #limiter_LimitChangeNotFound{});
 handle_commit_error({_, {invalid_request, Errors}}) ->
     woody_error:raise(business, #limiter_base_InvalidRequest{errors = Errors});
 handle_commit_error(Error) ->
     handle_default_error(Error).
 
 -spec handle_rollback_error(_) -> no_return().
-handle_rollback_error({_, {plan, notfound}}) ->
-    woody_error:raise(business, #limiter_LimitChangeNotFound{});
 handle_rollback_error({_, {invalid_request, Errors}}) ->
     woody_error:raise(business, #limiter_base_InvalidRequest{errors = Errors});
 handle_rollback_error(Error) ->
