@@ -448,7 +448,7 @@ calculate_calendar_shard_id(Range, Timestamp, StartedAt, ShardSize) ->
     {CurrentDatetime, _USec1} = lim_range_codec:parse_timestamp(Timestamp),
     Units = calculate_time_units(Range, CurrentDatetime, StartDatetime),
     SignPrefix = mk_sign_prefix(Units),
-    RangePrefix = mk_prefix(Range),
+    RangePrefix = mk_unit_prefix(Range),
     mk_shard_id(<<SignPrefix/binary, "/", RangePrefix/binary>>, Units, ShardSize).
 
 calculate_time_units(year, CurrentDatetime, StartDatetime) ->
@@ -525,17 +525,16 @@ year({{Year, _, _}, _Time}) ->
 month({{_Year, Month, _}, _Time}) ->
     Month.
 
-mk_prefix(day) -> <<"day">>;
-mk_prefix(week) -> <<"week">>;
-mk_prefix(month) -> <<"month">>;
-mk_prefix(year) -> <<"year">>.
+mk_unit_prefix(day) -> <<"day">>;
+mk_unit_prefix(week) -> <<"week">>;
+mk_unit_prefix(month) -> <<"month">>;
+mk_unit_prefix(year) -> <<"year">>.
 
 mk_sign_prefix(Units) when Units >= 0 -> <<"future">>;
 mk_sign_prefix(_) -> <<"past">>.
 
-mk_shard_id(Prefix, Units0, ShardSize) ->
-    Units1 = abs(Units0),
-    ID = list_to_binary(integer_to_list(Units1 div ShardSize)),
+mk_shard_id(Prefix, Units, ShardSize) ->
+    ID = integer_to_binary(abs(Units) div ShardSize),
     <<Prefix/binary, "/", ID/binary>>.
 
 -spec mk_scope_prefix(config(), lim_context()) -> {ok, prefix()}.
