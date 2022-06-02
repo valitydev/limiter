@@ -110,8 +110,8 @@ create_config(C) ->
         time_range_type = ?time_range_week(),
         type = ?lim_type_turnover(),
         scope = ?scope([
-            {shop, #limiter_config_LimitScopeEmptyDetails{}},
-            {party, #limiter_config_LimitScopeEmptyDetails{}}
+            ?scope_shop(),
+            ?scope_party()
         ]),
         op_behaviour = ?op_behaviour(),
         context_type = ?ctx_type_payproc()
@@ -134,17 +134,14 @@ create_config_single_scope(C) ->
         time_range_type = ?time_range_week(),
         shard_size = 1,
         type = ?lim_type_turnover(),
-        scope = {single, {party, #limiter_config_LimitScopeEmptyDetails{}}},
+        scope = {single, ?scope_party()},
         context_type = ?ctx_type_payproc(),
         op_behaviour = ?op_behaviour()
     },
     {ok, #limiter_config_LimitConfig{
         scope = Scope
     }} = lim_client:create_config(Params, Client),
-    ?assertEqual(
-        ?scope([{party, #limiter_config_LimitScopeEmptyDetails{}}]),
-        Scope
-    ).
+    ?assertEqual(?scope([?scope_party()]), Scope).
 
 -spec get_config(config()) -> _.
 get_config(C) ->
