@@ -1,9 +1,7 @@
 -module(lim_configurator_SUITE).
 
--include_lib("stdlib/include/assert.hrl").
--include_lib("common_test/include/ct.hrl").
-
 -include_lib("limiter_proto/include/lim_configurator_thrift.hrl").
+-include("lim_ct_helper.hrl").
 
 -export([all/0]).
 
@@ -19,8 +17,6 @@
 
 -type group_name() :: atom().
 -type test_case_name() :: atom().
-
--define(RATE_SOURCE_ID, <<"dummy_source_id">>).
 
 %% tests descriptions
 
@@ -96,7 +92,10 @@ create_config(_C) ->
         shard_size = 4,
         time_range_type = {calendar, {week, #time_range_TimeRangeTypeCalendarWeek{}}},
         type = {turnover, #limiter_config_LimitTypeTurnover{}},
-        scope = {scope, {shop, #limiter_config_LimitScopeTypeShop{}}},
+        scope = ?scope([
+            {shop, #limiter_config_LimitScopeEmptyDetails{}},
+            {party, #limiter_config_LimitScopeEmptyDetails{}}
+        ]),
         op_behaviour = #limiter_config_OperationLimitBehaviour{
             invoice_payment_refund = {addition, #limiter_config_Addition{}}
         },

@@ -324,7 +324,7 @@ commit_multirange_limit_ok(C) ->
         time_range_type = {calendar, {month, #time_range_TimeRangeTypeCalendarMonth{}}},
         context_type = {payment_processing, #limiter_config_LimitContextTypePaymentProcessing{}},
         type = {turnover, #limiter_config_LimitTypeTurnover{}},
-        scope = {scope_global, #limiter_config_LimitScopeGlobal{}},
+        scope = ?scope([]),
         op_behaviour = #limiter_config_OperationLimitBehaviour{}
     },
     {ok, _LimitConfig} = lim_client:create_config(Params, Client),

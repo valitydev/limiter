@@ -102,7 +102,7 @@ marshal_unmarshal_created_test() ->
             time_range_type => {calendar, day},
             context_type => payment_processing,
             type => turnover,
-            scope => {scope, party},
+            scope => ordsets:from_list([party]),
             description => <<"description">>
         }},
     Context = #{machine_ref => ID, machine_ns => config},

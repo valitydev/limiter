@@ -122,7 +122,7 @@ construct_plan_id(#limiter_LimitChange{change_id = ChangeID}) ->
     ChangeID.
 
 construct_range_id(LimitID, Timestamp, Config, LimitContext) ->
-    {ok, Prefix} = lim_config_machine:mk_scope_prefix(Config, LimitContext),
+    Prefix = lim_config_machine:mk_scope_prefix(Config, LimitContext),
     ShardID = lim_config_machine:calculate_shard_id(Timestamp, Config),
     <<LimitID/binary, Prefix/binary, "/", ShardID/binary>>.
 

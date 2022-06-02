@@ -8,6 +8,8 @@
     currency = #limiter_base_CurrencyRef{symbolic_code = <<"RUB">>}
 }).
 
+-define(scope(Types), {multi, ordsets:from_list(Types)}).
+
 -define(op_invoice_payment(), {invoice_payment, #limiter_context_PaymentProcessingOperationInvoicePayment{}}).
 
 -define(ctx_invoice_payment(Cost, CaptureCost), ?ctx_invoice_payment(undefined, undefined, Cost, CaptureCost)).
