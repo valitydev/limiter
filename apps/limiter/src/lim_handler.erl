@@ -14,13 +14,6 @@
 
 -define(LIMIT_CHANGE(ID), #limiter_LimitChange{id = ID}).
 
--define(CASH(
-    Amount,
-    Currency
-),
-    #limiter_base_Cash{amount = Amount, currency = #limiter_base_CurrencyRef{symbolic_code = Currency}}
-).
-
 %%
 
 -spec handle_function(woody:func(), woody:args(), woody_context:ctx(), woody:options()) -> {ok, woody:result()}.
