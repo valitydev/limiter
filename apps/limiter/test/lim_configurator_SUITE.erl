@@ -15,6 +15,7 @@
 
 -export([legacy_create_config/1]).
 -export([create_config/1]).
+-export([create_config_single_scope/1]).
 -export([get_config/1]).
 
 -type group_name() :: atom().
@@ -34,6 +35,7 @@ groups() ->
         {default, [], [
             legacy_create_config,
             create_config,
+            create_config_single_scope,
             get_config
         ]}
     ].
@@ -122,8 +124,27 @@ create_config(C) ->
         lim_client:create_config(Params, Client)
     ).
 
+-spec create_config_single_scope(config()) -> _.
+create_config_single_scope(C) ->
+    Client = lim_client:new(),
+    Params = #limiter_config_LimitConfigParams{
+        id = ?config(limit_id, C),
+        started_at = <<"2000-01-01T00:00:00Z">>,
+        body_type = ?body_type_cash(),
+        time_range_type = ?time_range_week(),
+        shard_size = 1,
+        type = ?lim_type_turnover(),
+        scope = {single, {party, #limiter_config_LimitScopeEmptyDetails{}}},
+        context_type = ?ctx_type_payproc(),
+        op_behaviour = ?op_behaviour()
     },
-    {ok, #limiter_config_LimitConfig{}} = lim_client:create_config(Params, Client).
+    {ok, #limiter_config_LimitConfig{
+        scope = Scope
+    }} = lim_client:create_config(Params, Client),
+    ?assertEqual(
+        ?scope([{party, #limiter_config_LimitScopeEmptyDetails{}}]),
+        Scope
+    ).
 
 -spec get_config(config()) -> _.
 get_config(C) ->
