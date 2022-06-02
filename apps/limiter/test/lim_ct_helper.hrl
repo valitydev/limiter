@@ -3,12 +3,39 @@
 
 -include_lib("limiter_proto/include/lim_configurator_thrift.hrl").
 
--define(cash(Amount), #limiter_base_Cash{
+-define(currency, <<"RUB">>).
+
+-define(cash(Amount), ?cash(Amount, ?currency)).
+-define(cash(Amount, Currency), #limiter_base_Cash{
     amount = Amount,
-    currency = #limiter_base_CurrencyRef{symbolic_code = <<"RUB">>}
+    currency = #limiter_base_CurrencyRef{symbolic_code = Currency}
 }).
 
 -define(scope(Types), {multi, ordsets:from_list(Types)}).
+
+-define(body_type_cash(), ?body_type_cash(?currency)).
+-define(body_type_cash(Currency),
+    {cash, #limiter_config_LimitBodyTypeCash{currency = Currency}}
+).
+
+-define(lim_type_turnover(),
+    {turnover, #limiter_config_LimitTypeTurnover{}}
+).
+
+-define(time_range_week(),
+    {calendar, {week, #time_range_TimeRangeTypeCalendarWeek{}}}
+).
+
+-define(op_behaviour(), ?op_behaviour(?op_addition())).
+-define(op_behaviour(Refund), #limiter_config_OperationLimitBehaviour{
+    invoice_payment_refund = Refund
+}).
+
+-define(op_addition(), {addition, #limiter_config_Addition{}}).
+
+-define(ctx_type_payproc(),
+    {payment_processing, #limiter_config_LimitContextTypePaymentProcessing{}}
+).
 
 -define(op_invoice_payment(), {invoice_payment, #limiter_context_PaymentProcessingOperationInvoicePayment{}}).
 
