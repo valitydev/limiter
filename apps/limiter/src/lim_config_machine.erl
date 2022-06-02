@@ -540,7 +540,11 @@ mk_shard_id(Prefix, Units, ShardSize) ->
 
 -spec mk_scope_prefix(config(), lim_context()) -> prefix().
 mk_scope_prefix(Config, LimitContext) ->
-    Bits = enumerate_context_bits(scope(Config)),
+    mk_scope_prefix_impl(scope(Config), LimitContext).
+
+-spec mk_scope_prefix_impl(limit_scope(), lim_context()) -> prefix().
+mk_scope_prefix_impl(Scope, LimitContext) ->
+    Bits = enumerate_context_bits(Scope),
     ordsets:fold(
         fun(Bit, Acc) ->
             {ok, Value} = extract_context_bit(Bit, LimitContext),
@@ -558,7 +562,7 @@ append_prefix(Fragment, Acc) ->
     {from, lim_context:context_type(), _Name :: atom(), lim_context:context_operation()}
     | {order, integer(), context_bit()}.
 
--spec enumerate_context_bits(lim_config:scope()) -> ordsets:ordset(context_bit()).
+-spec enumerate_context_bits(limit_scope()) -> ordsets:ordset(context_bit()).
 enumerate_context_bits(Types) ->
     ordsets:fold(fun append_context_bits/2, ordsets:new(), Types).
 
@@ -783,6 +787,7 @@ check_calculate_year_shard_id_test() ->
 -define(LIMIT_CONTEXT, #{
     context => #{
         payment_processing => #{
+            op => invoice,
             invoice => #{
                 owner_id => <<"OWNWER">>,
                 shop_id => <<"SHLOP">>
@@ -793,18 +798,18 @@ check_calculate_year_shard_id_test() ->
 
 -spec global_scope_empty_prefix_test() -> _.
 global_scope_empty_prefix_test() ->
-    ?assertEqual(<<>>, mk_scope_prefix(#{}, ?LIMIT_CONTEXT)).
+    ?assertEqual(<<>>, mk_scope_prefix_impl(ordsets:new(), ?LIMIT_CONTEXT)).
 
 -spec preserve_scope_prefix_order_test_() -> [_TestGen].
 preserve_scope_prefix_order_test_() ->
     [
         ?_assertEqual(
             <<"/OWNWER/SHLOP">>,
-            mk_scope_prefix(#{scope => ordsets:from_list([shop, party])}, ?LIMIT_CONTEXT)
+            mk_scope_prefix_impl(ordsets:from_list([shop, party]), ?LIMIT_CONTEXT)
         ),
         ?_assertEqual(
             <<"/OWNWER/SHLOP">>,
-            mk_scope_prefix(#{scope => ordsets:from_list([shop])}, ?LIMIT_CONTEXT)
+            mk_scope_prefix_impl(ordsets:from_list([shop]), ?LIMIT_CONTEXT)
         )
     ].
 
