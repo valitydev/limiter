@@ -12,6 +12,10 @@
 }).
 
 -define(scope(Types), {multi, ordsets:from_list(Types)}).
+-define(global(), ?scope([])).
+
+-define(scope_party(), {party, #limiter_config_LimitScopeEmptyDetails{}}).
+-define(scope_shop(), {shop, #limiter_config_LimitScopeEmptyDetails{}}).
 
 -define(body_type_cash(), ?body_type_cash(?currency)).
 -define(body_type_cash(Currency),
@@ -22,8 +26,14 @@
     {turnover, #limiter_config_LimitTypeTurnover{}}
 ).
 
+-define(time_range_day(),
+    {calendar, {day, #time_range_TimeRangeTypeCalendarDay{}}}
+).
 -define(time_range_week(),
     {calendar, {week, #time_range_TimeRangeTypeCalendarWeek{}}}
+).
+-define(time_range_month(),
+    {calendar, {month, #time_range_TimeRangeTypeCalendarMonth{}}}
 ).
 
 -define(op_behaviour(), ?op_behaviour(?op_addition())).
@@ -32,6 +42,7 @@
 }).
 
 -define(op_addition(), {addition, #limiter_config_Addition{}}).
+-define(op_subtraction(), {subtraction, #limiter_config_Subtraction{}}).
 
 -define(ctx_type_payproc(),
     {payment_processing, #limiter_config_LimitContextTypePaymentProcessing{}}
