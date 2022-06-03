@@ -39,7 +39,8 @@
 -type description() :: binary().
 
 -type limit_type() :: turnover.
--type limit_scope() :: global | {scope, party | shop | wallet | identity}.
+-type limit_scope() :: ordsets:ordset(limit_scope_type()).
+-type limit_scope_type() :: party | shop | wallet | identity.
 -type body_type() :: {cash, currency()} | amount.
 -type shard_size() :: pos_integer().
 -type shard_id() :: binary().
@@ -211,11 +212,11 @@ type(#{type := Value}) ->
 type(_) ->
     undefined.
 
--spec scope(config()) -> lim_maybe:maybe(limit_scope()).
+-spec scope(config()) -> limit_scope().
 scope(#{scope := Value}) ->
     Value;
 scope(_) ->
-    undefined.
+    ordsets:new().
 
 -spec context_type(config()) -> context_type().
 context_type(#{context_type := Value}) ->
@@ -448,7 +449,7 @@ calculate_calendar_shard_id(Range, Timestamp, StartedAt, ShardSize) ->
     {CurrentDatetime, _USec1} = lim_range_codec:parse_timestamp(Timestamp),
     Units = calculate_time_units(Range, CurrentDatetime, StartDatetime),
     SignPrefix = mk_sign_prefix(Units),
-    RangePrefix = mk_prefix(Range),
+    RangePrefix = mk_unit_prefix(Range),
     mk_shard_id(<<SignPrefix/binary, "/", RangePrefix/binary>>, Units, ShardSize).
 
 calculate_time_units(year, CurrentDatetime, StartDatetime) ->
@@ -525,29 +526,65 @@ year({{Year, _, _}, _Time}) ->
 month({{_Year, Month, _}, _Time}) ->
     Month.
 
-mk_prefix(day) -> <<"day">>;
-mk_prefix(week) -> <<"week">>;
-mk_prefix(month) -> <<"month">>;
-mk_prefix(year) -> <<"year">>.
+mk_unit_prefix(day) -> <<"day">>;
+mk_unit_prefix(week) -> <<"week">>;
+mk_unit_prefix(month) -> <<"month">>;
+mk_unit_prefix(year) -> <<"year">>.
 
 mk_sign_prefix(Units) when Units >= 0 -> <<"future">>;
 mk_sign_prefix(_) -> <<"past">>.
 
-mk_shard_id(Prefix, Units0, ShardSize) ->
-    Units1 = abs(Units0),
-    ID = list_to_binary(integer_to_list(Units1 div ShardSize)),
+mk_shard_id(Prefix, Units, ShardSize) ->
+    ID = integer_to_binary(abs(Units) div ShardSize),
     <<Prefix/binary, "/", ID/binary>>.
 
--spec mk_scope_prefix(config(), lim_context()) -> {ok, prefix()}.
-mk_scope_prefix(#{scope := global}, _LimitContext) ->
-    {ok, <<>>};
-mk_scope_prefix(#{scope := {scope, party}}, LimitContext) ->
-    {ok, PartyID} = lim_context:get_from_context(payment_processing, owner_id, invoice, LimitContext),
-    {ok, <<"/", PartyID/binary>>};
-mk_scope_prefix(#{scope := {scope, shop}}, LimitContext) ->
-    {ok, PartyID} = lim_context:get_from_context(payment_processing, owner_id, invoice, LimitContext),
-    {ok, ShopID} = lim_context:get_from_context(payment_processing, shop_id, invoice, LimitContext),
-    {ok, <<"/", PartyID/binary, "/", ShopID/binary>>}.
+-spec mk_scope_prefix(config(), lim_context()) -> prefix().
+mk_scope_prefix(Config, LimitContext) ->
+    mk_scope_prefix_impl(scope(Config), LimitContext).
+
+-spec mk_scope_prefix_impl(limit_scope(), lim_context()) -> prefix().
+mk_scope_prefix_impl(Scope, LimitContext) ->
+    Bits = enumerate_context_bits(Scope),
+    ordsets:fold(
+        fun(Bit, Acc) ->
+            {ok, Value} = extract_context_bit(Bit, LimitContext),
+            append_prefix(Value, Acc)
+        end,
+        <<>>,
+        Bits
+    ).
+
+-spec append_prefix(binary(), prefix()) -> prefix().
+append_prefix(Fragment, Acc) ->
+    <<Acc/binary, "/", Fragment/binary>>.
+
+-type context_bit() ::
+    {from, lim_context:context_type(), _Name :: atom(), lim_context:context_operation()}
+    | {order, integer(), context_bit()}.
+
+-spec enumerate_context_bits(limit_scope()) -> ordsets:ordset(context_bit()).
+enumerate_context_bits(Types) ->
+    ordsets:fold(fun append_context_bits/2, ordsets:new(), Types).
+
+append_context_bits(party, Bits) ->
+    ordsets:add_element(
+        {order, 1, {from, payment_processing, owner_id, invoice}},
+        Bits
+    );
+append_context_bits(shop, Bits) ->
+    lists:foldl(fun ordsets:add_element/2, Bits, [
+        % NOTE
+        % Shop scope implies party scope.
+        % Also we need to preserve order between party / shop to ensure backwards compatibility.
+        {order, 1, {from, payment_processing, owner_id, invoice}},
+        {order, 2, {from, payment_processing, shop_id, invoice}}
+    ]).
+
+-spec extract_context_bit(context_bit(), lim_context()) -> {ok, binary()}.
+extract_context_bit({order, _, Bit}, LimitContext) ->
+    extract_context_bit(Bit, LimitContext);
+extract_context_bit({from, ContextType, ValueName, Op}, LimitContext) ->
+    lim_context:get_from_context(ContextType, ValueName, Op, LimitContext).
 
 %%% Machinery callbacks
 
@@ -746,5 +783,34 @@ check_calculate_year_shard_id_test() ->
     StartedAt2 = <<"2000-01-02T03:00:00Z">>,
     ?assertEqual(<<"past/year/1">>, calculate_calendar_shard_id(year, <<"2000-01-01T00:00:00Z">>, StartedAt2, 1)),
     ?assertEqual(<<"future/year/0">>, calculate_calendar_shard_id(year, <<"2001-01-01T00:00:00Z">>, StartedAt2, 1)).
+
+-define(LIMIT_CONTEXT, #{
+    context => #{
+        payment_processing => #{
+            op => invoice,
+            invoice => #{
+                owner_id => <<"OWNER">>,
+                shop_id => <<"SHLOP">>
+            }
+        }
+    }
+}).
+
+-spec global_scope_empty_prefix_test() -> _.
+global_scope_empty_prefix_test() ->
+    ?assertEqual(<<>>, mk_scope_prefix_impl(ordsets:new(), ?LIMIT_CONTEXT)).
+
+-spec preserve_scope_prefix_order_test_() -> [_TestGen].
+preserve_scope_prefix_order_test_() ->
+    [
+        ?_assertEqual(
+            <<"/OWNER/SHLOP">>,
+            mk_scope_prefix_impl(ordsets:from_list([shop, party]), ?LIMIT_CONTEXT)
+        ),
+        ?_assertEqual(
+            <<"/OWNER/SHLOP">>,
+            mk_scope_prefix_impl(ordsets:from_list([shop]), ?LIMIT_CONTEXT)
+        )
+    ].
 
 -endif.

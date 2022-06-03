@@ -129,7 +129,7 @@ end_per_testcase(_Name, C) ->
 commit_with_default_exchange(C) ->
     Rational = #base_Rational{p = 1000000, q = 100},
     _ = mock_exchange(Rational, C),
-    _ = prepare_environment(<<"GlobalMonthTurnover">>, C),
+    _ = configure_limit(?time_range_month(), ?global(), C),
     ID = ?config(id, C),
     Context = #limiter_context_LimitContext{
         payment_processing = #limiter_context_ContextPaymentProcessing{
@@ -150,7 +150,7 @@ commit_with_default_exchange(C) ->
 partial_commit_with_exchange(C) ->
     Rational = #base_Rational{p = 800000, q = 100},
     _ = mock_exchange(Rational, C),
-    _ = prepare_environment(<<"GlobalMonthTurnover">>, C),
+    _ = configure_limit(?time_range_month(), ?global(), C),
     ID = ?config(id, C),
     Context = #limiter_context_LimitContext{
         payment_processing = #limiter_context_ContextPaymentProcessing{
@@ -177,7 +177,7 @@ partial_commit_with_exchange(C) ->
 commit_with_exchange(C) ->
     Rational = #base_Rational{p = 1000000, q = 100},
     _ = mock_exchange(Rational, C),
-    _ = prepare_environment(<<"GlobalMonthTurnover">>, C),
+    _ = configure_limit(?time_range_month(), ?global(), C),
     ID = ?config(id, C),
     Context = #limiter_context_LimitContext{
         payment_processing = #limiter_context_ContextPaymentProcessing{
@@ -214,7 +214,7 @@ get_rate(C) ->
 
 -spec get_limit_notfound(config()) -> _.
 get_limit_notfound(C) ->
-    _ = prepare_environment(<<"GlobalMonthTurnover">>, C),
+    _ = configure_limit(?time_range_month(), ?global(), C),
     Context = #limiter_context_LimitContext{
         payment_processing = #limiter_context_ContextPaymentProcessing{
             op = {invoice, #limiter_context_PaymentProcessingOperationInvoice{}},
@@ -225,7 +225,7 @@ get_limit_notfound(C) ->
 
 -spec hold_ok(config()) -> _.
 hold_ok(C) ->
-    _ = prepare_environment(<<"GlobalMonthTurnover">>, C),
+    _ = configure_limit(?time_range_month(), ?global(), C),
     ID = ?config(id, C),
     Context = #limiter_context_LimitContext{
         payment_processing = #limiter_context_ContextPaymentProcessing{
@@ -244,7 +244,7 @@ hold_ok(C) ->
 
 -spec commit_ok(config()) -> _.
 commit_ok(C) ->
-    _ = prepare_environment(<<"GlobalMonthTurnover">>, C),
+    _ = configure_limit(?time_range_month(), ?global(), C),
     ID = ?config(id, C),
     Context = #limiter_context_LimitContext{
         payment_processing = #limiter_context_ContextPaymentProcessing{
@@ -263,7 +263,7 @@ commit_ok(C) ->
 
 -spec rollback_ok(config()) -> _.
 rollback_ok(C) ->
-    _ = prepare_environment(<<"GlobalMonthTurnover">>, C),
+    _ = configure_limit(?time_range_week(), ?global(), C),
     ID = ?config(id, C),
     Context0 = ?ctx_invoice_payment(?cash(10), ?cash(10)),
     Context1 = ?ctx_invoice_payment(?cash(10), ?cash(0)),
@@ -277,7 +277,7 @@ refund_ok(C) ->
     Client = ?config(client, C),
     OwnerID = <<"WWWcool Ltd">>,
     ShopID = <<"shop">>,
-    _ = prepare_environment(<<"ShopDayTurnover">>, C),
+    _ = configure_limit(?time_range_day(), ?scope([?scope_party(), ?scope_shop()]), C),
     Context0 = ?ctx_invoice_payment(OwnerID, ShopID, ?cash(15), ?cash(15)),
     RefundContext1 = ?ctx_invoice_payment_refund(OwnerID, ShopID, ?cash(10), ?cash(10), ?cash(10)),
     {ok, {vector, _}} = hold_and_commit(?LIMIT_CHANGE(ID, <<"Payment">>), Context0, Client),
@@ -287,13 +287,13 @@ refund_ok(C) ->
 
 -spec get_config_ok(config()) -> _.
 get_config_ok(C) ->
-    _ = prepare_environment(<<"GlobalMonthTurnover">>, C),
+    _ = configure_limit(?time_range_week(), ?global(), C),
     {ok, #limiter_config_LimitConfig{}} = lim_client:get_config(?config(id, C), ?config(client, C)).
 
 -spec commit_inexistent_hold_fails(config()) -> _.
 commit_inexistent_hold_fails(C) ->
     ID = ?config(id, C),
-    _ = prepare_environment(<<"GlobalMonthTurnover">>, C),
+    _ = configure_limit(?time_range_week(), ?global(), C),
     Context = ?ctx_invoice_payment(?cash(42), undefined),
     % NOTE
     % We do not expect `LimitChangeNotFound` here because we no longer reconcile with accounter
@@ -304,7 +304,7 @@ commit_inexistent_hold_fails(C) ->
 -spec partial_commit_inexistent_hold_fails(config()) -> _.
 partial_commit_inexistent_hold_fails(C) ->
     ID = ?config(id, C),
-    _ = prepare_environment(<<"GlobalMonthTurnover">>, C),
+    _ = configure_limit(?time_range_week(), ?global(), C),
     Context = ?ctx_invoice_payment(?cash(42), ?cash(21)),
     % NOTE
     % We do not expect `LimitChangeNotFound` here because we no longer reconcile with accounter
@@ -324,7 +324,7 @@ commit_multirange_limit_ok(C) ->
         time_range_type = {calendar, {month, #time_range_TimeRangeTypeCalendarMonth{}}},
         context_type = {payment_processing, #limiter_config_LimitContextTypePaymentProcessing{}},
         type = {turnover, #limiter_config_LimitTypeTurnover{}},
-        scope = {scope_global, #limiter_config_LimitScopeGlobal{}},
+        scope = ?scope([]),
         op_behaviour = #limiter_config_OperationLimitBehaviour{}
     },
     {ok, _LimitConfig} = lim_client:create_config(Params, Client),
@@ -356,7 +356,7 @@ commit_multirange_limit_ok(C) ->
 commit_processes_idempotently(C) ->
     ID = ?config(id, C),
     Client = ?config(client, C),
-    _ = prepare_environment(<<"GlobalMonthTurnover">>, C),
+    _ = configure_limit(?time_range_week(), ?global(), C),
     Context = ?ctx_invoice_payment(?cash(42), undefined),
     Change = ?LIMIT_CHANGE(ID),
     {ok, _} = lim_client:hold(Change, Context, Client),
@@ -370,7 +370,7 @@ commit_processes_idempotently(C) ->
 full_commit_processes_idempotently(C) ->
     ID = ?config(id, C),
     Client = ?config(client, C),
-    _ = prepare_environment(<<"GlobalMonthTurnover">>, C),
+    _ = configure_limit(?time_range_week(), ?global(), C),
     Cost = ?cash(42),
     Context = ?ctx_invoice_payment(Cost, Cost),
     Change = ?LIMIT_CHANGE(ID),
@@ -385,7 +385,7 @@ full_commit_processes_idempotently(C) ->
 partial_commit_processes_idempotently(C) ->
     ID = ?config(id, C),
     Client = ?config(client, C),
-    _ = prepare_environment(<<"GlobalMonthTurnover">>, C),
+    _ = configure_limit(?time_range_week(), ?global(), C),
     Context = ?ctx_invoice_payment(?cash(42), ?cash(40)),
     Change = ?LIMIT_CHANGE(ID),
     {ok, _} = lim_client:hold(Change, Context, Client),
@@ -399,7 +399,7 @@ partial_commit_processes_idempotently(C) ->
 rollback_processes_idempotently(C) ->
     ID = ?config(id, C),
     Client = ?config(client, C),
-    _ = prepare_environment(<<"GlobalMonthTurnover">>, C),
+    _ = configure_limit(?time_range_week(), ?global(), C),
     Context = ?ctx_invoice_payment(?cash(42), ?cash(0)),
     Change = ?LIMIT_CHANGE(ID),
     {ok, _} = lim_client:hold(Change, Context, Client),
@@ -421,19 +421,20 @@ hold_and_commit(Change, Context, Client) ->
 mock_exchange(Rational, C) ->
     lim_mock:mock_services([{xrates, fun('GetConvertedAmount', _) -> {ok, Rational} end}], C).
 
-prepare_environment(LimitName, C) ->
+configure_limit(TimeRange, Scope, C) ->
     ID = ?config(id, C),
-    Params = #limiter_cfg_LimitCreateParams{
+    Params = #limiter_config_LimitConfigParams{
         id = ID,
-        name = LimitName,
-        description = <<"description">>,
         started_at = <<"2000-01-01T00:00:00Z">>,
-        body_type = {cash, #limiter_config_LimitBodyTypeCash{currency = <<"RUB">>}},
-        op_behaviour = #limiter_config_OperationLimitBehaviour{
-            invoice_payment_refund = {subtraction, #limiter_config_Subtraction{}}
-        }
+        body_type = ?body_type_cash(<<"RUB">>),
+        time_range_type = TimeRange,
+        shard_size = 1,
+        type = ?lim_type_turnover(),
+        scope = Scope,
+        context_type = ?ctx_type_payproc(),
+        op_behaviour = ?op_behaviour(?op_subtraction())
     },
-    {ok, _LimitConfig} = lim_client:legacy_create_config(Params, ?config(client, C)).
+    {ok, _LimitConfig} = lim_client:create_config(Params, ?config(client, C)).
 
 gen_unique_id(Prefix) ->
     genlib:format("~s/~B", [Prefix, lim_time:now()]).

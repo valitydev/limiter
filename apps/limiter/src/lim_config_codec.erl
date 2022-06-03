@@ -103,19 +103,19 @@ marshal_context_type(payment_processing) ->
 marshal_type(turnover) ->
     {turnover, #limiter_config_LimitTypeTurnover{}}.
 
-marshal_scope({scope, Type}) ->
-    {scope, marshal_scope_type(Type)};
-marshal_scope(global) ->
-    {scope_global, #limiter_config_LimitScopeGlobal{}}.
+marshal_scope(Types) ->
+    {multi, ordsets:from_list(lists:map(fun marshal_scope_type/1, ordsets:to_list(Types)))}.
 
 marshal_scope_type(party) ->
-    {party, #limiter_config_LimitScopeTypeParty{}};
+    {party, #limiter_config_LimitScopeEmptyDetails{}};
 marshal_scope_type(shop) ->
-    {shop, #limiter_config_LimitScopeTypeShop{}};
+    {shop, #limiter_config_LimitScopeEmptyDetails{}};
 marshal_scope_type(wallet) ->
-    {wallet, #limiter_config_LimitScopeTypeWallet{}};
+    {wallet, #limiter_config_LimitScopeEmptyDetails{}};
 marshal_scope_type(identity) ->
-    {identity, #limiter_config_LimitScopeTypeIdentity{}}.
+    {identity, #limiter_config_LimitScopeEmptyDetails{}};
+marshal_scope_type(payment_tool) ->
+    {payment_tool, #limiter_config_LimitScopeEmptyDetails{}}.
 
 %%
 
@@ -239,10 +239,10 @@ unmarshal_context_type({payment_processing, #limiter_config_LimitContextTypePaym
 unmarshal_type({turnover, #limiter_config_LimitTypeTurnover{}}) ->
     turnover.
 
-unmarshal_scope({scope, Type}) ->
-    {scope, unmarshal_scope_type(Type)};
-unmarshal_scope({scope_global, #limiter_config_LimitScopeGlobal{}}) ->
-    global.
+unmarshal_scope({single, Type}) ->
+    ordsets:from_list([unmarshal_scope_type(Type)]);
+unmarshal_scope({multi, Types}) ->
+    ordsets:from_list(lists:map(fun unmarshal_scope_type/1, ordsets:to_list(Types))).
 
 unmarshal_scope_type({party, _}) ->
     party;
@@ -251,7 +251,9 @@ unmarshal_scope_type({shop, _}) ->
 unmarshal_scope_type({wallet, _}) ->
     wallet;
 unmarshal_scope_type({identity, _}) ->
-    identity.
+    identity;
+unmarshal_scope_type({payment_tool, _}) ->
+    payment_tool.
 
 %%
 
@@ -274,7 +276,7 @@ marshal_unmarshal_created_test() ->
             time_range_type => {calendar, day},
             context_type => payment_processing,
             type => turnover,
-            scope => {scope, party},
+            scope => ordsets:from_list([party, shop]),
             description => <<"description">>
         }},
     Event = {ev, lim_time:machinery_now(), Created},

@@ -21,7 +21,7 @@
 -type cash() :: lim_body:cash().
 
 -type t() :: #{
-    woody_context := woody_context(),
+    woody_context => woody_context(),
     context => context(),
     clock => clock()
 }.
