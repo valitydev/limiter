@@ -804,11 +804,11 @@ global_scope_empty_prefix_test() ->
 preserve_scope_prefix_order_test_() ->
     [
         ?_assertEqual(
-            <<"/OWNWER/SHLOP">>,
+            <<"/OWNER/SHLOP">>,
             mk_scope_prefix_impl(ordsets:from_list([shop, party]), ?LIMIT_CONTEXT)
         ),
         ?_assertEqual(
-            <<"/OWNWER/SHLOP">>,
+            <<"/OWNER/SHLOP">>,
             mk_scope_prefix_impl(ordsets:from_list([shop]), ?LIMIT_CONTEXT)
         )
     ].
