@@ -789,7 +789,7 @@ check_calculate_year_shard_id_test() ->
         payment_processing => #{
             op => invoice,
             invoice => #{
-                owner_id => <<"OWNWER">>,
+                owner_id => <<"OWNER">>,
                 shop_id => <<"SHLOP">>
             }
         }
