@@ -2,10 +2,10 @@
 
 -include_lib("xrates_proto/include/xrates_rate_thrift.hrl").
 
--export([convert/4]).
+-export([convert/3]).
 
 -type context() :: lim_context:t().
--type timestamp() :: binary().
+-type config() :: lim_config_machine:config().
 
 -type conversion_error() :: quote_not_found | currency_not_found.
 
@@ -15,30 +15,32 @@
 -define(DEFAULT_FACTOR, 1.1).
 -define(DEFAULT_FACTOR_NAME, <<"DEFAULT">>).
 
--spec convert(lim_body:cash(), lim_body:currency(), timestamp(), context()) ->
+-spec convert(lim_body:cash(), config(), context()) ->
     {ok, lim_body:cash()}
     | {error, conversion_error()}.
-convert(Cash = #{currency := Currency}, DestinationCurrency, Timestamp, LimitContext) ->
-    Factor = get_exchange_factor(Currency),
-    Request = construct_conversion_request(Cash, DestinationCurrency, Timestamp),
+convert(#{amount := Amount, currency := Currency}, Config, LimitContext) ->
+    ContextType = lim_config_machine:context_type(Config),
+    {ok, Timestamp} = lim_context:get_from_context(ContextType, created_at, LimitContext),
+    {cash, DestinationCurrency} = lim_config_machine:body_type(Config),
+    Request = #rate_ConversionRequest{
+        source = Currency,
+        destination = DestinationCurrency,
+        amount = Amount,
+        datetime = Timestamp
+    },
     case call_rates('GetConvertedAmount', {<<"CBR">>, Request}, LimitContext) of
         {ok, #base_Rational{p = P, q = Q}} ->
             Rational = genlib_rational:new(P, Q),
-            Amount = genlib_rational:round(genlib_rational:mul(Rational, Factor)),
-            {ok, #{amount => Amount, currency => DestinationCurrency}};
+            Factor = get_exchange_factor(Currency),
+            {ok, #{
+                amount => genlib_rational:round(genlib_rational:mul(Rational, Factor)),
+                currency => DestinationCurrency
+            }};
         {exception, #rate_QuoteNotFound{}} ->
             {error, quote_not_found};
         {exception, #rate_CurrencyNotFound{}} ->
             {error, currency_not_found}
     end.
-
-construct_conversion_request(#{amount := Amount, currency := Currency}, DestinationCurrency, Timestamp) ->
-    #rate_ConversionRequest{
-        source = Currency,
-        destination = DestinationCurrency,
-        amount = Amount,
-        datetime = Timestamp
-    }.
 
 get_exchange_factor(Currency) ->
     Factors = genlib_app:env(?APP, exchange_factors, #{}),

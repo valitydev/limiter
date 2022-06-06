@@ -21,34 +21,45 @@
 -export_type([cash/0]).
 -export_type([get_body_error/0]).
 
+-import(lim_pipeline, [do/1, unwrap/1]).
+
 -spec get_body(body_type(), config(), lim_context:t()) -> {ok, t()} | {error, get_body_error()}.
 get_body(BodyType, Config, LimitContext) ->
-    case do_get_body(BodyType, Config, LimitContext) of
-        {ok, Body} ->
-            {ok, apply_op_behaviour(Body, Config, LimitContext)};
-        {error, _} = Error ->
-            Error
-    end.
+    do(fun() ->
+        Body = do_get_body(BodyType, Config, LimitContext),
+        apply_op_behaviour(Body, Config, LimitContext)
+    end).
 
 do_get_body(BodyType, Config = #{body_type := {cash, ConfigCurrency}}, LimitContext) ->
-    ContextType = lim_config_machine:context_type(Config),
-    {ok, Operation} = lim_context:get_operation(ContextType, LimitContext),
-    case get_body_for_operation(BodyType, Operation, Config, LimitContext) of
-        {ok, {cash, #{currency := ConfigCurrency}}} = Result ->
+    OpBody = unwrap(get_body_for_operation(BodyType, Config, LimitContext)),
+    case OpBody of
+        {cash, #{currency := ConfigCurrency}} = Result ->
             Result;
-        {ok, {cash, #{currency := _} = Cash}} ->
-            {ok, Timestamp} = lim_context:get_from_context(ContextType, created_at, LimitContext),
-            case lim_rates:convert(Cash, ConfigCurrency, Timestamp, LimitContext) of
-                {ok, ConvertedCash} ->
-                    {ok, {cash, ConvertedCash}};
-                Error ->
-                    Error
-            end;
+        {cash, #{currency := _} = Cash} ->
+            ConvertedCash = unwrap(lim_rates:convert(Cash, Config, LimitContext)),
+            {cash, ConvertedCash};
         Error ->
             Error
     end;
-do_get_body(_BodyType, #{body_type := amount}, _LimitContext) ->
-    {ok, {amount, 1}}.
+do_get_body(BodyType, Config = #{body_type := amount}, LimitContext) ->
+    OpBody = unwrap(get_body_for_operation(BodyType, Config, LimitContext)),
+    case OpBody of
+        {cash, #{amount := Amount}} when Amount > 0 ->
+            % NOTE
+            % Increment limit by one on every positive amount operation.
+            {amount, 1};
+        {cash, #{amount := 0}} ->
+            % NOTE
+            % Looks crutchy: zero amount operation means "rollback" in the protocol.
+            {amount, 0}
+    end.
+
+-spec get_body_for_operation(body_type(), config(), lim_context:t()) ->
+    {ok, t()} | {error, notfound}.
+get_body_for_operation(BodyType, Config, LimitContext) ->
+    ContextType = lim_config_machine:context_type(Config),
+    {ok, Operation} = lim_context:get_operation(ContextType, LimitContext),
+    get_body_for_operation(BodyType, Operation, Config, LimitContext).
 
 -spec get_body_for_operation(body_type(), lim_context:context_operation(), config(), lim_context:t()) ->
     {ok, t()} | {error, notfound}.
