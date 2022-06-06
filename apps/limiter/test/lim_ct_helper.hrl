@@ -21,6 +21,9 @@
 -define(body_type_cash(Currency),
     {cash, #limiter_config_LimitBodyTypeCash{currency = Currency}}
 ).
+-define(body_type_amount(),
+    {amount, #limiter_config_LimitBodyTypeAmount{}}
+).
 
 -define(lim_type_turnover(),
     {turnover, #limiter_config_LimitTypeTurnover{}}
