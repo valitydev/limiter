@@ -9,8 +9,9 @@
 -export([rollback/3]).
 -export([get_plan/2]).
 -export([get_balance/2]).
--export([get_default_currency/0]).
 -export([create_account/2]).
+
+-export([noncurrency/0]).
 
 -type currency() :: dmsl_domain_thrift:'CurrencySymbolicCode'().
 -type amount() :: dmsl_domain_thrift:'Amount'().
@@ -40,7 +41,7 @@
 -export_type([batch_id/0]).
 -export_type([invalid_request_error/0]).
 
--define(DEFAULT_CURRENCY, <<"RUB">>).
+-define(NONCURRENCY, <<>>).
 
 -spec plan(plan_id(), [batch()], lim_context()) -> ok | {error, invalid_request_error()}.
 plan(_PlanID, [], _LimitContext) ->
@@ -133,9 +134,9 @@ construct_balance(
         currency => Currency
     }.
 
--spec get_default_currency() -> currency().
-get_default_currency() ->
-    ?DEFAULT_CURRENCY.
+-spec noncurrency() -> currency().
+noncurrency() ->
+    ?NONCURRENCY.
 
 -spec create_account(currency(), lim_context()) -> {ok, account_id()}.
 create_account(CurrencyCode, LimitContext) ->

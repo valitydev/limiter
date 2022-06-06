@@ -113,7 +113,7 @@ ranges(_State) ->
 currency(#{currency := Currency}) ->
     Currency;
 currency(_State) ->
-    lim_accounting:get_default_currency().
+    lim_accounting:noncurrency().
 
 %%% API
 

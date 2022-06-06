@@ -22,7 +22,7 @@ construct_posting(#{account_id_from := From, account_id_to := To}, {amount, Amou
         from_id = From,
         to_id = To,
         amount = Amount,
-        currency_sym_code = lim_accounting:get_default_currency(),
+        currency_sym_code = lim_accounting:noncurrency(),
         description = <<>>
     }.
 
