@@ -46,7 +46,9 @@ do_get_body(BodyType, Config = #{body_type := {cash, ConfigCurrency}}, LimitCont
             end;
         Error ->
             Error
-    end.
+    end;
+do_get_body(_BodyType, #{body_type := amount}, _LimitContext) ->
+    {ok, {amount, 1}}.
 
 -spec get_body_for_operation(body_type(), lim_context:context_operation(), config(), lim_context:t()) ->
     {ok, t()} | {error, notfound}.
