@@ -2,12 +2,10 @@
 
 -include_lib("xrates_proto/include/xrates_rate_thrift.hrl").
 
--export([get_converted_amount/3]).
+-export([convert/4]).
 
--type amount() :: dmsl_domain_thrift:'Amount'().
--type currency() :: dmsl_domain_thrift:'CurrencySymbolicCode'().
--type limit_context() :: lim_context:t().
--type config() :: lim_config_machine:config().
+-type context() :: lim_context:t().
+-type timestamp() :: binary().
 
 -type conversion_error() :: quote_not_found | currency_not_found.
 
@@ -17,30 +15,24 @@
 -define(DEFAULT_FACTOR, 1.1).
 -define(DEFAULT_FACTOR_NAME, <<"DEFAULT">>).
 
--spec get_converted_amount({amount(), currency()}, config(), limit_context()) ->
-    {ok, amount()}
+-spec convert(lim_body:cash(), lim_body:currency(), timestamp(), context()) ->
+    {ok, lim_body:cash()}
     | {error, conversion_error()}.
-get_converted_amount(Cash = {_Amount, Currency}, Config, LimitContext) ->
+convert(Cash = #{currency := Currency}, DestinationCurrency, Timestamp, LimitContext) ->
     Factor = get_exchange_factor(Currency),
-    case
-        call_rates(
-            'GetConvertedAmount',
-            {<<"CBR">>, construct_conversion_request(Cash, Config, LimitContext)},
-            LimitContext
-        )
-    of
+    Request = construct_conversion_request(Cash, DestinationCurrency, Timestamp),
+    case call_rates('GetConvertedAmount', {<<"CBR">>, Request}, LimitContext) of
         {ok, #base_Rational{p = P, q = Q}} ->
             Rational = genlib_rational:new(P, Q),
-            {ok, genlib_rational:round(genlib_rational:mul(Rational, Factor))};
+            Amount = genlib_rational:round(genlib_rational:mul(Rational, Factor)),
+            {ok, #{amount => Amount, currency => DestinationCurrency}};
         {exception, #rate_QuoteNotFound{}} ->
             {error, quote_not_found};
         {exception, #rate_CurrencyNotFound{}} ->
             {error, currency_not_found}
     end.
 
-construct_conversion_request({Amount, Currency}, Config = #{body_type := {cash, DestinationCurrency}}, LimitContext) ->
-    ContextType = lim_config_machine:context_type(Config),
-    {ok, Timestamp} = lim_context:get_from_context(ContextType, created_at, LimitContext),
+construct_conversion_request(#{amount := Amount, currency := Currency}, DestinationCurrency, Timestamp) ->
     #rate_ConversionRequest{
         source = Currency,
         destination = DestinationCurrency,

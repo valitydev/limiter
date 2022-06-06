@@ -63,7 +63,7 @@ hold(LimitChange = #limiter_LimitChange{id = LimitID}, Config, LimitContext) ->
     do(fun() ->
         TimeRangeAccount = ensure_limit_time_range(LimitID, Config, LimitContext),
         Body = unwrap(lim_body:get_body(full, Config, LimitContext)),
-        Posting = construct_posting(TimeRangeAccount, Body, Config, LimitContext),
+        Posting = construct_posting(TimeRangeAccount, Body),
         unwrap(lim_accounting:hold(construct_plan_id(LimitChange), {1, [Posting]}, LimitContext))
     end).
 
@@ -96,7 +96,7 @@ rollback(LimitChange = #limiter_LimitChange{id = LimitID}, Config, LimitContext)
     do(fun() ->
         TimeRangeAccount = ensure_limit_time_range(LimitID, Config, LimitContext),
         Body = unwrap(lim_body:get_body(full, Config, LimitContext)),
-        Posting = construct_posting(TimeRangeAccount, Body, Config, LimitContext),
+        Posting = construct_posting(TimeRangeAccount, Body),
         unwrap(lim_accounting:rollback(construct_plan_id(LimitChange), [{1, [Posting]}], LimitContext))
     end).
 
@@ -129,10 +129,10 @@ construct_range_id(LimitID, Timestamp, Config, LimitContext) ->
 construct_commit_plan(TimeRangeAccount, Config, LimitContext) ->
     Body = unwrap(lim_body:get_body(full, Config, LimitContext)),
     MaybePartialBody = lim_body:get_body(partial, Config, LimitContext),
-    construct_commit_postings(TimeRangeAccount, Body, MaybePartialBody, Config, LimitContext).
+    construct_commit_postings(TimeRangeAccount, Body, MaybePartialBody).
 
-construct_commit_postings(TimeRangeAccount, Full, MaybePartialBody, Config, LimitContext) ->
-    OriginalHoldPosting = construct_posting(TimeRangeAccount, Full, Config, LimitContext),
+construct_commit_postings(TimeRangeAccount, Full, MaybePartialBody) ->
+    OriginalHoldPosting = construct_posting(TimeRangeAccount, Full),
     case determine_commit_intent(MaybePartialBody, Full) of
         commit ->
             [{commit, [{1, [OriginalHoldPosting]}]}];
@@ -142,7 +142,7 @@ construct_commit_postings(TimeRangeAccount, Full, MaybePartialBody, Config, Limi
             % Partial body is less than full body
             ok = unwrap(assert_partial_body(Partial, Full)),
             ReverseHoldPosting = lim_p_transfer:reverse_posting(OriginalHoldPosting),
-            PartialHoldPosting = construct_posting(TimeRangeAccount, Partial, Config, LimitContext),
+            PartialHoldPosting = construct_posting(TimeRangeAccount, Partial),
             PartialBatch = [ReverseHoldPosting, PartialHoldPosting],
             [
                 {hold, {2, PartialBatch}},
@@ -168,19 +168,8 @@ determine_commit_intent({ok, {cash, #{amount := 0}}}, _FullBody) ->
 determine_commit_intent({ok, Partial}, _FullBody) ->
     {commit, Partial}.
 
-construct_posting(TimeRangeAccount, Body, Config, LimitContext) ->
-    apply_op_behaviour(lim_p_transfer:construct_posting(TimeRangeAccount, Body), Config, LimitContext).
-
-apply_op_behaviour(Posting, #{op_behaviour := ComputationConfig}, LimitContext) ->
-    {ok, Operation} = lim_context:get_operation(payment_processing, LimitContext),
-    case maps:get(Operation, ComputationConfig, undefined) of
-        subtraction ->
-            lim_p_transfer:reverse_posting(Posting);
-        Type when Type =:= undefined orelse Type =:= additional ->
-            Posting
-    end;
-apply_op_behaviour(Body, _Config, _LimitContext) ->
-    Body.
+construct_posting(TimeRangeAccount, Body) ->
+    lim_p_transfer:construct_posting(TimeRangeAccount, Body).
 
 assert_partial_body(
     {cash, #{amount := Partial, currency := Currency}},

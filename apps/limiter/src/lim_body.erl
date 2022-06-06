@@ -1,7 +1,6 @@
 -module(lim_body).
 
 -export([get_body/3]).
--export([create_body_from_cash/2]).
 
 -type t() :: {amount, amount()} | {cash, cash()}.
 
@@ -17,20 +16,31 @@
 -type get_body_error() :: notfound | lim_rates:conversion_error().
 
 -export_type([t/0]).
+-export_type([amount/0]).
+-export_type([currency/0]).
 -export_type([cash/0]).
 -export_type([get_body_error/0]).
 
 -spec get_body(body_type(), config(), lim_context:t()) -> {ok, t()} | {error, get_body_error()}.
-get_body(BodyType, Config = #{body_type := {cash, ConfigCurrency}}, LimitContext) ->
+get_body(BodyType, Config, LimitContext) ->
+    case do_get_body(BodyType, Config, LimitContext) of
+        {ok, Body} ->
+            {ok, apply_op_behaviour(Body, Config, LimitContext)};
+        {error, _} = Error ->
+            Error
+    end.
+
+do_get_body(BodyType, Config = #{body_type := {cash, ConfigCurrency}}, LimitContext) ->
     ContextType = lim_config_machine:context_type(Config),
     {ok, Operation} = lim_context:get_operation(ContextType, LimitContext),
     case get_body_for_operation(BodyType, Operation, Config, LimitContext) of
         {ok, {cash, #{currency := ConfigCurrency}}} = Result ->
             Result;
-        {ok, {cash, #{amount := Amount, currency := Currency}}} ->
-            case lim_rates:get_converted_amount({Amount, Currency}, Config, LimitContext) of
-                {ok, ConvertedAmount} ->
-                    {ok, create_body_from_cash(ConvertedAmount, ConfigCurrency)};
+        {ok, {cash, #{currency := _} = Cash}} ->
+            {ok, Timestamp} = lim_context:get_from_context(ContextType, created_at, LimitContext),
+            case lim_rates:convert(Cash, ConfigCurrency, Timestamp, LimitContext) of
+                {ok, ConvertedCash} ->
+                    {ok, {cash, ConvertedCash}};
                 Error ->
                     Error
             end;
@@ -73,6 +83,20 @@ get_body_for_operation(partial, invoice_payment_refund = Operation, Config, Limi
 get_body_for_operation(partial, invoice_payment_chargeback, _Config, _LimitContext) ->
     {error, notfound}.
 
--spec create_body_from_cash(amount(), currency()) -> t().
-create_body_from_cash(Amount, Currency) ->
-    {cash, #{amount => Amount, currency => Currency}}.
+apply_op_behaviour(Body, #{op_behaviour := ComputationConfig}, LimitContext) ->
+    {ok, Operation} = lim_context:get_operation(payment_processing, LimitContext),
+    case maps:get(Operation, ComputationConfig, undefined) of
+        addition ->
+            Body;
+        subtraction ->
+            invert_body(Body);
+        undefined ->
+            Body
+    end;
+apply_op_behaviour(Body, _Config, _LimitContext) ->
+    Body.
+
+invert_body({cash, Cash = #{amount := Amount}}) ->
+    {cash, Cash#{amount := -Amount}};
+invert_body({amount, Amount}) ->
+    {amount, -Amount}.

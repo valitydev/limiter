@@ -294,7 +294,7 @@ unmarshal_payment_processing_invoice_payment_chargeback(#limiter_context_Invoice
     }).
 
 unmarshal_cash(#limiter_base_Cash{amount = Amount, currency = #limiter_base_CurrencyRef{symbolic_code = Currency}}) ->
-    lim_body:create_body_from_cash(Amount, Currency).
+    {cash, #{amount => Amount, currency => Currency}}.
 
 unmarshal_string(Value) ->
     Value.
