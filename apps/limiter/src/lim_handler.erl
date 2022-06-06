@@ -79,8 +79,6 @@ handle_function_('Rollback', {LimitChange = ?LIMIT_CHANGE(LimitID), Clock, Conte
     end.
 
 -spec handle_get_error(_) -> no_return().
-handle_get_error({_, {range, notfound}}) ->
-    woody_error:raise(business, #limiter_LimitNotFound{});
 handle_get_error(Error) ->
     handle_default_error(Error).
 

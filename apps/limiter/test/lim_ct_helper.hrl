@@ -48,7 +48,18 @@
     {payment_processing, #limiter_config_LimitContextTypePaymentProcessing{}}
 ).
 
+-define(op_invoice(), {invoice, #limiter_context_PaymentProcessingOperationInvoice{}}).
 -define(op_invoice_payment(), {invoice_payment, #limiter_context_PaymentProcessingOperationInvoicePayment{}}).
+
+-define(ctx_invoice(Cost), #limiter_context_LimitContext{
+    payment_processing = #limiter_context_ContextPaymentProcessing{
+        op = ?op_invoice(),
+        invoice = #limiter_context_Invoice{
+            created_at = <<"2000-01-01T00:00:00Z">>,
+            cost = Cost
+        }
+    }
+}).
 
 -define(ctx_invoice_payment(Cost, CaptureCost), ?ctx_invoice_payment(undefined, undefined, Cost, CaptureCost)).
 

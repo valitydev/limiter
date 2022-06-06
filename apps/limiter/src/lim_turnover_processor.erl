@@ -42,14 +42,13 @@
 -export_type([commit_error/0]).
 -export_type([rollback_error/0]).
 
--import(lim_pipeline, [do/1, unwrap/1, unwrap/2]).
+-import(lim_pipeline, [do/1, unwrap/1]).
 
 -spec get_limit(lim_id(), config(), lim_context()) -> {ok, limit()} | {error, get_limit_error()}.
 get_limit(LimitID, Config, LimitContext) ->
     do(fun() ->
         {LimitRangeID, TimeRange} = compute_limit_time_range_location(LimitID, Config, LimitContext),
-        #{max_available_amount := Amount} =
-            unwrap(range, lim_range_machine:get_range_balance(LimitRangeID, TimeRange, LimitContext)),
+        Amount = find_range_balance_amount(LimitRangeID, TimeRange, LimitContext),
         #limiter_Limit{
             id = LimitRangeID,
             amount = Amount,
@@ -57,6 +56,14 @@ get_limit(LimitID, Config, LimitContext) ->
             description = lim_config_machine:description(Config)
         }
     end).
+
+find_range_balance_amount(LimitRangeID, TimeRange, LimitContext) ->
+    case lim_range_machine:get_range_balance(LimitRangeID, TimeRange, LimitContext) of
+        {ok, #{max_available_amount := Amount}} ->
+            Amount;
+        {error, notfound} ->
+            0
+    end.
 
 -spec hold(lim_change(), config(), lim_context()) -> ok | {error, hold_error()}.
 hold(LimitChange = #limiter_LimitChange{id = LimitID}, Config, LimitContext) ->

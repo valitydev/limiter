@@ -19,6 +19,7 @@
 -export([partial_commit_with_exchange/1]).
 -export([commit_with_exchange/1]).
 -export([get_rate/1]).
+-export([get_limit_ok/1]).
 -export([get_limit_notfound/1]).
 -export([hold_ok/1]).
 -export([commit_ok/1]).
@@ -56,6 +57,7 @@ groups() ->
             partial_commit_with_exchange,
             commit_with_exchange,
             get_rate,
+            get_limit_ok,
             get_limit_notfound,
             hold_ok,
             commit_ok,
@@ -212,33 +214,27 @@ get_rate(C) ->
         WoodyContext
     ).
 
+-spec get_limit_ok(config()) -> _.
+get_limit_ok(C) ->
+    ID = configure_limit(?time_range_month(), ?global(), C),
+    Context = ?ctx_invoice(_Cost = undefined),
+    ?assertMatch(
+        {ok, #limiter_Limit{amount = 0}},
+        lim_client:get(ID, Context, ?config(client, C))
+    ).
+
 -spec get_limit_notfound(config()) -> _.
 get_limit_notfound(C) ->
-    _ = configure_limit(?time_range_month(), ?global(), C),
-    Context = #limiter_context_LimitContext{
-        payment_processing = #limiter_context_ContextPaymentProcessing{
-            op = {invoice, #limiter_context_PaymentProcessingOperationInvoice{}},
-            invoice = #limiter_context_Invoice{created_at = <<"2000-01-01T00:00:00Z">>}
-        }
-    },
-    {exception, #limiter_LimitNotFound{}} = lim_client:get(?config(id, C), Context, ?config(client, C)).
+    Context = ?ctx_invoice(_Cost = undefined),
+    ?assertEqual(
+        {exception, #limiter_LimitNotFound{}},
+        lim_client:get(<<"NOSUCHLIMITID">>, Context, ?config(client, C))
+    ).
 
 -spec hold_ok(config()) -> _.
 hold_ok(C) ->
-    _ = configure_limit(?time_range_month(), ?global(), C),
-    ID = ?config(id, C),
-    Context = #limiter_context_LimitContext{
-        payment_processing = #limiter_context_ContextPaymentProcessing{
-            op = {invoice, #limiter_context_PaymentProcessingOperationInvoice{}},
-            invoice = #limiter_context_Invoice{
-                created_at = <<"2000-01-01T00:00:00Z">>,
-                cost = #limiter_base_Cash{
-                    amount = 10,
-                    currency = #limiter_base_CurrencyRef{symbolic_code = <<"RUB">>}
-                }
-            }
-        }
-    },
+    ID = configure_limit(?time_range_month(), ?global(), C),
+    Context = ?ctx_invoice(?cash(10)),
     {ok, {vector, #limiter_VectorClock{}}} = lim_client:hold(?LIMIT_CHANGE(ID), Context, ?config(client, C)),
     {ok, #limiter_Limit{}} = lim_client:get(ID, Context, ?config(client, C)).
 
