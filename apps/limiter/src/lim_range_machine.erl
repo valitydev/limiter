@@ -109,7 +109,7 @@ ranges(#{ranges := Ranges}) ->
 ranges(_State) ->
     [].
 
--spec currency(limit_range_state()) -> currency().
+-spec currency(limit_range_state() | create_params()) -> currency().
 currency(#{currency := Currency}) ->
     Currency;
 currency(_State) ->
@@ -122,13 +122,14 @@ get(ID, LimitContext) ->
     get_state(ID, lim_context:woody_context(LimitContext)).
 
 -spec ensure_exists(create_params(), time_range(), lim_context()) -> {ok, time_range_ext()}.
-ensure_exists(Params = #{id := ID, currency := Currency}, TimeRange, LimitContext) ->
+ensure_exists(Params = #{id := ID}, TimeRange, LimitContext) ->
     WoodyCtx = lim_context:woody_context(LimitContext),
     case get_state(ID, WoodyCtx) of
         {ok, State} ->
             ensure_range_exist_in_state(TimeRange, State, WoodyCtx);
         {error, notfound} ->
-            _ = start(ID, Params, [new_time_range_ext(TimeRange, Currency, WoodyCtx)], WoodyCtx),
+            TimeRangeExt = new_time_range_ext(TimeRange, currency(Params), WoodyCtx),
+            _ = start(ID, Params, [TimeRangeExt], WoodyCtx),
             {ok, State} = get_state(ID, WoodyCtx),
             get_range(TimeRange, State)
     end.
@@ -161,9 +162,7 @@ get_range_balance(ID, TimeRange, LimitContext) ->
 
 -spec init(args([event()]), machine(), handler_args(), handler_opts()) -> result().
 init(Events, _Machine, _HandlerArgs, _HandlerOpts) ->
-    #{
-        events => emit_events(Events)
-    }.
+    #{events => emit_events(Events)}.
 
 -spec process_call(args(range_call()), machine(), handler_args(), handler_opts()) ->
     {response(time_range_ext()), result()} | no_return().
