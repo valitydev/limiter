@@ -157,7 +157,7 @@ construct_prototype(CurrencyCode, Description) ->
 %%
 
 call_accounter(Function, Args, LimitContext) ->
-    {ok, WoodyContext} = lim_context:woody_context(LimitContext),
+    WoodyContext = lim_context:woody_context(LimitContext),
     lim_client_woody:call(accounter, Function, Args, WoodyContext).
 
 convert_exception(#'InvalidRequest'{errors = Errors}) ->

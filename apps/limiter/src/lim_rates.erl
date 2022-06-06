@@ -65,5 +65,4 @@ get_exchange_factor(Currency) ->
 %%
 
 call_rates(Function, Args, LimitContext) ->
-    {ok, WoodyContext} = lim_context:woody_context(LimitContext),
-    lim_client_woody:call(xrates, Function, Args, WoodyContext).
+    lim_client_woody:call(xrates, Function, Args, lim_context:woody_context(LimitContext)).

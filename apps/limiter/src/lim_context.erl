@@ -96,13 +96,13 @@
 -export_type([context_type/0]).
 -export_type([context_operation/0]).
 
--spec create(woody_context()) -> {ok, t()}.
+-spec create(woody_context()) -> t().
 create(WoodyContext) ->
-    {ok, #{woody_context => WoodyContext}}.
+    #{woody_context => WoodyContext}.
 
--spec woody_context(t()) -> {ok, woody_context()}.
+-spec woody_context(t()) -> woody_context().
 woody_context(Context) ->
-    {ok, maps:get(woody_context, Context)}.
+    maps:get(woody_context, Context).
 
 -spec clock(t()) -> {ok, clock()} | {error, notfound}.
 clock(#{clock := Clock}) ->

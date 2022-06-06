@@ -119,12 +119,11 @@ currency(_State) ->
 
 -spec get(id(), lim_context()) -> {ok, limit_range_state()} | {error, notfound}.
 get(ID, LimitContext) ->
-    {ok, WoodyCtx} = lim_context:woody_context(LimitContext),
-    get_state(ID, WoodyCtx).
+    get_state(ID, lim_context:woody_context(LimitContext)).
 
 -spec ensure_exists(create_params(), time_range(), lim_context()) -> {ok, time_range_ext()}.
 ensure_exists(Params = #{id := ID, currency := Currency}, TimeRange, LimitContext) ->
-    {ok, WoodyCtx} = lim_context:woody_context(LimitContext),
+    WoodyCtx = lim_context:woody_context(LimitContext),
     case get_state(ID, WoodyCtx) of
         {ok, State} ->
             ensure_range_exist_in_state(TimeRange, State, WoodyCtx);
@@ -196,7 +195,7 @@ find_time_range(TimeRange, [_Head | Rest]) ->
     find_time_range(TimeRange, Rest).
 
 new_time_range_ext(TimeRange, Currency, WoodyCtx) ->
-    {ok, LimitContext} = lim_context:create(WoodyCtx),
+    LimitContext = lim_context:create(WoodyCtx),
     {ok, AccountIDFrom} = lim_accounting:create_account(Currency, LimitContext),
     {ok, AccountIDTo} = lim_accounting:create_account(Currency, LimitContext),
     TimeRange#{

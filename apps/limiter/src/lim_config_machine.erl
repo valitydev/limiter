@@ -232,7 +232,7 @@ op_behaviour(_) ->
 
 -spec start(lim_id(), create_params(), lim_context()) -> {ok, config()}.
 start(ID, Params, LimitContext) ->
-    {ok, WoodyCtx} = lim_context:woody_context(LimitContext),
+    WoodyCtx = lim_context:woody_context(LimitContext),
     Config = genlib_map:compact(Params#{id => ID, created_at => lim_time:now()}),
     case machinery:start(?NS, ID, [{created, Config}], get_backend(WoodyCtx)) of
         ok ->
@@ -245,7 +245,7 @@ start(ID, Params, LimitContext) ->
 -spec get(lim_id(), lim_context()) -> {ok, config()} | {error, notfound}.
 get(ID, LimitContext) ->
     do(fun() ->
-        {ok, WoodyCtx} = lim_context:woody_context(LimitContext),
+        WoodyCtx = lim_context:woody_context(LimitContext),
         Machine = unwrap(machinery:get(?NS, ID, get_backend(WoodyCtx))),
         collapse(Machine)
     end).

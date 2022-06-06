@@ -16,7 +16,7 @@
 
 -spec handle_function(woody:func(), woody:args(), woody_context:ctx(), woody:options()) -> {ok, woody:result()}.
 handle_function(Fn, Args, WoodyCtx, Opts) ->
-    {ok, LimitContext} = lim_context:create(WoodyCtx),
+    LimitContext = lim_context:create(WoodyCtx),
     scoper:scope(
         configurator,
         fun() -> handle_function_(Fn, Args, LimitContext, Opts) end
