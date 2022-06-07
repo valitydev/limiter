@@ -26,33 +26,37 @@
 -spec get_body(body_type(), config(), lim_context:t()) -> {ok, t()} | {error, get_body_error()}.
 get_body(BodyType, Config, LimitContext) ->
     do(fun() ->
-        Body = do_get_body(BodyType, Config, LimitContext),
+        Body = unwrap(do_get_body(BodyType, Config, LimitContext)),
         apply_op_behaviour(Body, Config, LimitContext)
     end).
 
 do_get_body(BodyType, Config = #{body_type := {cash, ConfigCurrency}}, LimitContext) ->
-    OpBody = unwrap(get_body_for_operation(BodyType, Config, LimitContext)),
-    case OpBody of
-        {cash, #{currency := ConfigCurrency}} = Result ->
-            Result;
-        {cash, #{currency := _} = Cash} ->
-            ConvertedCash = unwrap(lim_rates:convert(Cash, Config, LimitContext)),
-            {cash, ConvertedCash};
-        Error ->
-            Error
-    end;
+    do(fun() ->
+        OpBody = unwrap(get_body_for_operation(BodyType, Config, LimitContext)),
+        case OpBody of
+            {cash, #{currency := ConfigCurrency}} = Result ->
+                Result;
+            {cash, #{currency := _} = Cash} ->
+                ConvertedCash = unwrap(lim_rates:convert(Cash, Config, LimitContext)),
+                {cash, ConvertedCash};
+            Error ->
+                Error
+        end
+    end);
 do_get_body(BodyType, Config = #{body_type := amount}, LimitContext) ->
-    OpBody = unwrap(get_body_for_operation(BodyType, Config, LimitContext)),
-    case OpBody of
-        {cash, #{amount := Amount}} when Amount > 0 ->
-            % NOTE
-            % Increment limit by one on every positive amount operation.
-            {amount, 1};
-        {cash, #{amount := 0}} ->
-            % NOTE
-            % Looks crutchy: zero amount operation means "rollback" in the protocol.
-            {amount, 0}
-    end.
+    do(fun() ->
+        OpBody = unwrap(get_body_for_operation(BodyType, Config, LimitContext)),
+        case OpBody of
+            {cash, #{amount := Amount}} when Amount > 0 ->
+                % NOTE
+                % Increment limit by one on every positive amount operation.
+                {amount, 1};
+            {cash, #{amount := 0}} ->
+                % NOTE
+                % Looks crutchy: zero amount operation means "rollback" in the protocol.
+                {amount, 0}
+        end
+    end).
 
 -spec get_body_for_operation(body_type(), config(), lim_context:t()) ->
     {ok, t()} | {error, notfound}.
