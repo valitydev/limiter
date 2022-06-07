@@ -4,7 +4,7 @@
 
 -export([convert/3]).
 
--type context() :: lim_context:t().
+-type limit_context() :: lim_context:t().
 -type config() :: lim_config_machine:config().
 
 -type conversion_error() :: quote_not_found | currency_not_found.
@@ -15,7 +15,7 @@
 -define(DEFAULT_FACTOR, 1.1).
 -define(DEFAULT_FACTOR_NAME, <<"DEFAULT">>).
 
--spec convert(lim_body:cash(), config(), context()) ->
+-spec convert(lim_body:cash(), config(), limit_context()) ->
     {ok, lim_body:cash()}
     | {error, conversion_error()}.
 convert(#{amount := Amount, currency := Currency}, Config, LimitContext) ->
