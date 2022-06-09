@@ -299,4 +299,48 @@ marshal_unmarshal_created_test() ->
     Event = {ev, lim_time:machinery_now(), Created},
     ?assertEqual(Event, unmarshal(timestamped_change, marshal(timestamped_change, Event))).
 
+-spec unmarshal_created_w_deprecated_body_type_test_() -> [_TestGen].
+unmarshal_created_w_deprecated_body_type_test_() ->
+    Now = lim_time:now(),
+    Config = #limiter_config_LimitConfig{
+        id = <<"ID">>,
+        processor_type = <<"TurnoverProcessor">>,
+        created_at = lim_time:to_rfc3339(Now),
+        started_at = <<"2000-01-01T00:00:00Z">>,
+        shard_size = 42,
+        time_range_type = {calendar, {day, #time_range_TimeRangeTypeCalendarDay{}}},
+        context_type = {payment_processing, #limiter_config_LimitContextTypePaymentProcessing{}},
+        body_type_deprecated = {cash, #limiter_config_LimitBodyTypeCash{currency = <<"☭☭☭"/utf8>>}}
+    },
+    [
+        ?_assertMatch(
+            {created, #{
+                id := <<"ID">>,
+                created_at := Now,
+                type := {turnover, {amount, <<"☭☭☭"/utf8>>}}
+            }},
+            unmarshal_change(
+                {created, #limiter_config_CreatedChange{
+                    limit_config = Config#limiter_config_LimitConfig{
+                        type = undefined
+                    }
+                }}
+            )
+        ),
+        ?_assertMatch(
+            {created, #{
+                id := <<"ID">>,
+                created_at := Now,
+                type := {turnover, {amount, <<"☭☭☭"/utf8>>}}
+            }},
+            unmarshal_change(
+                {created, #limiter_config_CreatedChange{
+                    limit_config = Config#limiter_config_LimitConfig{
+                        type = {turnover, #limiter_config_LimitTypeTurnover{}}
+                    }
+                }}
+            )
+        )
+    ].
+
 -endif.
