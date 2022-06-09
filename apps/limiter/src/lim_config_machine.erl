@@ -36,7 +36,7 @@
 -type processor() :: lim_router:processor().
 -type description() :: binary().
 
--type limit_type() :: {turnover, limit_turnover_metric:t()}.
+-type limit_type() :: {turnover, lim_turnover_metric:t()}.
 -type limit_scope() :: ordsets:ordset(limit_scope_type()).
 -type limit_scope_type() :: party | shop | wallet | identity.
 -type shard_size() :: pos_integer().

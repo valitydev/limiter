@@ -39,7 +39,7 @@
 -type id() :: binary().
 -type time_range_type() :: lim_config_machine:time_range_type().
 -type time_range() :: lim_config_machine:time_range().
--type currency() :: lim_config_machine:currency().
+-type currency() :: lim_body:currency().
 
 -type limit_range_state() :: #{
     id := id(),
