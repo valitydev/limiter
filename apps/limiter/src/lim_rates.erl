@@ -2,7 +2,7 @@
 
 -include_lib("xrates_proto/include/xrates_rate_thrift.hrl").
 
--export([convert/3]).
+-export([convert/4]).
 
 -type limit_context() :: lim_context:t().
 -type config() :: lim_config_machine:config().
@@ -15,13 +15,12 @@
 -define(DEFAULT_FACTOR, 1.1).
 -define(DEFAULT_FACTOR_NAME, <<"DEFAULT">>).
 
--spec convert(lim_body:cash(), config(), limit_context()) ->
+-spec convert(lim_body:cash(), lim_body:currency(), config(), limit_context()) ->
     {ok, lim_body:cash()}
     | {error, conversion_error()}.
-convert(#{amount := Amount, currency := Currency}, Config, LimitContext) ->
+convert(#{amount := Amount, currency := Currency}, DestinationCurrency, Config, LimitContext) ->
     ContextType = lim_config_machine:context_type(Config),
     {ok, Timestamp} = lim_context:get_from_context(ContextType, created_at, LimitContext),
-    {cash, DestinationCurrency} = lim_config_machine:body_type(Config),
     Request = #rate_ConversionRequest{
         source = Currency,
         destination = DestinationCurrency,

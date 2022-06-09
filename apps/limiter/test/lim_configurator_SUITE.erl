@@ -85,8 +85,7 @@ legacy_create_config(C) ->
         id = ID,
         name = <<"GlobalMonthTurnover">>,
         description = Description,
-        started_at = <<"2000-01-01T00:00:00Z">>,
-        body_type = ?body_type_cash()
+        started_at = <<"2000-01-01T00:00:00Z">>
     },
     ?assertMatch(
         {ok, #limiter_config_LimitConfig{
@@ -105,10 +104,9 @@ create_config(C) ->
         id = ?config(limit_id, C),
         description = Description,
         started_at = <<"2000-01-01T00:00:00Z">>,
-        body_type = ?body_type_cash(<<"RUB">>),
         shard_size = 4,
         time_range_type = ?time_range_week(),
-        type = ?lim_type_turnover(),
+        type = ?lim_type_turnover(?turnover_metric_amount()),
         scope = ?scope([
             ?scope_shop(),
             ?scope_party()
@@ -130,7 +128,6 @@ create_config_single_scope(C) ->
     Params = #limiter_config_LimitConfigParams{
         id = ?config(limit_id, C),
         started_at = <<"2000-01-01T00:00:00Z">>,
-        body_type = ?body_type_cash(),
         time_range_type = ?time_range_week(),
         shard_size = 1,
         type = ?lim_type_turnover(),
@@ -157,8 +154,7 @@ prepare_environment(ID, LimitName, _C) ->
         id = ID,
         name = LimitName,
         description = <<"description">>,
-        started_at = <<"2000-01-01T00:00:00Z">>,
-        body_type = ?body_type_cash()
+        started_at = <<"2000-01-01T00:00:00Z">>
     },
     {ok, LimitConfig} = lim_client:legacy_create_config(Params, Client),
     #{config => LimitConfig, client => Client}.

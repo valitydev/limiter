@@ -2,27 +2,19 @@
 
 -include_lib("damsel/include/dmsl_accounter_thrift.hrl").
 
--export([new/2]).
+-export([new/3]).
 -export([reverse/1]).
 
 -type posting() :: lim_accounting:posting().
--type body() :: lim_body:t().
 
--spec new(lim_range_machine:time_range_ext(), body()) -> posting().
-new(#{account_id_from := From, account_id_to := To}, {cash, #{amount := Amount, currency := Currency}}) ->
+-spec new(lim_range_machine:time_range_ext(), lim_body:amount(), lim_body:currency()) ->
+    posting().
+new(#{account_id_from := From, account_id_to := To}, Amount, Currency) ->
     reverse_negative_posting(#accounter_Posting{
         from_id = From,
         to_id = To,
         amount = Amount,
         currency_sym_code = Currency,
-        description = <<>>
-    });
-new(#{account_id_from := From, account_id_to := To}, {amount, Amount}) ->
-    reverse_negative_posting(#accounter_Posting{
-        from_id = From,
-        to_id = To,
-        amount = Amount,
-        currency_sym_code = lim_accounting:noncurrency(),
         description = <<>>
     }).
 

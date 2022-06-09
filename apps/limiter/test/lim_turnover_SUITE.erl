@@ -316,12 +316,11 @@ commit_multirange_limit_ok(C) ->
     Client = ?config(client, C),
     Params = #limiter_config_LimitConfigParams{
         id = ID,
-        body_type = {cash, #limiter_config_LimitBodyTypeCash{currency = <<"RUB">>}},
         started_at = <<"2000-01-01T00:00:00Z">>,
         shard_size = 12,
-        time_range_type = {calendar, {month, #time_range_TimeRangeTypeCalendarMonth{}}},
-        context_type = {payment_processing, #limiter_config_LimitContextTypePaymentProcessing{}},
-        type = {turnover, #limiter_config_LimitTypeTurnover{}},
+        time_range_type = ?time_range_month(),
+        context_type = ?ctx_type_payproc(),
+        type = ?lim_type_turnover(?turnover_metric_amount(<<"RUB">>)),
         scope = ?scope([]),
         op_behaviour = #limiter_config_OperationLimitBehaviour{}
     },
@@ -408,7 +407,7 @@ rollback_processes_idempotently(C) ->
 -spec commit_amount_ok(config()) -> _.
 commit_amount_ok(C) ->
     Client = ?config(client, C),
-    ID = configure_limit(?time_range_week(), ?global(), ?body_type_amount(), C),
+    ID = configure_limit(?time_range_week(), ?global(), ?turnover_metric_number(), C),
     Context = ?ctx_invoice_payment(?cash(10), ?cash(10)),
     {ok, LimitState0} = lim_client:get(ID, Context, Client),
     _ = hold_and_commit(?LIMIT_CHANGE(ID), Context, Client),
@@ -418,7 +417,7 @@ commit_amount_ok(C) ->
 -spec rollback_amount_ok(config()) -> _.
 rollback_amount_ok(C) ->
     Client = ?config(client, C),
-    ID = configure_limit(?time_range_week(), ?global(), ?body_type_amount(), C),
+    ID = configure_limit(?time_range_week(), ?global(), ?turnover_metric_number(), C),
     Context = ?ctx_invoice_payment(?cash(10), ?cash(10)),
     ContextRollback = ?ctx_invoice_payment(?cash(10), ?cash(0)),
     {ok, LimitState0} = lim_client:get(ID, Context, Client),
@@ -429,7 +428,7 @@ rollback_amount_ok(C) ->
 -spec partial_commit_amount_counts_as_single_op(config()) -> _.
 partial_commit_amount_counts_as_single_op(C) ->
     Client = ?config(client, C),
-    ID = configure_limit(?time_range_week(), ?global(), ?body_type_amount(), C),
+    ID = configure_limit(?time_range_week(), ?global(), ?turnover_metric_number(), C),
     Context = ?ctx_invoice_payment(?cash(10), ?cash(10)),
     ContextPartial = ?ctx_invoice_payment(?cash(10), ?cash(5)),
     {ok, LimitState0} = lim_client:get(ID, Context, Client),
@@ -453,17 +452,16 @@ mock_exchange(Rational, C) ->
     lim_mock:mock_services([{xrates, fun('GetConvertedAmount', _) -> {ok, Rational} end}], C).
 
 configure_limit(TimeRange, Scope, C) ->
-    configure_limit(TimeRange, Scope, ?body_type_cash(<<"RUB">>), C).
+    configure_limit(TimeRange, Scope, ?turnover_metric_amount(<<"RUB">>), C).
 
-configure_limit(TimeRange, Scope, BodyType, C) ->
+configure_limit(TimeRange, Scope, Metric, C) ->
     ID = ?config(id, C),
     Params = #limiter_config_LimitConfigParams{
         id = ID,
         started_at = <<"2000-01-01T00:00:00Z">>,
-        body_type = BodyType,
         time_range_type = TimeRange,
         shard_size = 1,
-        type = ?lim_type_turnover(),
+        type = ?lim_type_turnover(Metric),
         scope = Scope,
         context_type = ?ctx_type_payproc(),
         op_behaviour = ?op_behaviour(?op_subtraction())

@@ -96,12 +96,11 @@ marshal_unmarshal_created_test() ->
             id => ID,
             processor_type => <<"type">>,
             created_at => lim_time:now(),
-            body_type => {cash, <<"RUB">>},
             started_at => <<"2000-01-01T00:00:00Z">>,
             shard_size => 7,
             time_range_type => {calendar, day},
             context_type => payment_processing,
-            type => turnover,
+            type => {turnover, {amount, <<"RUB">>}},
             scope => ordsets:from_list([party]),
             description => <<"description">>
         }},
