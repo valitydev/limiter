@@ -37,6 +37,7 @@
 
 -export([commit_amount_ok/1]).
 -export([rollback_amount_ok/1]).
+-export([commit_refund_amount_ok/1]).
 -export([partial_commit_amount_counts_as_single_op/1]).
 
 -type group_name() :: atom().
@@ -76,6 +77,7 @@ groups() ->
         {cashless, [parallel], [
             commit_amount_ok,
             rollback_amount_ok,
+            commit_refund_amount_ok,
             partial_commit_amount_counts_as_single_op
         ]},
         {idempotency, [parallel], [
@@ -412,7 +414,10 @@ commit_amount_ok(C) ->
     {ok, LimitState0} = lim_client:get(ID, Context, Client),
     _ = hold_and_commit(?LIMIT_CHANGE(ID), Context, Client),
     {ok, LimitState1} = lim_client:get(ID, Context, Client),
-    ?assertEqual(LimitState1#limiter_Limit.amount, LimitState0#limiter_Limit.amount + 1).
+    ?assertEqual(
+        LimitState1#limiter_Limit.amount,
+        LimitState0#limiter_Limit.amount + 1
+    ).
 
 -spec rollback_amount_ok(config()) -> _.
 rollback_amount_ok(C) ->
@@ -423,7 +428,29 @@ rollback_amount_ok(C) ->
     {ok, LimitState0} = lim_client:get(ID, Context, Client),
     _ = hold_and_commit(?LIMIT_CHANGE(ID), Context, ContextRollback, Client),
     {ok, LimitState1} = lim_client:get(ID, Context, Client),
-    ?assertEqual(LimitState1#limiter_Limit.amount, LimitState0#limiter_Limit.amount).
+    ?assertEqual(
+        LimitState1#limiter_Limit.amount,
+        LimitState0#limiter_Limit.amount
+    ).
+
+-spec commit_refund_amount_ok(config()) -> _.
+commit_refund_amount_ok(C) ->
+    Client = ?config(client, C),
+    ID = configure_limit(?time_range_week(), ?global(), ?turnover_metric_number(), C),
+    Cost = ?cash(10),
+    CaptureCost = ?cash(8),
+    RefundCost = ?cash(5),
+    PaymentContext = ?ctx_invoice_payment(<<"OWNER">>, <<"SHOP">>, Cost, CaptureCost),
+    RefundContext = ?ctx_invoice_payment_refund(<<"OWNER">>, <<"SHOP">>, Cost, CaptureCost, RefundCost),
+    {ok, LimitState0} = lim_client:get(ID, PaymentContext, Client),
+    _ = hold_and_commit(?LIMIT_CHANGE(ID, 1), PaymentContext, Client),
+    _ = hold_and_commit(?LIMIT_CHANGE(ID, 2), RefundContext, Client),
+    {ok, LimitState1} = lim_client:get(ID, PaymentContext, Client),
+    ?assertEqual(
+        % Expected to be the same because refund decreases counter given limit config
+        LimitState1#limiter_Limit.amount,
+        LimitState0#limiter_Limit.amount
+    ).
 
 -spec partial_commit_amount_counts_as_single_op(config()) -> _.
 partial_commit_amount_counts_as_single_op(C) ->
@@ -434,7 +461,10 @@ partial_commit_amount_counts_as_single_op(C) ->
     {ok, LimitState0} = lim_client:get(ID, Context, Client),
     _ = hold_and_commit(?LIMIT_CHANGE(ID), Context, ContextPartial, Client),
     {ok, LimitState1} = lim_client:get(ID, Context, Client),
-    ?assertEqual(LimitState1#limiter_Limit.amount, LimitState0#limiter_Limit.amount + 1).
+    ?assertEqual(
+        LimitState1#limiter_Limit.amount,
+        LimitState0#limiter_Limit.amount + 1
+    ).
 
 %%
 
