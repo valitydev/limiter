@@ -35,10 +35,10 @@
 -export([partial_commit_processes_idempotently/1]).
 -export([rollback_processes_idempotently/1]).
 
--export([commit_amount_ok/1]).
--export([rollback_amount_ok/1]).
--export([commit_refund_amount_ok/1]).
--export([partial_commit_amount_counts_as_single_op/1]).
+-export([commit_number_ok/1]).
+-export([rollback_number_ok/1]).
+-export([commit_refund_keep_number_unchanged/1]).
+-export([partial_commit_number_counts_as_single_op/1]).
 
 -type group_name() :: atom().
 -type test_case_name() :: atom().
@@ -75,10 +75,10 @@ groups() ->
             commit_multirange_limit_ok
         ]},
         {cashless, [parallel], [
-            commit_amount_ok,
-            rollback_amount_ok,
-            commit_refund_amount_ok,
-            partial_commit_amount_counts_as_single_op
+            commit_number_ok,
+            rollback_number_ok,
+            commit_refund_keep_number_unchanged,
+            partial_commit_number_counts_as_single_op
         ]},
         {idempotency, [parallel], [
             commit_processes_idempotently,
@@ -406,8 +406,8 @@ rollback_processes_idempotently(C) ->
 
 %%
 
--spec commit_amount_ok(config()) -> _.
-commit_amount_ok(C) ->
+-spec commit_number_ok(config()) -> _.
+commit_number_ok(C) ->
     Client = ?config(client, C),
     ID = configure_limit(?time_range_week(), ?global(), ?turnover_metric_number(), C),
     Context = ?ctx_invoice_payment(?cash(10), ?cash(10)),
@@ -419,8 +419,8 @@ commit_amount_ok(C) ->
         LimitState0#limiter_Limit.amount + 1
     ).
 
--spec rollback_amount_ok(config()) -> _.
-rollback_amount_ok(C) ->
+-spec rollback_number_ok(config()) -> _.
+rollback_number_ok(C) ->
     Client = ?config(client, C),
     ID = configure_limit(?time_range_week(), ?global(), ?turnover_metric_number(), C),
     Context = ?ctx_invoice_payment(?cash(10), ?cash(10)),
@@ -433,8 +433,8 @@ rollback_amount_ok(C) ->
         LimitState0#limiter_Limit.amount
     ).
 
--spec commit_refund_amount_ok(config()) -> _.
-commit_refund_amount_ok(C) ->
+-spec commit_refund_keep_number_unchanged(config()) -> _.
+commit_refund_keep_number_unchanged(C) ->
     Client = ?config(client, C),
     ID = configure_limit(?time_range_week(), ?global(), ?turnover_metric_number(), C),
     Cost = ?cash(10),
@@ -452,8 +452,8 @@ commit_refund_amount_ok(C) ->
         LimitState0#limiter_Limit.amount
     ).
 
--spec partial_commit_amount_counts_as_single_op(config()) -> _.
-partial_commit_amount_counts_as_single_op(C) ->
+-spec partial_commit_number_counts_as_single_op(config()) -> _.
+partial_commit_number_counts_as_single_op(C) ->
     Client = ?config(client, C),
     ID = configure_limit(?time_range_week(), ?global(), ?turnover_metric_number(), C),
     Context = ?ctx_invoice_payment(?cash(10), ?cash(10)),

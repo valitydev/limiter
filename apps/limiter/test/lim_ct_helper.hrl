@@ -17,16 +17,15 @@
 -define(scope_party(), {party, #limiter_config_LimitScopeEmptyDetails{}}).
 -define(scope_shop(), {shop, #limiter_config_LimitScopeEmptyDetails{}}).
 
--define(body_type_cash(), ?body_type_cash(?currency)).
--define(body_type_cash(Currency),
-    {cash, #limiter_config_LimitBodyTypeCash{currency = Currency}}
-).
--define(body_type_amount(),
-    {amount, #limiter_config_LimitBodyTypeAmount{}}
+-define(lim_type_turnover(), ?lim_type_turnover(?turnover_metric_number())).
+-define(lim_type_turnover(Metric),
+    {turnover, #limiter_config_LimitTypeTurnover{metric = Metric}}
 ).
 
--define(lim_type_turnover(),
-    {turnover, #limiter_config_LimitTypeTurnover{}}
+-define(turnover_metric_number(), {number, #limiter_config_LimitTurnoverNumber{}}).
+-define(turnover_metric_amount(), ?turnover_metric_amount(?currency)).
+-define(turnover_metric_amount(Currency),
+    {amount, #limiter_config_LimitTurnoverAmount{currency = Currency}}
 ).
 
 -define(time_range_day(),
