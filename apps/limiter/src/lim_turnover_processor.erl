@@ -25,16 +25,16 @@
 -type get_limit_error() :: {range, notfound}.
 
 -type hold_error() ::
-    lim_body:get_body_error()
+    lim_rates:conversion_error()
     | lim_accounting:invalid_request_error().
 
 -type commit_error() ::
     {forbidden_operation_amount, forbidden_operation_amount_error()}
-    | lim_body:get_body_error()
+    | lim_rates:conversion_error()
     | lim_accounting:invalid_request_error().
 
 -type rollback_error() ::
-    lim_body:get_body_error()
+    lim_rates:conversion_error()
     | lim_accounting:invalid_request_error().
 
 -export_type([get_limit_error/0]).
@@ -42,14 +42,13 @@
 -export_type([commit_error/0]).
 -export_type([rollback_error/0]).
 
--import(lim_pipeline, [do/1, unwrap/1, unwrap/2]).
+-import(lim_pipeline, [do/1, unwrap/1]).
 
 -spec get_limit(lim_id(), config(), lim_context()) -> {ok, limit()} | {error, get_limit_error()}.
 get_limit(LimitID, Config, LimitContext) ->
     do(fun() ->
         {LimitRangeID, TimeRange} = compute_limit_time_range_location(LimitID, Config, LimitContext),
-        #{max_available_amount := Amount} =
-            unwrap(range, lim_range_machine:get_range_balance(LimitRangeID, TimeRange, LimitContext)),
+        Amount = find_range_balance_amount(LimitRangeID, TimeRange, LimitContext),
         #limiter_Limit{
             id = LimitRangeID,
             amount = Amount,
@@ -58,12 +57,20 @@ get_limit(LimitID, Config, LimitContext) ->
         }
     end).
 
+find_range_balance_amount(LimitRangeID, TimeRange, LimitContext) ->
+    case lim_range_machine:get_range_balance(LimitRangeID, TimeRange, LimitContext) of
+        {ok, #{max_available_amount := Amount}} ->
+            Amount;
+        {error, notfound} ->
+            0
+    end.
+
 -spec hold(lim_change(), config(), lim_context()) -> ok | {error, hold_error()}.
 hold(LimitChange = #limiter_LimitChange{id = LimitID}, Config, LimitContext) ->
     do(fun() ->
         TimeRangeAccount = ensure_limit_time_range(LimitID, Config, LimitContext),
-        Body = unwrap(lim_body:get_body(full, Config, LimitContext)),
-        Posting = construct_posting(TimeRangeAccount, Body, Config, LimitContext),
+        Metric = unwrap(compute_metric(hold, Config, LimitContext)),
+        Posting = lim_posting:new(TimeRangeAccount, Metric, currency(Config)),
         unwrap(lim_accounting:hold(construct_plan_id(LimitChange), {1, [Posting]}, LimitContext))
     end).
 
@@ -95,8 +102,8 @@ commit(LimitChange = #limiter_LimitChange{id = LimitID}, Config, LimitContext) -
 rollback(LimitChange = #limiter_LimitChange{id = LimitID}, Config, LimitContext) ->
     do(fun() ->
         TimeRangeAccount = ensure_limit_time_range(LimitID, Config, LimitContext),
-        Body = unwrap(lim_body:get_body(full, Config, LimitContext)),
-        Posting = construct_posting(TimeRangeAccount, Body, Config, LimitContext),
+        Metric = unwrap(compute_metric(hold, Config, LimitContext)),
+        Posting = lim_posting:new(TimeRangeAccount, Metric, currency(Config)),
         unwrap(lim_accounting:rollback(construct_plan_id(LimitChange), [{1, [Posting]}], LimitContext))
     end).
 
@@ -113,7 +120,7 @@ ensure_limit_time_range(LimitID, Config, LimitContext) ->
         id => LimitRangeID,
         type => lim_config_machine:time_range_type(Config),
         created_at => Timestamp,
-        currency => lim_config_machine:currency(Config)
+        currency => currency(Config)
     }),
     unwrap(lim_range_machine:ensure_exists(CreateParams, TimeRange, LimitContext)).
 
@@ -127,22 +134,24 @@ construct_range_id(LimitID, Timestamp, Config, LimitContext) ->
     <<LimitID/binary, Prefix/binary, "/", ShardID/binary>>.
 
 construct_commit_plan(TimeRangeAccount, Config, LimitContext) ->
-    Body = unwrap(lim_body:get_body(full, Config, LimitContext)),
-    MaybePartialBody = lim_body:get_body(partial, Config, LimitContext),
-    construct_commit_postings(TimeRangeAccount, Body, MaybePartialBody, Config, LimitContext).
+    MetricHold = unwrap(compute_metric(hold, Config, LimitContext)),
+    MetricCommit = unwrap(compute_metric(commit, Config, LimitContext)),
+    construct_commit_postings(TimeRangeAccount, MetricHold, MetricCommit, Config).
 
-construct_commit_postings(TimeRangeAccount, Full, MaybePartialBody, Config, LimitContext) ->
-    OriginalHoldPosting = construct_posting(TimeRangeAccount, Full, Config, LimitContext),
-    case determine_commit_intent(MaybePartialBody, Full) of
-        commit ->
+construct_commit_postings(TimeRangeAccount, MetricHold, MetricCommit, Config) ->
+    OriginalHoldPosting = lim_posting:new(TimeRangeAccount, MetricHold, currency(Config)),
+    case MetricCommit of
+        MetricHold ->
+            % Commit-time metric is equal to hold-time metric
             [{commit, [{1, [OriginalHoldPosting]}]}];
-        rollback ->
+        0 ->
+            % Commit-time metric is 0, this is rollback
             [{rollback, [{1, [OriginalHoldPosting]}]}];
-        {commit, Partial} ->
+        _MetricPartial ->
             % Partial body is less than full body
-            ok = unwrap(assert_partial_body(Partial, Full)),
-            ReverseHoldPosting = lim_p_transfer:reverse_posting(OriginalHoldPosting),
-            PartialHoldPosting = construct_posting(TimeRangeAccount, Partial, Config, LimitContext),
+            ok = unwrap(validate_metric(MetricCommit, MetricHold)),
+            ReverseHoldPosting = lim_posting:reverse(OriginalHoldPosting),
+            PartialHoldPosting = lim_posting:new(TimeRangeAccount, MetricCommit, currency(Config)),
             PartialBatch = [ReverseHoldPosting, PartialHoldPosting],
             [
                 {hold, {2, PartialBatch}},
@@ -153,71 +162,36 @@ construct_commit_postings(TimeRangeAccount, Full, MaybePartialBody, Config, Limi
             ]
     end.
 
-determine_commit_intent({error, notfound}, _FullBody) ->
-    % No partial body specified
-    commit;
-determine_commit_intent({ok, FullBody}, FullBody) ->
-    % Partial body is equal to full body
-    commit;
-determine_commit_intent({ok, {amount, 0}}, _FullBody) ->
-    % Partial body is 0, this is rollback
-    rollback;
-determine_commit_intent({ok, {cash, #{amount := 0}}}, _FullBody) ->
-    % Partial body is 0, this is rollback
-    rollback;
-determine_commit_intent({ok, Partial}, _FullBody) ->
-    {commit, Partial}.
+compute_metric(Stage, Config, LimitContext) ->
+    {turnover, Metric} = lim_config_machine:type(Config),
+    lim_turnover_metric:compute(Metric, Stage, Config, LimitContext).
 
-construct_posting(TimeRangeAccount, Body, Config, LimitContext) ->
-    apply_op_behaviour(lim_p_transfer:construct_posting(TimeRangeAccount, Body), Config, LimitContext).
+currency(#{type := {turnover, {amount, Currency}}}) ->
+    Currency;
+currency(#{type := {turnover, number}}) ->
+    lim_accounting:noncurrency().
 
-apply_op_behaviour(Posting, #{op_behaviour := ComputationConfig}, LimitContext) ->
-    {ok, Operation} = lim_context:get_operation(payment_processing, LimitContext),
-    case maps:get(Operation, ComputationConfig, undefined) of
-        subtraction ->
-            lim_p_transfer:reverse_posting(Posting);
-        Type when Type =:= undefined orelse Type =:= additional ->
-            Posting
-    end;
-apply_op_behaviour(Body, _Config, _LimitContext) ->
-    Body.
-
-assert_partial_body(
-    {cash, #{amount := Partial, currency := Currency}},
-    {cash, #{amount := Full, currency := Currency}}
-) ->
-    compare_amount(Partial, Full, Currency);
-assert_partial_body(
-    {cash, #{amount := Partial, currency := PartialCurrency}},
-    {cash, #{amount := Full, currency := FullCurrency}}
-) ->
-    erlang:error({invalid_partial_cash, {Partial, PartialCurrency}, {Full, FullCurrency}}).
-
-compare_amount(Partial, Full, Currency) when Full > 0 ->
-    case Partial < Full of
+validate_metric(MetricCommit, MetricHold) when MetricHold > 0 ->
+    case MetricCommit < MetricHold of
         true ->
             ok;
         false ->
             {error,
-                {forbidden_operation_amount,
-                    genlib_map:compact(#{
-                        type => positive,
-                        partial => Partial,
-                        full => Full,
-                        currency => Currency
-                    })}}
+                {forbidden_operation_amount, #{
+                    type => positive,
+                    partial => MetricCommit,
+                    full => MetricHold
+                }}}
     end;
-compare_amount(Partial, Full, Currency) when Full < 0 ->
-    case Partial > Full of
+validate_metric(MetricCommit, MetricHold) when MetricHold < 0 ->
+    case MetricCommit > MetricHold of
         true ->
             ok;
         false ->
             {error,
-                {forbidden_operation_amount,
-                    genlib_map:compact(#{
-                        type => negative,
-                        partial => Partial,
-                        full => Full,
-                        currency => Currency
-                    })}}
+                {forbidden_operation_amount, #{
+                    type => negative,
+                    partial => MetricCommit,
+                    full => MetricHold
+                }}}
     end.

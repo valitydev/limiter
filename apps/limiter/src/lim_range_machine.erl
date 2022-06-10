@@ -39,7 +39,7 @@
 -type id() :: binary().
 -type time_range_type() :: lim_config_machine:time_range_type().
 -type time_range() :: lim_config_machine:time_range().
--type currency() :: lim_config_machine:currency().
+-type currency() :: lim_body:currency().
 
 -type limit_range_state() :: #{
     id := id(),
@@ -109,27 +109,27 @@ ranges(#{ranges := Ranges}) ->
 ranges(_State) ->
     [].
 
--spec currency(limit_range_state()) -> currency().
+-spec currency(limit_range_state() | create_params()) -> currency().
 currency(#{currency := Currency}) ->
     Currency;
 currency(_State) ->
-    lim_accounting:get_default_currency().
+    lim_accounting:noncurrency().
 
 %%% API
 
 -spec get(id(), lim_context()) -> {ok, limit_range_state()} | {error, notfound}.
 get(ID, LimitContext) ->
-    {ok, WoodyCtx} = lim_context:woody_context(LimitContext),
-    get_state(ID, WoodyCtx).
+    get_state(ID, lim_context:woody_context(LimitContext)).
 
 -spec ensure_exists(create_params(), time_range(), lim_context()) -> {ok, time_range_ext()}.
-ensure_exists(Params = #{id := ID, currency := Currency}, TimeRange, LimitContext) ->
-    {ok, WoodyCtx} = lim_context:woody_context(LimitContext),
+ensure_exists(Params = #{id := ID}, TimeRange, LimitContext) ->
+    WoodyCtx = lim_context:woody_context(LimitContext),
     case get_state(ID, WoodyCtx) of
         {ok, State} ->
             ensure_range_exist_in_state(TimeRange, State, WoodyCtx);
         {error, notfound} ->
-            _ = start(ID, Params, [new_time_range_ext(TimeRange, Currency, WoodyCtx)], WoodyCtx),
+            TimeRangeExt = new_time_range_ext(TimeRange, currency(Params), WoodyCtx),
+            _ = start(ID, Params, [TimeRangeExt], WoodyCtx),
             {ok, State} = get_state(ID, WoodyCtx),
             get_range(TimeRange, State)
     end.
@@ -162,9 +162,7 @@ get_range_balance(ID, TimeRange, LimitContext) ->
 
 -spec init(args([event()]), machine(), handler_args(), handler_opts()) -> result().
 init(Events, _Machine, _HandlerArgs, _HandlerOpts) ->
-    #{
-        events => emit_events(Events)
-    }.
+    #{events => emit_events(Events)}.
 
 -spec process_call(args(range_call()), machine(), handler_args(), handler_opts()) ->
     {response(time_range_ext()), result()} | no_return().
@@ -196,7 +194,7 @@ find_time_range(TimeRange, [_Head | Rest]) ->
     find_time_range(TimeRange, Rest).
 
 new_time_range_ext(TimeRange, Currency, WoodyCtx) ->
-    {ok, LimitContext} = lim_context:create(WoodyCtx),
+    LimitContext = lim_context:create(WoodyCtx),
     {ok, AccountIDFrom} = lim_accounting:create_account(Currency, LimitContext),
     {ok, AccountIDTo} = lim_accounting:create_account(Currency, LimitContext),
     TimeRange#{

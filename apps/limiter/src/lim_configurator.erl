@@ -8,21 +8,19 @@
 
 -export([handle_function/4]).
 
-%%
-
--type lim_context() :: lim_context:t().
+-define(DEFAULT_CURRENCY, <<"RUB">>).
 
 %%
 
 -spec handle_function(woody:func(), woody:args(), woody_context:ctx(), woody:options()) -> {ok, woody:result()}.
 handle_function(Fn, Args, WoodyCtx, Opts) ->
-    {ok, LimitContext} = lim_context:create(WoodyCtx),
+    LimitContext = lim_context:create(WoodyCtx),
     scoper:scope(
         configurator,
         fun() -> handle_function_(Fn, Args, LimitContext, Opts) end
     ).
 
--spec handle_function_(woody:func(), woody:args(), lim_context(), woody:options()) -> {ok, woody:result()}.
+-spec handle_function_(woody:func(), woody:args(), lim_context:t(), woody:options()) -> {ok, woody:result()}.
 handle_function_(
     'CreateLegacy',
     {#limiter_cfg_LimitCreateParams{
@@ -30,7 +28,6 @@ handle_function_(
         name = Name,
         description = Description,
         started_at = StartedAt,
-        body_type = BodyType,
         op_behaviour = OpBehaviour
     }},
     LimitContext,
@@ -43,7 +40,6 @@ handle_function_(
                 genlib_map:compact(Config#{
                     description => Description,
                     started_at => StartedAt,
-                    body_type => lim_config_codec:unmarshal_body_type(BodyType),
                     op_behaviour => lim_config_codec:maybe_apply(
                         OpBehaviour,
                         fun lim_config_codec:unmarshal_op_behaviour/1
@@ -77,7 +73,7 @@ handle_function_('Get', {LimitID}, LimitContext, _Opts) ->
             woody_error:raise(business, #limiter_cfg_LimitConfigNotFound{})
     end.
 
-map_type(turnover) ->
+map_type({turnover, _}) ->
     <<"TurnoverProcessor">>;
 map_type(_) ->
     woody_error:raise(
@@ -88,7 +84,7 @@ map_type(_) ->
 mk_limit_config(<<"ShopDayTurnover">>) ->
     {ok, #{
         processor_type => <<"TurnoverProcessor">>,
-        type => turnover,
+        type => {turnover, {amount, ?DEFAULT_CURRENCY}},
         scope => ordsets:from_list([shop]),
         shard_size => 7,
         context_type => payment_processing,
@@ -97,7 +93,7 @@ mk_limit_config(<<"ShopDayTurnover">>) ->
 mk_limit_config(<<"PartyDayTurnover">>) ->
     {ok, #{
         processor_type => <<"TurnoverProcessor">>,
-        type => turnover,
+        type => {turnover, {amount, ?DEFAULT_CURRENCY}},
         scope => ordsets:from_list([party]),
         shard_size => 7,
         context_type => payment_processing,
@@ -106,7 +102,7 @@ mk_limit_config(<<"PartyDayTurnover">>) ->
 mk_limit_config(<<"ShopMonthTurnover">>) ->
     {ok, #{
         processor_type => <<"TurnoverProcessor">>,
-        type => turnover,
+        type => {turnover, {amount, ?DEFAULT_CURRENCY}},
         scope => ordsets:from_list([shop]),
         shard_size => 12,
         context_type => payment_processing,
@@ -115,7 +111,7 @@ mk_limit_config(<<"ShopMonthTurnover">>) ->
 mk_limit_config(<<"PartyMonthTurnover">>) ->
     {ok, #{
         processor_type => <<"TurnoverProcessor">>,
-        type => turnover,
+        type => {turnover, {amount, ?DEFAULT_CURRENCY}},
         scope => ordsets:from_list([party]),
         shard_size => 12,
         context_type => payment_processing,
@@ -124,7 +120,7 @@ mk_limit_config(<<"PartyMonthTurnover">>) ->
 mk_limit_config(<<"GlobalMonthTurnover">>) ->
     {ok, #{
         processor_type => <<"TurnoverProcessor">>,
-        type => turnover,
+        type => {turnover, {amount, ?DEFAULT_CURRENCY}},
         scope => ordsets:new(),
         shard_size => 12,
         context_type => payment_processing,

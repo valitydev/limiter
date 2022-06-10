@@ -18,7 +18,7 @@
 
 -spec handle_function(woody:func(), woody:args(), woody_context:ctx(), woody:options()) -> {ok, woody:result()}.
 handle_function(Fn, Args, WoodyCtx, Opts) ->
-    {ok, LimitContext} = lim_context:create(WoodyCtx),
+    LimitContext = lim_context:create(WoodyCtx),
     scoper:scope(
         limiter,
         fun() -> handle_function_(Fn, Args, LimitContext, Opts) end
@@ -79,8 +79,6 @@ handle_function_('Rollback', {LimitChange = ?LIMIT_CHANGE(LimitID), Clock, Conte
     end.
 
 -spec handle_get_error(_) -> no_return().
-handle_get_error({_, {range, notfound}}) ->
-    woody_error:raise(business, #limiter_LimitNotFound{});
 handle_get_error(Error) ->
     handle_default_error(Error).
 

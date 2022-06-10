@@ -7,8 +7,6 @@
 -export([created_at/1]).
 -export([id/1]).
 -export([description/1]).
--export([body_type/1]).
--export([currency/1]).
 -export([started_at/1]).
 -export([shard_size/1]).
 -export([time_range_type/1]).
@@ -38,10 +36,9 @@
 -type processor() :: lim_router:processor().
 -type description() :: binary().
 
--type limit_type() :: turnover.
+-type limit_type() :: {turnover, lim_turnover_metric:t()}.
 -type limit_scope() :: ordsets:ordset(limit_scope_type()).
 -type limit_scope_type() :: party | shop | wallet | identity.
--type body_type() :: {cash, currency()} | amount.
 -type shard_size() :: pos_integer().
 -type shard_id() :: binary().
 -type prefix() :: binary().
@@ -57,12 +54,11 @@
     id := lim_id(),
     processor_type := processor_type(),
     created_at := lim_time:timestamp_ms(),
-    body_type := body_type(),
     started_at := timestamp(),
     shard_size := shard_size(),
     time_range_type := time_range_type(),
     context_type := context_type(),
-    type => limit_type(),
+    type := limit_type(),
     scope => limit_scope(),
     description => description(),
     op_behaviour => op_behaviour()
@@ -70,7 +66,6 @@
 
 -type create_params() :: #{
     processor_type := processor_type(),
-    body_type := body_type(),
     started_at := timestamp(),
     shard_size := shard_size(),
     time_range_type := time_range_type(),
@@ -88,16 +83,13 @@
 -type lim_change() :: lim_limiter_thrift:'LimitChange'().
 -type limit() :: lim_limiter_thrift:'Limit'().
 -type timestamp() :: lim_base_thrift:'Timestamp'().
--type currency() :: lim_base_thrift:'CurrencySymbolicCode'().
 
 -export_type([config/0]).
--export_type([body_type/0]).
 -export_type([limit_type/0]).
 -export_type([limit_scope/0]).
 -export_type([time_range_type/0]).
 -export_type([time_range/0]).
 -export_type([create_params/0]).
--export_type([currency/0]).
 -export_type([lim_id/0]).
 -export_type([lim_change/0]).
 -export_type([limit/0]).
@@ -180,16 +172,6 @@ description(#{description := ID}) ->
 description(_) ->
     undefined.
 
--spec body_type(config()) -> body_type().
-body_type(#{body_type := BodyType}) ->
-    BodyType.
-
--spec currency(config()) -> currency() | undefined.
-currency(#{body_type := {cash, Currency}}) ->
-    Currency;
-currency(#{body_type := amount}) ->
-    undefined.
-
 -spec started_at(config()) -> timestamp().
 started_at(#{started_at := Value}) ->
     Value.
@@ -206,11 +188,11 @@ time_range_type(#{time_range_type := Value}) ->
 processor_type(#{processor_type := Value}) ->
     Value.
 
--spec type(config()) -> lim_maybe:maybe(limit_type()).
+-spec type(config()) -> limit_type().
 type(#{type := Value}) ->
     Value;
 type(_) ->
-    undefined.
+    {turnover, number}.
 
 -spec scope(config()) -> limit_scope().
 scope(#{scope := Value}) ->
@@ -232,7 +214,7 @@ op_behaviour(_) ->
 
 -spec start(lim_id(), create_params(), lim_context()) -> {ok, config()}.
 start(ID, Params, LimitContext) ->
-    {ok, WoodyCtx} = lim_context:woody_context(LimitContext),
+    WoodyCtx = lim_context:woody_context(LimitContext),
     Config = genlib_map:compact(Params#{id => ID, created_at => lim_time:now()}),
     case machinery:start(?NS, ID, [{created, Config}], get_backend(WoodyCtx)) of
         ok ->
@@ -245,7 +227,7 @@ start(ID, Params, LimitContext) ->
 -spec get(lim_id(), lim_context()) -> {ok, config()} | {error, notfound}.
 get(ID, LimitContext) ->
     do(fun() ->
-        {ok, WoodyCtx} = lim_context:woody_context(LimitContext),
+        WoodyCtx = lim_context:woody_context(LimitContext),
         Machine = unwrap(machinery:get(?NS, ID, get_backend(WoodyCtx))),
         collapse(Machine)
     end).
