@@ -84,7 +84,7 @@ handle_get_error(Error) ->
 
 -spec handle_hold_error(_) -> no_return().
 handle_hold_error({_, {invalid_request, Errors}}) ->
-    woody_error:raise(business, #limiter_base_InvalidRequest{errors = Errors});
+    woody_error:raise(business, #'InvalidRequest'{errors = Errors});
 handle_hold_error(Error) ->
     handle_default_error(Error).
 
@@ -92,13 +92,13 @@ handle_hold_error(Error) ->
 handle_commit_error({_, {forbidden_operation_amount, Error}}) ->
     handle_forbidden_operation_amount_error(Error);
 handle_commit_error({_, {invalid_request, Errors}}) ->
-    woody_error:raise(business, #limiter_base_InvalidRequest{errors = Errors});
+    woody_error:raise(business, #'InvalidRequest'{errors = Errors});
 handle_commit_error(Error) ->
     handle_default_error(Error).
 
 -spec handle_rollback_error(_) -> no_return().
 handle_rollback_error({_, {invalid_request, Errors}}) ->
-    woody_error:raise(business, #limiter_base_InvalidRequest{errors = Errors});
+    woody_error:raise(business, #'InvalidRequest'{errors = Errors});
 handle_rollback_error(Error) ->
     handle_default_error(Error).
 

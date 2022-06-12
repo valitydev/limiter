@@ -145,13 +145,13 @@ commit_with_default_exchange(C) ->
     _ = mock_exchange(Rational, C),
     ID = configure_limit(?time_range_month(), ?global(), C),
     Context = #limiter_context_LimitContext{
-        payment_processing = #limiter_context_ContextPaymentProcessing{
+        limiter_payment_processing = #limiter_context_ContextPaymentProcessing{
             op = {invoice, #limiter_context_PaymentProcessingOperationInvoice{}},
             invoice = #limiter_context_Invoice{
                 created_at = <<"2000-01-01T00:00:00Z">>,
-                cost = #limiter_base_Cash{
+                cost = #domain_Cash{
                     amount = 10000,
-                    currency = #limiter_base_CurrencyRef{symbolic_code = <<"SOME_CURRENCY">>}
+                    currency = #domain_CurrencyRef{symbolic_code = <<"SOME_CURRENCY">>}
                 }
             }
         }
@@ -165,18 +165,18 @@ partial_commit_with_exchange(C) ->
     _ = mock_exchange(Rational, C),
     ID = configure_limit(?time_range_month(), ?global(), C),
     Context = #limiter_context_LimitContext{
-        payment_processing = #limiter_context_ContextPaymentProcessing{
+        limiter_payment_processing = #limiter_context_ContextPaymentProcessing{
             op = {invoice_payment, #limiter_context_PaymentProcessingOperationInvoicePayment{}},
             invoice = #limiter_context_Invoice{
                 effective_payment = #limiter_context_InvoicePayment{
                     created_at = <<"2000-01-01T00:00:00Z">>,
-                    cost = #limiter_base_Cash{
+                    cost = #domain_Cash{
                         amount = 10000,
-                        currency = #limiter_base_CurrencyRef{symbolic_code = <<"USD">>}
+                        currency = #domain_CurrencyRef{symbolic_code = <<"USD">>}
                     },
-                    capture_cost = #limiter_base_Cash{
+                    capture_cost = #domain_Cash{
                         amount = 8000,
-                        currency = #limiter_base_CurrencyRef{symbolic_code = <<"USD">>}
+                        currency = #domain_CurrencyRef{symbolic_code = <<"USD">>}
                     }
                 }
             }
@@ -191,13 +191,13 @@ commit_with_exchange(C) ->
     _ = mock_exchange(Rational, C),
     ID = configure_limit(?time_range_month(), ?global(), C),
     Context = #limiter_context_LimitContext{
-        payment_processing = #limiter_context_ContextPaymentProcessing{
+        limiter_payment_processing = #limiter_context_ContextPaymentProcessing{
             op = {invoice, #limiter_context_PaymentProcessingOperationInvoice{}},
             invoice = #limiter_context_Invoice{
                 created_at = <<"2000-01-01T00:00:00Z">>,
-                cost = #limiter_base_Cash{
+                cost = #domain_Cash{
                     amount = 10000,
-                    currency = #limiter_base_CurrencyRef{symbolic_code = <<"USD">>}
+                    currency = #domain_CurrencyRef{symbolic_code = <<"USD">>}
                 }
             }
         }
@@ -251,13 +251,13 @@ hold_ok(C) ->
 commit_ok(C) ->
     ID = configure_limit(?time_range_month(), ?global(), C),
     Context = #limiter_context_LimitContext{
-        payment_processing = #limiter_context_ContextPaymentProcessing{
+        limiter_payment_processing = #limiter_context_ContextPaymentProcessing{
             op = {invoice, #limiter_context_PaymentProcessingOperationInvoice{}},
             invoice = #limiter_context_Invoice{
                 created_at = <<"2000-01-01T00:00:00Z">>,
-                cost = #limiter_base_Cash{
+                cost = #domain_Cash{
                     amount = 10,
-                    currency = #limiter_base_CurrencyRef{symbolic_code = <<"RUB">>}
+                    currency = #domain_CurrencyRef{symbolic_code = <<"RUB">>}
                 }
             }
         }
@@ -299,7 +299,7 @@ commit_inexistent_hold_fails(C) ->
     % NOTE
     % We do not expect `LimitChangeNotFound` here because we no longer reconcile with accounter
     % before requesting him to hold / commit.
-    {exception, #limiter_base_InvalidRequest{}} =
+    {exception, #'InvalidRequest'{}} =
         lim_client:commit(?LIMIT_CHANGE(ID), Context, ?config(client, C)).
 
 -spec partial_commit_inexistent_hold_fails(config()) -> _.
@@ -309,7 +309,7 @@ partial_commit_inexistent_hold_fails(C) ->
     % NOTE
     % We do not expect `LimitChangeNotFound` here because we no longer reconcile with accounter
     % before requesting him to hold / commit.
-    {exception, #limiter_base_InvalidRequest{}} =
+    {exception, #'InvalidRequest'{}} =
         lim_client:commit(?LIMIT_CHANGE(ID), Context, ?config(client, C)).
 
 -spec commit_multirange_limit_ok(config()) -> _.

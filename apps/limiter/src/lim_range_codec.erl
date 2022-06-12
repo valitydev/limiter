@@ -48,7 +48,7 @@ marshal(time_range, #{
     account_id_from := AccountIDFrom,
     account_id_to := AccountIDTo
 }) ->
-    #time_range_TimeRange{
+    #limiter_time_range_TimeRange{
         upper = Upper,
         lower = Lower,
         account_id_from = AccountIDFrom,
@@ -57,15 +57,15 @@ marshal(time_range, #{
 marshal(time_range_type, {calendar, SubType}) ->
     {calendar, marshal(time_range_sub_type, SubType)};
 marshal(time_range_type, {interval, Interval}) ->
-    {interval, #time_range_TimeRangeTypeInterval{amount = Interval}};
+    {interval, #limiter_time_range_TimeRangeTypeInterval{amount = Interval}};
 marshal(time_range_sub_type, year) ->
-    {year, #time_range_TimeRangeTypeCalendarYear{}};
+    {year, #limiter_time_range_TimeRangeTypeCalendarYear{}};
 marshal(time_range_sub_type, month) ->
-    {month, #time_range_TimeRangeTypeCalendarMonth{}};
+    {month, #limiter_time_range_TimeRangeTypeCalendarMonth{}};
 marshal(time_range_sub_type, week) ->
-    {week, #time_range_TimeRangeTypeCalendarWeek{}};
+    {week, #limiter_time_range_TimeRangeTypeCalendarWeek{}};
 marshal(time_range_sub_type, day) ->
-    {day, #time_range_TimeRangeTypeCalendarDay{}};
+    {day, #limiter_time_range_TimeRangeTypeCalendarDay{}};
 marshal(timestamp, {DateTime, USec}) ->
     DateTimeinSeconds = genlib_time:daytime_to_unixtime(DateTime),
     {TimeinUnit, Unit} =
@@ -99,7 +99,7 @@ unmarshal(range, #limiter_range_LimitRange{
         created_at => CreatedAt,
         currency => Currency
     });
-unmarshal(time_range, #time_range_TimeRange{
+unmarshal(time_range, #limiter_time_range_TimeRange{
     upper = Upper,
     lower = Lower,
     account_id_from = AccountIDFrom,
@@ -113,7 +113,7 @@ unmarshal(time_range, #time_range_TimeRange{
     };
 unmarshal(time_range_type, {calendar, SubType}) ->
     {calendar, unmarshal(time_range_sub_type, SubType)};
-unmarshal(time_range_type, {interval, #time_range_TimeRangeTypeInterval{amount = Interval}}) ->
+unmarshal(time_range_type, {interval, #limiter_time_range_TimeRangeTypeInterval{amount = Interval}}) ->
     {interval, Interval};
 unmarshal(time_range_sub_type, {year, _}) ->
     year;

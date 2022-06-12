@@ -8,7 +8,7 @@
     currency := currency()
 }.
 
--type currency() :: lim_base_thrift:'CurrencySymbolicCode'().
+-type currency() :: lim_domain_thrift:'CurrencySymbolicCode'().
 -type config() :: lim_config_machine:config().
 -type body_type() :: full | partial.
 

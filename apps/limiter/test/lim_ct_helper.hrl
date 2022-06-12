@@ -6,9 +6,9 @@
 -define(currency, <<"RUB">>).
 
 -define(cash(Amount), ?cash(Amount, ?currency)).
--define(cash(Amount, Currency), #limiter_base_Cash{
+-define(cash(Amount, Currency), #domain_Cash{
     amount = Amount,
-    currency = #limiter_base_CurrencyRef{symbolic_code = Currency}
+    currency = #domain_CurrencyRef{symbolic_code = Currency}
 }).
 
 -define(scope(Types), {multi, ordsets:from_list(Types)}).
@@ -29,13 +29,13 @@
 ).
 
 -define(time_range_day(),
-    {calendar, {day, #time_range_TimeRangeTypeCalendarDay{}}}
+    {calendar, {day, #limiter_time_range_TimeRangeTypeCalendarDay{}}}
 ).
 -define(time_range_week(),
-    {calendar, {week, #time_range_TimeRangeTypeCalendarWeek{}}}
+    {calendar, {week, #limiter_time_range_TimeRangeTypeCalendarWeek{}}}
 ).
 -define(time_range_month(),
-    {calendar, {month, #time_range_TimeRangeTypeCalendarMonth{}}}
+    {calendar, {month, #limiter_time_range_TimeRangeTypeCalendarMonth{}}}
 ).
 
 -define(op_behaviour(), ?op_behaviour(?op_addition())).
@@ -54,7 +54,7 @@
 -define(op_invoice_payment(), {invoice_payment, #limiter_context_PaymentProcessingOperationInvoicePayment{}}).
 
 -define(ctx_invoice(Cost), #limiter_context_LimitContext{
-    payment_processing = #limiter_context_ContextPaymentProcessing{
+    limiter_payment_processing = #limiter_context_ContextPaymentProcessing{
         op = ?op_invoice(),
         invoice = #limiter_context_Invoice{
             created_at = <<"2000-01-01T00:00:00Z">>,
@@ -66,7 +66,7 @@
 -define(ctx_invoice_payment(Cost, CaptureCost), ?ctx_invoice_payment(undefined, undefined, Cost, CaptureCost)).
 
 -define(ctx_invoice_payment(OwnerID, ShopID, Cost, CaptureCost), #limiter_context_LimitContext{
-    payment_processing = #limiter_context_ContextPaymentProcessing{
+    limiter_payment_processing = #limiter_context_ContextPaymentProcessing{
         op = ?op_invoice_payment(),
         invoice = #limiter_context_Invoice{
             owner_id = OwnerID,
@@ -81,7 +81,7 @@
 }).
 
 -define(ctx_invoice_payment(Payment), #limiter_context_LimitContext{
-    payment_processing = #limiter_context_ContextPaymentProcessing{
+    limiter_payment_processing = #limiter_context_ContextPaymentProcessing{
         op = ?op_invoice_payment(),
         invoice = #limiter_context_Invoice{
             effective_payment = Payment
@@ -90,7 +90,7 @@
 }).
 
 -define(ctx_invoice_payment_refund(OwnerID, ShopID, Cost, CaptureCost, RefundCost), #limiter_context_LimitContext{
-    payment_processing = #limiter_context_ContextPaymentProcessing{
+    limiter_payment_processing = #limiter_context_ContextPaymentProcessing{
         op = {invoice_payment_refund, #limiter_context_PaymentProcessingOperationInvoicePaymentRefund{}},
         invoice = #limiter_context_Invoice{
             owner_id = OwnerID,

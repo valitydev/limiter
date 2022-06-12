@@ -180,7 +180,7 @@ get_payment_processing_operation_context(_, _) ->
 
 %%
 
-unmarshal_context(#limiter_context_LimitContext{payment_processing = PaymentProcessing}) ->
+unmarshal_context(#limiter_context_LimitContext{limiter_payment_processing = PaymentProcessing}) ->
     #{payment_processing => unmarshal_payment_processing_context(PaymentProcessing)};
 unmarshal_context(_) ->
     #{}.
@@ -293,7 +293,7 @@ unmarshal_payment_processing_invoice_payment_chargeback(#limiter_context_Invoice
         created_at => maybe_unmarshal(CreatedAt, fun unmarshal_string/1)
     }).
 
-unmarshal_cash(#limiter_base_Cash{amount = Amount, currency = #limiter_base_CurrencyRef{symbolic_code = Currency}}) ->
+unmarshal_cash(#domain_Cash{amount = Amount, currency = #domain_CurrencyRef{symbolic_code = Currency}}) ->
     #{amount => Amount, currency => Currency}.
 
 unmarshal_string(Value) ->

@@ -85,16 +85,16 @@ marshal_behaviour(addition) ->
 marshal_time_range_type({calendar, CalendarType}) ->
     {calendar, marshal_calendar_time_range_type(CalendarType)};
 marshal_time_range_type({interval, Amount}) ->
-    {interval, #time_range_TimeRangeTypeInterval{amount = Amount}}.
+    {interval, #limiter_time_range_TimeRangeTypeInterval{amount = Amount}}.
 
 marshal_calendar_time_range_type(day) ->
-    {day, #time_range_TimeRangeTypeCalendarDay{}};
+    {day, #limiter_time_range_TimeRangeTypeCalendarDay{}};
 marshal_calendar_time_range_type(week) ->
-    {week, #time_range_TimeRangeTypeCalendarWeek{}};
+    {week, #limiter_time_range_TimeRangeTypeCalendarWeek{}};
 marshal_calendar_time_range_type(month) ->
-    {month, #time_range_TimeRangeTypeCalendarMonth{}};
+    {month, #limiter_time_range_TimeRangeTypeCalendarMonth{}};
 marshal_calendar_time_range_type(year) ->
-    {year, #time_range_TimeRangeTypeCalendarYear{}}.
+    {year, #limiter_time_range_TimeRangeTypeCalendarYear{}}.
 
 marshal_context_type(payment_processing) ->
     {payment_processing, #limiter_config_LimitContextTypePaymentProcessing{}}.
@@ -235,7 +235,7 @@ unmarshal_body_type_deprecated({cash, #limiter_config_LimitBodyTypeCash{currency
 
 unmarshal_time_range_type({calendar, CalendarType}) ->
     {calendar, unmarshal_calendar_time_range_type(CalendarType)};
-unmarshal_time_range_type({interval, #time_range_TimeRangeTypeInterval{amount = Amount}}) ->
+unmarshal_time_range_type({interval, #limiter_time_range_TimeRangeTypeInterval{amount = Amount}}) ->
     {interval, Amount}.
 
 unmarshal_calendar_time_range_type({day, _}) ->
@@ -308,7 +308,7 @@ unmarshal_created_w_deprecated_body_type_test_() ->
         created_at = lim_time:to_rfc3339(Now),
         started_at = <<"2000-01-01T00:00:00Z">>,
         shard_size = 42,
-        time_range_type = {calendar, {day, #time_range_TimeRangeTypeCalendarDay{}}},
+        time_range_type = {calendar, {day, #limiter_time_range_TimeRangeTypeCalendarDay{}}},
         context_type = {payment_processing, #limiter_config_LimitContextTypePaymentProcessing{}},
         body_type_deprecated = {cash, #limiter_config_LimitBodyTypeCash{currency = <<"☭☭☭"/utf8>>}}
     },

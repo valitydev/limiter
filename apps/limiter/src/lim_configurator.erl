@@ -23,7 +23,7 @@ handle_function(Fn, Args, WoodyCtx, Opts) ->
 -spec handle_function_(woody:func(), woody:args(), lim_context:t(), woody:options()) -> {ok, woody:result()}.
 handle_function_(
     'CreateLegacy',
-    {#limiter_cfg_LimitCreateParams{
+    {#limiter_configurator_LimitCreateParams{
         id = ID,
         name = Name,
         description = Description,
@@ -51,7 +51,7 @@ handle_function_(
         {error, {name, notfound}} ->
             woody_error:raise(
                 business,
-                #limiter_cfg_LimitConfigNameNotFound{}
+                #limiter_configurator_LimitConfigNameNotFound{}
             )
     end;
 handle_function_('Create', {Params}, LimitContext, _Opts) ->
@@ -70,7 +70,7 @@ handle_function_('Get', {LimitID}, LimitContext, _Opts) ->
         {ok, LimitConfig} ->
             {ok, lim_config_codec:marshal_config(LimitConfig)};
         {error, notfound} ->
-            woody_error:raise(business, #limiter_cfg_LimitConfigNotFound{})
+            woody_error:raise(business, #limiter_configurator_LimitConfigNotFound{})
     end.
 
 map_type({turnover, _}) ->
@@ -78,7 +78,7 @@ map_type({turnover, _}) ->
 map_type(_) ->
     woody_error:raise(
         business,
-        #limiter_base_InvalidRequest{errors = [<<"Config type not found.">>]}
+        #'InvalidRequest'{errors = [<<"Config type not found.">>]}
     ).
 
 mk_limit_config(<<"ShopDayTurnover">>) ->

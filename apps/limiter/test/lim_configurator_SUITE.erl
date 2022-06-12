@@ -81,7 +81,7 @@ legacy_create_config(C) ->
     Client = lim_client:new(),
     ID = ?config(limit_id, C),
     Description = genlib:unique(),
-    Params = #limiter_cfg_LimitCreateParams{
+    Params = #limiter_configurator_LimitCreateParams{
         id = ID,
         name = <<"GlobalMonthTurnover">>,
         description = Description,
@@ -150,7 +150,7 @@ get_config(C) ->
 
 prepare_environment(ID, LimitName, _C) ->
     Client = lim_client:new(),
-    Params = #limiter_cfg_LimitCreateParams{
+    Params = #limiter_configurator_LimitCreateParams{
         id = ID,
         name = LimitName,
         description = <<"description">>,
