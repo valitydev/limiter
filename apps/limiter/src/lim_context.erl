@@ -18,6 +18,8 @@
 -type thrift_context() :: lim_limiter_thrift:'LimitContext'().
 -type clock() :: lim_limiter_thrift:'Clock'().
 -type id() :: binary().
+-type token() :: binary().
+-type exp_date() :: binary().
 -type cash() :: lim_body:cash().
 
 -type t() :: #{
@@ -68,10 +70,26 @@
     capture_cost => cash(),
     created_at => timestamp(),
     flow => instant | hold,
-    payer => payment_resource | customer | recurrent,
+    payer => payment_processing_payer(),
     effective_adjustment => payment_processing_payment_adjustment(),
     effective_refund => payment_processing_payment_refund(),
     effective_chargeback => payment_processing_payment_chargeback()
+}.
+
+-type payment_processing_payer() ::
+    {payment_resource, payment_processing_payer_data()}
+    | {customer, payment_processing_payer_data()}
+    | {recurrent, payment_processing_payer_data()}.
+
+-type payment_processing_payer_data() :: #{
+    payment_tool => payment_processing_payment_tool()
+}.
+
+-type payment_processing_payment_tool() :: {bank_card, payment_processing_bank_card()}.
+
+-type payment_processing_bank_card() :: #{
+    token => token(),
+    exp_date => exp_date()
 }.
 
 -type payment_processing_payment_adjustment() :: #{
@@ -93,6 +111,7 @@
 }.
 
 -export_type([t/0]).
+-export_type([context/0]).
 -export_type([context_type/0]).
 -export_type([context_operation/0]).
 
@@ -180,8 +199,14 @@ get_payment_processing_operation_context(_, _) ->
 
 %%
 
-unmarshal_context(#limiter_context_LimitContext{limiter_payment_processing = PaymentProcessing}) ->
+unmarshal_context(#limiter_context_LimitContext{limiter_payment_processing = PaymentProcessing})
+    when PaymentProcessing =/= undefined
+->
     #{payment_processing => unmarshal_payment_processing_context(PaymentProcessing)};
+unmarshal_context(#limiter_context_LimitContext{payment_processing = PaymentProcessing})
+    when PaymentProcessing =/= undefined
+->
+    #{payment_processing => lim_payproc_context:unmarshal(PaymentProcessing)};
 unmarshal_context(_) ->
     #{}.
 
@@ -258,7 +283,7 @@ unmarshal_payment_processing_invoice_payment_flow({Flow, _}) ->
     Flow.
 
 unmarshal_payment_processing_invoice_payment_payer({Payer, _}) ->
-    Payer.
+    {Payer, #{}}.
 
 unmarshal_payment_processing_invoice_payment_adjustment(#limiter_context_InvoicePaymentAdjustment{
     id = ID,
