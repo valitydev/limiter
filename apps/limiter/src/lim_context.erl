@@ -199,12 +199,12 @@ get_payment_processing_operation_context(_, _) ->
 
 %%
 
-unmarshal_context(#limiter_context_LimitContext{limiter_payment_processing = PaymentProcessing})
-    when PaymentProcessing =/= undefined
+unmarshal_context(#limiter_context_LimitContext{limiter_payment_processing = PaymentProcessing}) when
+    PaymentProcessing =/= undefined
 ->
     #{payment_processing => unmarshal_payment_processing_context(PaymentProcessing)};
-unmarshal_context(#limiter_context_LimitContext{payment_processing = PaymentProcessing})
-    when PaymentProcessing =/= undefined
+unmarshal_context(#limiter_context_LimitContext{payment_processing = PaymentProcessing}) when
+    PaymentProcessing =/= undefined
 ->
     #{payment_processing => lim_payproc_context:unmarshal(PaymentProcessing)};
 unmarshal_context(_) ->

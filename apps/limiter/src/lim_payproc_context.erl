@@ -91,11 +91,17 @@ unmarshal_payment_processing_invoice_payment_payer({Payer, Data}) ->
 unmarshal_payment_processing_invoice_payment_payer_data(#domain_PaymentResourcePayer{
     resource = #domain_DisposablePaymentResource{payment_tool = PaymentTool}
 }) ->
-    genlib_map:compact(#{payment_tool => maybe_unmarshal(PaymentTool, fun unmarshal_payment_processing_payment_tool/1)});
+    genlib_map:compact(#{
+        payment_tool => maybe_unmarshal(PaymentTool, fun unmarshal_payment_processing_payment_tool/1)
+    });
 unmarshal_payment_processing_invoice_payment_payer_data(#domain_CustomerPayer{payment_tool = PaymentTool}) ->
-    genlib_map:compact(#{payment_tool => maybe_unmarshal(PaymentTool, fun unmarshal_payment_processing_payment_tool/1)});
+    genlib_map:compact(#{
+        payment_tool => maybe_unmarshal(PaymentTool, fun unmarshal_payment_processing_payment_tool/1)
+    });
 unmarshal_payment_processing_invoice_payment_payer_data(#domain_RecurrentPayer{payment_tool = PaymentTool}) ->
-    genlib_map:compact(#{payment_tool => maybe_unmarshal(PaymentTool, fun unmarshal_payment_processing_payment_tool/1)}).
+    genlib_map:compact(#{
+        payment_tool => maybe_unmarshal(PaymentTool, fun unmarshal_payment_processing_payment_tool/1)
+    }).
 
 unmarshal_payment_processing_payment_tool({bank_card, #domain_BankCard{token = Token, exp_date = ExpDate}}) ->
     {bank_card, #{
