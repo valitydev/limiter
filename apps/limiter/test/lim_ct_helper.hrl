@@ -71,7 +71,7 @@
         invoice = #limiter_context_Invoice{
             owner_id = OwnerID,
             shop_id = ShopID,
-            effective_payment = #limiter_context_InvoicePayment{
+            payment = #limiter_context_InvoicePayment{
                 created_at = <<"2000-01-01T00:00:00Z">>,
                 cost = Cost,
                 capture_cost = CaptureCost
@@ -84,7 +84,7 @@
     limiter_payment_processing = #limiter_context_ContextPaymentProcessing{
         op = ?op_invoice_payment(),
         invoice = #limiter_context_Invoice{
-            effective_payment = Payment
+            payment = Payment
         }
     }
 }).
@@ -95,7 +95,7 @@
         invoice = #limiter_context_Invoice{
             owner_id = OwnerID,
             shop_id = ShopID,
-            effective_payment = #limiter_context_InvoicePayment{
+            payment = #limiter_context_InvoicePayment{
                 created_at = <<"2000-01-01T00:00:00Z">>,
                 cost = Cost,
                 capture_cost = CaptureCost,

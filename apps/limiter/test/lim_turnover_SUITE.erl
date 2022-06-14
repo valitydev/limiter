@@ -168,7 +168,7 @@ partial_commit_with_exchange(C) ->
         limiter_payment_processing = #limiter_context_ContextPaymentProcessing{
             op = {invoice_payment, #limiter_context_PaymentProcessingOperationInvoicePayment{}},
             invoice = #limiter_context_Invoice{
-                effective_payment = #limiter_context_InvoicePayment{
+                payment = #limiter_context_InvoicePayment{
                     created_at = <<"2000-01-01T00:00:00Z">>,
                     cost = #domain_Cash{
                         amount = 10000,

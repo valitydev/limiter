@@ -4,12 +4,12 @@
 
 -export([unmarshal/1]).
 
--type thrift_context() :: lim_limiter_payproc_context_thrift:'ContextPaymentProcessing'().
+-type thrift_context() :: lim_limiter_payproc_context_thrift:'Context'().
 
 %%
 
 -spec unmarshal(thrift_context()) -> lim_context:context().
-unmarshal(#limiter_context_payproc_ContextPaymentProcessing{
+unmarshal(#limiter_context_payproc_Context{
     op = {Operation, _},
     invoice = Invoice
 }) ->
@@ -26,8 +26,8 @@ unmarshal_payment_processing_invoice(#limiter_context_payproc_Invoice{
         cost = Cost,
         created_at = CreatedAt
     },
-    effective_payment = EffectivePayment,
-    effective_adjustment = EffectiveAdjustment
+    payment = Payment,
+    adjustment = Adjustment
 }) ->
     genlib_map:compact(#{
         id => maybe_unmarshal(ID, fun unmarshal_string/1),
@@ -35,11 +35,11 @@ unmarshal_payment_processing_invoice(#limiter_context_payproc_Invoice{
         shop_id => maybe_unmarshal(ShopID, fun unmarshal_string/1),
         cost => maybe_unmarshal(Cost, fun unmarshal_cash/1),
         created_at => maybe_unmarshal(CreatedAt, fun unmarshal_string/1),
-        effective_adjustment => maybe_unmarshal(
-            EffectiveAdjustment,
+        adjustment => maybe_unmarshal(
+            Adjustment,
             fun unmarshal_payment_processing_invoice_adjustment/1
         ),
-        effective_payment => maybe_unmarshal(EffectivePayment, fun unmarshal_payment_processing_invoice_payment/1)
+        payment => maybe_unmarshal(Payment, fun unmarshal_payment_processing_invoice_payment/1)
     }).
 
 unmarshal_payment_processing_invoice_adjustment(#domain_InvoiceAdjustment{id = ID}) ->
@@ -55,32 +55,37 @@ unmarshal_payment_processing_invoice_payment(#limiter_context_payproc_InvoicePay
         cost = Cost,
         created_at = CreatedAt,
         flow = Flow,
+        status = Status,
         payer = Payer
     },
-    capture_cost = CaptureCost,
-    effective_adjustment = EffectiveAdjustment,
-    effective_refund = EffectiveRefund,
-    effective_chargeback = EffectiveChargeback
+    adjustment = Adjustment,
+    refund = EffectiveRefund,
+    chargeback = EffectiveChargeback
 }) ->
     genlib_map:compact(#{
         id => maybe_unmarshal(ID, fun unmarshal_string/1),
         owner_id => maybe_unmarshal(OwnerID, fun unmarshal_string/1),
         shop_id => maybe_unmarshal(ShopID, fun unmarshal_string/1),
         cost => maybe_unmarshal(Cost, fun unmarshal_cash/1),
-        capture_cost => maybe_unmarshal(CaptureCost, fun unmarshal_cash/1),
+        capture_cost => get_capture_cost_from_status(Status),
         created_at => maybe_unmarshal(CreatedAt, fun unmarshal_string/1),
         flow => maybe_unmarshal(Flow, fun unmarshal_payment_processing_invoice_payment_flow/1),
         payer => maybe_unmarshal(Payer, fun unmarshal_payment_processing_invoice_payment_payer/1),
-        effective_adjustment => maybe_unmarshal(
-            EffectiveAdjustment,
+        adjustment => maybe_unmarshal(
+            Adjustment,
             fun unmarshal_payment_processing_invoice_payment_adjustment/1
         ),
-        effective_refund => maybe_unmarshal(EffectiveRefund, fun unmarshal_payment_processing_invoice_payment_refund/1),
-        effective_chargeback => maybe_unmarshal(
+        refund => maybe_unmarshal(EffectiveRefund, fun unmarshal_payment_processing_invoice_payment_refund/1),
+        chargeback => maybe_unmarshal(
             EffectiveChargeback,
             fun unmarshal_payment_processing_invoice_payment_chargeback/1
         )
     }).
+
+get_capture_cost_from_status({captured, #domain_InvoicePaymentCaptured{cost = Cost}}) ->
+    maybe_unmarshal(Cost, fun unmarshal_cash/1);
+get_capture_cost_from_status(_) ->
+    undefined.
 
 unmarshal_payment_processing_invoice_payment_flow({Flow, _}) ->
     Flow.

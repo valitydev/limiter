@@ -54,8 +54,8 @@
     shop_id => id(),
     cost => cash(),
     created_at => timestamp(),
-    effective_adjustment => payment_processing_adjustment(),
-    effective_payment => payment_processing_payment()
+    adjustment => payment_processing_adjustment(),
+    payment => payment_processing_payment()
 }.
 
 -type payment_processing_adjustment() :: #{
@@ -71,9 +71,9 @@
     created_at => timestamp(),
     flow => instant | hold,
     payer => payment_processing_payer(),
-    effective_adjustment => payment_processing_payment_adjustment(),
-    effective_refund => payment_processing_payment_refund(),
-    effective_chargeback => payment_processing_payment_chargeback()
+    adjustment => payment_processing_payment_adjustment(),
+    refund => payment_processing_payment_refund(),
+    chargeback => payment_processing_payment_chargeback()
 }.
 
 -type payment_processing_payer() ::
@@ -175,23 +175,23 @@ get_from_context(_, _ValueName, _Op, _LimContext) ->
 
 get_payment_processing_operation_context(invoice, #{invoice := Invoice}) ->
     {ok, Invoice};
-get_payment_processing_operation_context(invoice_adjustment, #{invoice := #{effective_adjustment := Adjustment}}) ->
+get_payment_processing_operation_context(invoice_adjustment, #{invoice := #{adjustment := Adjustment}}) ->
     {ok, Adjustment};
-get_payment_processing_operation_context(invoice_payment, #{invoice := #{effective_payment := Payment}}) ->
+get_payment_processing_operation_context(invoice_payment, #{invoice := #{payment := Payment}}) ->
     {ok, Payment};
 get_payment_processing_operation_context(
     invoice_payment_adjustment,
-    #{invoice := #{effective_payment := #{effective_adjustment := Adjustment}}}
+    #{invoice := #{payment := #{adjustment := Adjustment}}}
 ) ->
     {ok, Adjustment};
 get_payment_processing_operation_context(
     invoice_payment_refund,
-    #{invoice := #{effective_payment := #{effective_refund := Refund}}}
+    #{invoice := #{payment := #{refund := Refund}}}
 ) ->
     {ok, Refund};
 get_payment_processing_operation_context(
     invoice_payment_chargeback,
-    #{invoice := #{effective_payment := #{effective_chargeback := Chargeback}}}
+    #{invoice := #{payment := #{chargeback := Chargeback}}}
 ) ->
     {ok, Chargeback};
 get_payment_processing_operation_context(_, _) ->
@@ -225,8 +225,8 @@ unmarshal_payment_processing_invoice(#limiter_context_Invoice{
     shop_id = ShopID,
     cost = Cost,
     created_at = CreatedAt,
-    effective_payment = EffectivePayment,
-    effective_adjustment = EffectiveAdjustment
+    payment = Payment,
+    adjustment = Adjustment
 }) ->
     genlib_map:compact(#{
         id => maybe_unmarshal(ID, fun unmarshal_string/1),
@@ -234,11 +234,11 @@ unmarshal_payment_processing_invoice(#limiter_context_Invoice{
         shop_id => maybe_unmarshal(ShopID, fun unmarshal_string/1),
         cost => maybe_unmarshal(Cost, fun unmarshal_cash/1),
         created_at => maybe_unmarshal(CreatedAt, fun unmarshal_string/1),
-        effective_adjustment => maybe_unmarshal(
-            EffectiveAdjustment,
+        adjustment => maybe_unmarshal(
+            Adjustment,
             fun unmarshal_payment_processing_invoice_adjustment/1
         ),
-        effective_payment => maybe_unmarshal(EffectivePayment, fun unmarshal_payment_processing_invoice_payment/1)
+        payment => maybe_unmarshal(Payment, fun unmarshal_payment_processing_invoice_payment/1)
     }).
 
 unmarshal_payment_processing_invoice_adjustment(#limiter_context_InvoiceAdjustment{id = ID}) ->
@@ -255,7 +255,7 @@ unmarshal_payment_processing_invoice_payment(#limiter_context_InvoicePayment{
     created_at = CreatedAt,
     flow = Flow,
     payer = Payer,
-    effective_adjustment = EffectiveAdjustment,
+    adjustment = Adjustment,
     effective_refund = EffectiveRefund,
     effective_chargeback = EffectiveChargeback
 }) ->
@@ -268,12 +268,12 @@ unmarshal_payment_processing_invoice_payment(#limiter_context_InvoicePayment{
         created_at => maybe_unmarshal(CreatedAt, fun unmarshal_string/1),
         flow => maybe_unmarshal(Flow, fun unmarshal_payment_processing_invoice_payment_flow/1),
         payer => maybe_unmarshal(Payer, fun unmarshal_payment_processing_invoice_payment_payer/1),
-        effective_adjustment => maybe_unmarshal(
-            EffectiveAdjustment,
+        adjustment => maybe_unmarshal(
+            Adjustment,
             fun unmarshal_payment_processing_invoice_payment_adjustment/1
         ),
-        effective_refund => maybe_unmarshal(EffectiveRefund, fun unmarshal_payment_processing_invoice_payment_refund/1),
-        effective_chargeback => maybe_unmarshal(
+        refund => maybe_unmarshal(EffectiveRefund, fun unmarshal_payment_processing_invoice_payment_refund/1),
+        chargeback => maybe_unmarshal(
             EffectiveChargeback,
             fun unmarshal_payment_processing_invoice_payment_chargeback/1
         )
