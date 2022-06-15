@@ -43,9 +43,7 @@ unmarshal_payment_processing_invoice(#limiter_context_payproc_Invoice{
     }).
 
 unmarshal_payment_processing_invoice_adjustment(#domain_InvoiceAdjustment{id = ID}) ->
-    genlib_map:compact(#{
-        id => maybe_unmarshal(ID, fun unmarshal_string/1)
-    }).
+    #{id => unmarshal_string(ID)}.
 
 unmarshal_payment_processing_invoice_payment(#limiter_context_payproc_InvoicePayment{
     payment = #domain_InvoicePayment{
@@ -164,3 +162,26 @@ maybe_unmarshal(undefined, _) ->
     undefined;
 maybe_unmarshal(Value, UnmarshalFun) ->
     UnmarshalFun(Value).
+
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+
+-spec test() -> _.
+
+-spec marshal_unmarshal_created_test() -> _.
+marshal_unmarshal_created_test() ->
+    ExpDate = #domain_BankCardExpDate{month = 2, year = 2022},
+    PaymentTool = {bank_card, #domain_BankCard{token = <<"Token">>, exp_date = ExpDate}},
+    Data0 = #domain_PaymentResourcePayer{
+        resource = #domain_DisposablePaymentResource{payment_tool = PaymentTool},
+        contact_info = #domain_ContactInfo{}
+    },
+    #{payment_tool := _} = unmarshal_payment_processing_invoice_payment_payer_data(Data0),
+    Data1 = #domain_CustomerPayer{payment_tool = PaymentTool},
+    #{payment_tool := _} = unmarshal_payment_processing_invoice_payment_payer_data(Data1),
+    Data2 = #domain_RecurrentPayer{payment_tool = PaymentTool},
+    #{payment_tool := _} = unmarshal_payment_processing_invoice_payment_payer_data(Data2),
+    Data3 = #domain_RecurrentPayer{payment_tool = {payment_terminal, #domain_PaymentTerminal{}}},
+    #{} = unmarshal_payment_processing_invoice_payment_payer_data(Data3).
+
+-endif.
