@@ -18,6 +18,7 @@
 
 -define(scope_party(), {party, #limiter_config_LimitScopeEmptyDetails{}}).
 -define(scope_shop(), {shop, #limiter_config_LimitScopeEmptyDetails{}}).
+-define(scope_payment_tool(), {payment_tool, #limiter_config_LimitScopeEmptyDetails{}}).
 
 -define(lim_type_turnover(), ?lim_type_turnover(?turnover_metric_number())).
 -define(lim_type_turnover(Metric),
@@ -38,6 +39,9 @@
 ).
 -define(time_range_month(),
     {calendar, {month, #limiter_time_range_TimeRangeTypeCalendarMonth{}}}
+).
+-define(time_range_year(),
+    {calendar, {year, #limiter_time_range_TimeRangeTypeCalendarYear{}}}
 ).
 
 -define(op_behaviour(), ?op_behaviour(?op_addition())).
@@ -76,8 +80,13 @@
             effective_payment = #limiter_context_InvoicePayment{
                 created_at = <<"2000-01-01T00:00:00Z">>,
                 cost = Cost,
-                capture_cost = CaptureCost
-            }
+                capture_cost = CaptureCost,
+                flow = {hold, #limiter_context_InvoicePaymentFlowHold{}},
+                payer = {payment_resource, #limiter_context_PaymentResourcePayer{}},
+                effective_adjustment = #limiter_context_InvoicePaymentAdjustment{},
+                effective_chargeback = #limiter_context_InvoicePaymentChargeback{}
+            },
+            effective_adjustment = #limiter_context_InvoiceAdjustment{}
         }
     }
 }).
@@ -115,10 +124,15 @@
 -define(payproc_op_invoice, {invoice, #limiter_context_payproc_OperationInvoice{}}).
 -define(payproc_op_invoice_payment, {invoice_payment, #limiter_context_payproc_OperationInvoicePayment{}}).
 
--define(payproc_bank_card, #domain_BankCard{
-    token = ?string,
+-define(payproc_bank_card(),
+    ?payproc_bank_card(?string, 2, 2022)
+).
+
+-define(payproc_bank_card(Token, Month, Year), #domain_BankCard{
+    token = Token,
     bin = ?string,
-    last_digits = ?string
+    last_digits = ?string,
+    exp_date = #domain_BankCardExpDate{month = Month, year = Year}
 }).
 
 -define(payproc_invoice(OwnerID, ShopID, Cost), #domain_Invoice{
@@ -132,7 +146,11 @@
     cost = Cost
 }).
 
--define(payproc_invoice_payment(Cost, CaptureCost), #domain_InvoicePayment{
+-define(payproc_invoice_payment(Cost, CaptureCost),
+    ?payproc_invoice_payment(Cost, CaptureCost, {bank_card, ?payproc_bank_card()})
+).
+
+-define(payproc_invoice_payment(Cost, CaptureCost, PaymentTool), #domain_InvoicePayment{
     id = ?string,
     created_at = ?timestamp,
     status = {captured, #domain_InvoicePaymentCaptured{cost = CaptureCost}},
@@ -142,7 +160,7 @@
     payer =
         {payment_resource, #domain_PaymentResourcePayer{
             resource = #domain_DisposablePaymentResource{
-                payment_tool = {bank_card, ?payproc_bank_card}
+                payment_tool = PaymentTool
             },
             contact_info = #domain_ContactInfo{}
         }}
@@ -177,7 +195,10 @@
     payment_processing = #limiter_context_payproc_Context{
         op = ?payproc_op_invoice_payment,
         invoice = #limiter_context_payproc_Invoice{
-            payment = Payment
+            invoice = ?payproc_invoice(?string, ?string, ?cash(10)),
+            payment = #limiter_context_payproc_InvoicePayment{
+                payment = Payment
+            }
         }
     }
 }).

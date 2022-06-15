@@ -44,6 +44,7 @@
 -export([payproc_commit_ok/1]).
 -export([payproc_rollback_ok/1]).
 -export([payproc_refund_ok/1]).
+-export([payproc_commit_with_payment_tool_scope_ok/1]).
 
 -type group_name() :: atom().
 -type test_case_name() :: atom().
@@ -81,7 +82,8 @@ groups() ->
             payproc_hold_ok,
             payproc_commit_ok,
             payproc_rollback_ok,
-            payproc_refund_ok
+            payproc_refund_ok,
+            payproc_commit_with_payment_tool_scope_ok
         ]},
         {cashless, [parallel], [
             commit_number_ok,
@@ -475,6 +477,8 @@ partial_commit_number_counts_as_single_op(C) ->
         LimitState0#limiter_Limit.amount + 1
     ).
 
+%%
+
 -spec payproc_hold_ok(config()) -> _.
 payproc_hold_ok(C) ->
     ID = configure_limit(?time_range_month(), ?global(), C),
@@ -484,7 +488,7 @@ payproc_hold_ok(C) ->
 
 -spec payproc_commit_ok(config()) -> _.
 payproc_commit_ok(C) ->
-    ID = configure_limit(?time_range_month(), ?global(), C),
+    ID = configure_limit(?time_range_year(), ?global(), C),
     Context = ?payproc_ctx_invoice(?cash(10)),
     {ok, {vector, _}} = hold_and_commit(?LIMIT_CHANGE(ID), Context, ?config(client, C)),
     {ok, #limiter_Limit{}} = lim_client:get(ID, Context, ?config(client, C)).
@@ -510,6 +514,41 @@ payproc_refund_ok(C) ->
     {ok, {vector, _}} = hold_and_commit(?LIMIT_CHANGE(ID, <<"Refund">>), RefundContext1, Client),
     {ok, #limiter_Limit{} = Limit2} = lim_client:get(ID, RefundContext1, Client),
     ?assertEqual(Limit2#limiter_Limit.amount, 5).
+
+-spec payproc_commit_with_payment_tool_scope_ok(config()) -> _.
+payproc_commit_with_payment_tool_scope_ok(C) ->
+    Client = ?config(client, C),
+    ID = configure_limit(?time_range_week(), ?scope([?scope_payment_tool()]), ?turnover_metric_number(), C),
+    Context0 = ?payproc_ctx_invoice_payment(
+        ?payproc_invoice_payment(
+            ?cash(10),
+            ?cash(10),
+            {bank_card, ?payproc_bank_card()}
+        )
+    ),
+    Context1 = ?payproc_ctx_invoice_payment(
+        ?payproc_invoice_payment(
+            ?cash(10),
+            ?cash(10),
+            {bank_card, ?payproc_bank_card(<<"OtherToken">>, 2, 2022)}
+        )
+    ),
+    Context2 = ?payproc_ctx_invoice_payment(
+        ?payproc_invoice_payment(
+            ?cash(10),
+            ?cash(10),
+            {bank_card, ?payproc_bank_card(?string, 3, 2022)}
+        )
+    ),
+    {ok, LimitState0} = lim_client:get(ID, Context0, Client),
+    _ = hold_and_commit(?LIMIT_CHANGE(ID), Context0, Client),
+    _ = hold_and_commit(?LIMIT_CHANGE(ID, 1), Context1, Client),
+    _ = hold_and_commit(?LIMIT_CHANGE(ID, 2), Context2, Client),
+    {ok, LimitState1} = lim_client:get(ID, Context0, Client),
+    ?assertEqual(
+        LimitState1#limiter_Limit.amount,
+        LimitState0#limiter_Limit.amount + 1
+    ).
 
 %%
 

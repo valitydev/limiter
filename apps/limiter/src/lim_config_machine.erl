@@ -572,8 +572,9 @@ extract_context_bit({order, _, Bit}, LimitContext) ->
     extract_context_bit(Bit, LimitContext);
 extract_context_bit({from, payment_processing, payer, Op}, LimitContext) ->
     {ok, {_, PayerData}} = lim_context:get_from_context(payment_processing, payer, Op, LimitContext),
-    Token = maps:get(token, PayerData),
-    ExpData = maps:get(exp_date, PayerData),
+    #{payment_tool := {_, PaymentToolData}} = PayerData,
+    Token = maps:get(token, PaymentToolData),
+    ExpData = maps:get(exp_date, PaymentToolData, <<>>),
     {ok, <<Token/binary, "/", ExpData/binary>>};
 extract_context_bit({from, ContextType, ValueName, Op}, LimitContext) ->
     lim_context:get_from_context(ContextType, ValueName, Op, LimitContext).
