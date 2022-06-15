@@ -4,6 +4,8 @@
 -include_lib("limiter_proto/include/lim_configurator_thrift.hrl").
 
 -define(currency, <<"RUB">>).
+-define(string, <<"STRING">>).
+-define(timestamp, <<"2000-01-01T00:00:00Z">>).
 
 -define(cash(Amount), ?cash(Amount, ?currency)).
 -define(cash(Amount, Currency), #domain_Cash{
@@ -71,7 +73,7 @@
         invoice = #limiter_context_Invoice{
             owner_id = OwnerID,
             shop_id = ShopID,
-            payment = #limiter_context_InvoicePayment{
+            effective_payment = #limiter_context_InvoicePayment{
                 created_at = <<"2000-01-01T00:00:00Z">>,
                 cost = Cost,
                 capture_cost = CaptureCost
@@ -84,7 +86,7 @@
     limiter_payment_processing = #limiter_context_ContextPaymentProcessing{
         op = ?op_invoice_payment(),
         invoice = #limiter_context_Invoice{
-            payment = Payment
+            effective_payment = Payment
         }
     }
 }).
@@ -95,7 +97,7 @@
         invoice = #limiter_context_Invoice{
             owner_id = OwnerID,
             shop_id = ShopID,
-            payment = #limiter_context_InvoicePayment{
+            effective_payment = #limiter_context_InvoicePayment{
                 created_at = <<"2000-01-01T00:00:00Z">>,
                 cost = Cost,
                 capture_cost = CaptureCost,
@@ -107,5 +109,98 @@
         }
     }
 }).
+
+%% Payproc
+
+-define(payproc_op_invoice, {invoice, #limiter_context_payproc_OperationInvoice{}}).
+-define(payproc_op_invoice_payment, {invoice_payment, #limiter_context_payproc_OperationInvoicePayment{}}).
+
+-define(payproc_bank_card, #domain_BankCard{
+    token = ?string,
+    bin = ?string,
+    last_digits = ?string
+}).
+
+-define(payproc_invoice(OwnerID, ShopID, Cost), #domain_Invoice{
+    id = ?string,
+    owner_id = OwnerID,
+    shop_id = ShopID,
+    created_at = ?timestamp,
+    status = {unpaid, #domain_InvoiceUnpaid{}},
+    details = #domain_InvoiceDetails{product = ?string},
+    due = ?timestamp,
+    cost = Cost
+}).
+
+-define(payproc_invoice_payment(Cost, CaptureCost), #domain_InvoicePayment{
+    id = ?string,
+    created_at = ?timestamp,
+    status = {captured, #domain_InvoicePaymentCaptured{cost = CaptureCost}},
+    cost = Cost,
+    domain_revision = 1,
+    flow = {instant, #domain_InvoicePaymentFlowInstant{}},
+    payer =
+        {payment_resource, #domain_PaymentResourcePayer{
+            resource = #domain_DisposablePaymentResource{
+                payment_tool = {bank_card, ?payproc_bank_card}
+            },
+            contact_info = #domain_ContactInfo{}
+        }}
+}).
+
+-define(payproc_ctx_invoice(Cost), #limiter_context_LimitContext{
+    payment_processing = #limiter_context_payproc_Context{
+        op = ?payproc_op_invoice,
+        invoice = #limiter_context_payproc_Invoice{
+            invoice = ?payproc_invoice(?string, ?string, Cost)
+        }
+    }
+}).
+
+-define(payproc_ctx_invoice_payment(Cost, CaptureCost),
+    ?payproc_ctx_invoice_payment(?string, ?string, Cost, CaptureCost)
+).
+
+-define(payproc_ctx_invoice_payment(OwnerID, ShopID, Cost, CaptureCost), #limiter_context_LimitContext{
+    payment_processing = #limiter_context_payproc_Context{
+        op = ?payproc_op_invoice_payment,
+        invoice = #limiter_context_payproc_Invoice{
+            invoice = ?payproc_invoice(OwnerID, ShopID, Cost),
+            payment = #limiter_context_payproc_InvoicePayment{
+                payment = ?payproc_invoice_payment(Cost, CaptureCost)
+            }
+        }
+    }
+}).
+
+-define(payproc_ctx_invoice_payment(Payment), #limiter_context_LimitContext{
+    payment_processing = #limiter_context_payproc_Context{
+        op = ?payproc_op_invoice_payment,
+        invoice = #limiter_context_payproc_Invoice{
+            payment = Payment
+        }
+    }
+}).
+
+-define(payproc_ctx_invoice_payment_refund(OwnerID, ShopID, Cost, CaptureCost, RefundCost),
+    #limiter_context_LimitContext{
+        payment_processing = #limiter_context_payproc_Context{
+            op = {invoice_payment_refund, #limiter_context_payproc_OperationInvoicePaymentRefund{}},
+            invoice = #limiter_context_payproc_Invoice{
+                invoice = ?payproc_invoice(OwnerID, ShopID, Cost),
+                payment = #limiter_context_payproc_InvoicePayment{
+                    payment = ?payproc_invoice_payment(Cost, CaptureCost),
+                    refund = #domain_InvoicePaymentRefund{
+                        id = ?string,
+                        status = {succeeded, #domain_InvoicePaymentRefundSucceeded{}},
+                        created_at = ?timestamp,
+                        domain_revision = 1,
+                        cash = RefundCost
+                    }
+                }
+            }
+        }
+    }
+).
 
 -endif.

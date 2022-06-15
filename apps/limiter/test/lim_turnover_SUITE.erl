@@ -40,6 +40,11 @@
 -export([commit_refund_keep_number_unchanged/1]).
 -export([partial_commit_number_counts_as_single_op/1]).
 
+-export([payproc_hold_ok/1]).
+-export([payproc_commit_ok/1]).
+-export([payproc_rollback_ok/1]).
+-export([payproc_refund_ok/1]).
+
 -type group_name() :: atom().
 -type test_case_name() :: atom().
 
@@ -72,7 +77,11 @@ groups() ->
             refund_ok,
             commit_inexistent_hold_fails,
             partial_commit_inexistent_hold_fails,
-            commit_multirange_limit_ok
+            commit_multirange_limit_ok,
+            payproc_hold_ok,
+            payproc_commit_ok,
+            payproc_rollback_ok,
+            payproc_refund_ok
         ]},
         {cashless, [parallel], [
             commit_number_ok,
@@ -168,7 +177,7 @@ partial_commit_with_exchange(C) ->
         limiter_payment_processing = #limiter_context_ContextPaymentProcessing{
             op = {invoice_payment, #limiter_context_PaymentProcessingOperationInvoicePayment{}},
             invoice = #limiter_context_Invoice{
-                payment = #limiter_context_InvoicePayment{
+                effective_payment = #limiter_context_InvoicePayment{
                     created_at = <<"2000-01-01T00:00:00Z">>,
                     cost = #domain_Cash{
                         amount = 10000,
@@ -465,6 +474,42 @@ partial_commit_number_counts_as_single_op(C) ->
         LimitState1#limiter_Limit.amount,
         LimitState0#limiter_Limit.amount + 1
     ).
+
+-spec payproc_hold_ok(config()) -> _.
+payproc_hold_ok(C) ->
+    ID = configure_limit(?time_range_month(), ?global(), C),
+    Context = ?payproc_ctx_invoice(?cash(10)),
+    {ok, {vector, #limiter_VectorClock{}}} = lim_client:hold(?LIMIT_CHANGE(ID), Context, ?config(client, C)),
+    {ok, #limiter_Limit{}} = lim_client:get(ID, Context, ?config(client, C)).
+
+-spec payproc_commit_ok(config()) -> _.
+payproc_commit_ok(C) ->
+    ID = configure_limit(?time_range_month(), ?global(), C),
+    Context = ?payproc_ctx_invoice(?cash(10)),
+    {ok, {vector, _}} = hold_and_commit(?LIMIT_CHANGE(ID), Context, ?config(client, C)),
+    {ok, #limiter_Limit{}} = lim_client:get(ID, Context, ?config(client, C)).
+
+-spec payproc_rollback_ok(config()) -> _.
+payproc_rollback_ok(C) ->
+    ID = configure_limit(?time_range_week(), ?global(), C),
+    Context0 = ?payproc_ctx_invoice_payment(?cash(10), ?cash(10)),
+    Context1 = ?payproc_ctx_invoice_payment(?cash(10), ?cash(0)),
+    Change = ?LIMIT_CHANGE(ID),
+    {ok, {vector, _}} = lim_client:hold(Change, Context0, ?config(client, C)),
+    {ok, {vector, _}} = lim_client:commit(Change, Context1, ?config(client, C)).
+
+-spec payproc_refund_ok(config()) -> _.
+payproc_refund_ok(C) ->
+    Client = ?config(client, C),
+    OwnerID = <<"WWWcool Ltd">>,
+    ShopID = <<"shop">>,
+    ID = configure_limit(?time_range_day(), ?scope([?scope_party(), ?scope_shop()]), C),
+    Context0 = ?payproc_ctx_invoice_payment(OwnerID, ShopID, ?cash(15), ?cash(15)),
+    RefundContext1 = ?payproc_ctx_invoice_payment_refund(OwnerID, ShopID, ?cash(10), ?cash(10), ?cash(10)),
+    {ok, {vector, _}} = hold_and_commit(?LIMIT_CHANGE(ID, <<"Payment">>), Context0, Client),
+    {ok, {vector, _}} = hold_and_commit(?LIMIT_CHANGE(ID, <<"Refund">>), RefundContext1, Client),
+    {ok, #limiter_Limit{} = Limit2} = lim_client:get(ID, RefundContext1, Client),
+    ?assertEqual(Limit2#limiter_Limit.amount, 5).
 
 %%
 

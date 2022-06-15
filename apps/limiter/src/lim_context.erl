@@ -225,8 +225,8 @@ unmarshal_payment_processing_invoice(#limiter_context_Invoice{
     shop_id = ShopID,
     cost = Cost,
     created_at = CreatedAt,
-    payment = Payment,
-    adjustment = Adjustment
+    effective_payment = Payment,
+    effective_adjustment = Adjustment
 }) ->
     genlib_map:compact(#{
         id => maybe_unmarshal(ID, fun unmarshal_string/1),
@@ -255,7 +255,7 @@ unmarshal_payment_processing_invoice_payment(#limiter_context_InvoicePayment{
     created_at = CreatedAt,
     flow = Flow,
     payer = Payer,
-    adjustment = Adjustment,
+    effective_adjustment = Adjustment,
     effective_refund = EffectiveRefund,
     effective_chargeback = EffectiveChargeback
 }) ->
