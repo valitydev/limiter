@@ -523,7 +523,7 @@ payproc_commit_with_payment_tool_scope_ok(C) ->
         ?payproc_invoice_payment(
             ?cash(10),
             ?cash(10),
-            {bank_card, ?payproc_bank_card()}
+            {bank_card, ?payproc_bank_card}
         )
     ),
     Context1 = ?payproc_ctx_invoice_payment(
