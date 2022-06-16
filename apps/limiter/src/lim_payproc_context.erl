@@ -171,17 +171,43 @@ maybe_unmarshal(Value, UnmarshalFun) ->
 -spec marshal_unmarshal_created_test() -> _.
 marshal_unmarshal_created_test() ->
     ExpDate = #domain_BankCardExpDate{month = 2, year = 2022},
-    PaymentTool = {bank_card, #domain_BankCard{token = <<"Token">>, exp_date = ExpDate}},
+    PaymentTool =
+        {bank_card, #domain_BankCard{
+            token = <<"Token">>,
+            bin = <<"bin">>,
+            exp_date = ExpDate,
+            last_digits = <<"1234">>
+        }},
     Data0 = #domain_PaymentResourcePayer{
         resource = #domain_DisposablePaymentResource{payment_tool = PaymentTool},
         contact_info = #domain_ContactInfo{}
     },
     #{payment_tool := _} = unmarshal_payment_processing_invoice_payment_payer_data(Data0),
-    Data1 = #domain_CustomerPayer{payment_tool = PaymentTool},
+    Data1 = #domain_CustomerPayer{
+        customer_id = <<"customer_id">>,
+        customer_binding_id = <<"customer_binding_id">>,
+        rec_payment_tool_id = <<"rec_payment_tool_id">>,
+        payment_tool = PaymentTool,
+        contact_info = #domain_ContactInfo{}
+    },
     #{payment_tool := _} = unmarshal_payment_processing_invoice_payment_payer_data(Data1),
-    Data2 = #domain_RecurrentPayer{payment_tool = PaymentTool},
+    Data2 = #domain_RecurrentPayer{
+        payment_tool = PaymentTool,
+        recurrent_parent = #domain_RecurrentParentPayment{
+            invoice_id = <<"invoice_id">>,
+            payment_id = <<"payment_id">>
+        },
+        contact_info = #domain_ContactInfo{}
+    },
     #{payment_tool := _} = unmarshal_payment_processing_invoice_payment_payer_data(Data2),
-    Data3 = #domain_RecurrentPayer{payment_tool = {payment_terminal, #domain_PaymentTerminal{}}},
+    Data3 = #domain_RecurrentPayer{
+        payment_tool = {payment_terminal, #domain_PaymentTerminal{}},
+        recurrent_parent = #domain_RecurrentParentPayment{
+            invoice_id = <<"invoice_id">>,
+            payment_id = <<"payment_id">>
+        },
+        contact_info = #domain_ContactInfo{}
+    },
     #{} = unmarshal_payment_processing_invoice_payment_payer_data(Data3).
 
 -endif.
