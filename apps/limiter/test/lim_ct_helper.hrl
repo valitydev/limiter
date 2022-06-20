@@ -124,11 +124,11 @@
 -define(payproc_op_invoice, {invoice, #limiter_context_payproc_OperationInvoice{}}).
 -define(payproc_op_invoice_payment, {invoice_payment, #limiter_context_payproc_OperationInvoicePayment{}}).
 
--define(payproc_bank_card(),
-    ?payproc_bank_card(?string, 2, 2022)
+-define(payproc_bank_card,
+    ?payproc_bank_card(?string, {2, 2022})
 ).
 
--define(payproc_bank_card(Token, Month, Year), #domain_BankCard{
+-define(payproc_bank_card(Token, {Month, Year}), #domain_BankCard{
     token = Token,
     bin = ?string,
     last_digits = ?string,
@@ -147,7 +147,7 @@
 }).
 
 -define(payproc_invoice_payment(Cost, CaptureCost),
-    ?payproc_invoice_payment(Cost, CaptureCost, {bank_card, ?payproc_bank_card()})
+    ?payproc_invoice_payment(Cost, CaptureCost, {bank_card, ?payproc_bank_card})
 ).
 
 -define(payproc_invoice_payment(Cost, CaptureCost, PaymentTool), #domain_InvoicePayment{
