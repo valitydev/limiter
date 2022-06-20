@@ -18,6 +18,8 @@
 -type thrift_context() :: lim_limiter_thrift:'LimitContext'().
 -type clock() :: lim_limiter_thrift:'Clock'().
 -type id() :: binary().
+-type token() :: binary().
+-type exp_date() :: binary().
 -type cash() :: lim_body:cash().
 
 -type t() :: #{
@@ -52,8 +54,8 @@
     shop_id => id(),
     cost => cash(),
     created_at => timestamp(),
-    effective_adjustment => payment_processing_adjustment(),
-    effective_payment => payment_processing_payment()
+    adjustment => payment_processing_adjustment(),
+    payment => payment_processing_payment()
 }.
 
 -type payment_processing_adjustment() :: #{
@@ -68,10 +70,26 @@
     capture_cost => cash(),
     created_at => timestamp(),
     flow => instant | hold,
-    payer => payment_resource | customer | recurrent,
-    effective_adjustment => payment_processing_payment_adjustment(),
-    effective_refund => payment_processing_payment_refund(),
-    effective_chargeback => payment_processing_payment_chargeback()
+    payer => payment_processing_payer(),
+    adjustment => payment_processing_payment_adjustment(),
+    refund => payment_processing_payment_refund(),
+    chargeback => payment_processing_payment_chargeback()
+}.
+
+-type payment_processing_payer() ::
+    {payment_resource, payment_processing_payer_data()}
+    | {customer, payment_processing_payer_data()}
+    | {recurrent, payment_processing_payer_data()}.
+
+-type payment_processing_payer_data() :: #{
+    payment_tool => payment_processing_payment_tool()
+}.
+
+-type payment_processing_payment_tool() :: {bank_card, payment_processing_bank_card()}.
+
+-type payment_processing_bank_card() :: #{
+    token => token(),
+    exp_date => exp_date()
 }.
 
 -type payment_processing_payment_adjustment() :: #{
@@ -93,6 +111,7 @@
 }.
 
 -export_type([t/0]).
+-export_type([context/0]).
 -export_type([context_type/0]).
 -export_type([context_operation/0]).
 
@@ -156,23 +175,23 @@ get_from_context(_, _ValueName, _Op, _LimContext) ->
 
 get_payment_processing_operation_context(invoice, #{invoice := Invoice}) ->
     {ok, Invoice};
-get_payment_processing_operation_context(invoice_adjustment, #{invoice := #{effective_adjustment := Adjustment}}) ->
+get_payment_processing_operation_context(invoice_adjustment, #{invoice := #{adjustment := Adjustment}}) ->
     {ok, Adjustment};
-get_payment_processing_operation_context(invoice_payment, #{invoice := #{effective_payment := Payment}}) ->
+get_payment_processing_operation_context(invoice_payment, #{invoice := #{payment := Payment}}) ->
     {ok, Payment};
 get_payment_processing_operation_context(
     invoice_payment_adjustment,
-    #{invoice := #{effective_payment := #{effective_adjustment := Adjustment}}}
+    #{invoice := #{payment := #{adjustment := Adjustment}}}
 ) ->
     {ok, Adjustment};
 get_payment_processing_operation_context(
     invoice_payment_refund,
-    #{invoice := #{effective_payment := #{effective_refund := Refund}}}
+    #{invoice := #{payment := #{refund := Refund}}}
 ) ->
     {ok, Refund};
 get_payment_processing_operation_context(
     invoice_payment_chargeback,
-    #{invoice := #{effective_payment := #{effective_chargeback := Chargeback}}}
+    #{invoice := #{payment := #{chargeback := Chargeback}}}
 ) ->
     {ok, Chargeback};
 get_payment_processing_operation_context(_, _) ->
@@ -180,126 +199,13 @@ get_payment_processing_operation_context(_, _) ->
 
 %%
 
-unmarshal_context(#limiter_context_LimitContext{payment_processing = PaymentProcessing}) ->
-    #{payment_processing => unmarshal_payment_processing_context(PaymentProcessing)};
+unmarshal_context(#limiter_context_LimitContext{limiter_payment_processing = PaymentProcessing}) when
+    PaymentProcessing =/= undefined
+->
+    #{payment_processing => lim_limiter_context:unmarshal(PaymentProcessing)};
+unmarshal_context(#limiter_context_LimitContext{payment_processing = PaymentProcessing}) when
+    PaymentProcessing =/= undefined
+->
+    #{payment_processing => lim_payproc_context:unmarshal(PaymentProcessing)};
 unmarshal_context(_) ->
     #{}.
-
-unmarshal_payment_processing_context(#limiter_context_ContextPaymentProcessing{
-    op = {Operation, _},
-    invoice = Invoice
-}) ->
-    genlib_map:compact(#{
-        op => Operation,
-        invoice => maybe_unmarshal(Invoice, fun unmarshal_payment_processing_invoice/1)
-    }).
-
-unmarshal_payment_processing_invoice(#limiter_context_Invoice{
-    id = ID,
-    owner_id = OwnerID,
-    shop_id = ShopID,
-    cost = Cost,
-    created_at = CreatedAt,
-    effective_payment = EffectivePayment,
-    effective_adjustment = EffectiveAdjustment
-}) ->
-    genlib_map:compact(#{
-        id => maybe_unmarshal(ID, fun unmarshal_string/1),
-        owner_id => maybe_unmarshal(OwnerID, fun unmarshal_string/1),
-        shop_id => maybe_unmarshal(ShopID, fun unmarshal_string/1),
-        cost => maybe_unmarshal(Cost, fun unmarshal_cash/1),
-        created_at => maybe_unmarshal(CreatedAt, fun unmarshal_string/1),
-        effective_adjustment => maybe_unmarshal(
-            EffectiveAdjustment,
-            fun unmarshal_payment_processing_invoice_adjustment/1
-        ),
-        effective_payment => maybe_unmarshal(EffectivePayment, fun unmarshal_payment_processing_invoice_payment/1)
-    }).
-
-unmarshal_payment_processing_invoice_adjustment(#limiter_context_InvoiceAdjustment{id = ID}) ->
-    genlib_map:compact(#{
-        id => maybe_unmarshal(ID, fun unmarshal_string/1)
-    }).
-
-unmarshal_payment_processing_invoice_payment(#limiter_context_InvoicePayment{
-    id = ID,
-    owner_id = OwnerID,
-    shop_id = ShopID,
-    cost = Cost,
-    capture_cost = CaptureCost,
-    created_at = CreatedAt,
-    flow = Flow,
-    payer = Payer,
-    effective_adjustment = EffectiveAdjustment,
-    effective_refund = EffectiveRefund,
-    effective_chargeback = EffectiveChargeback
-}) ->
-    genlib_map:compact(#{
-        id => maybe_unmarshal(ID, fun unmarshal_string/1),
-        owner_id => maybe_unmarshal(OwnerID, fun unmarshal_string/1),
-        shop_id => maybe_unmarshal(ShopID, fun unmarshal_string/1),
-        cost => maybe_unmarshal(Cost, fun unmarshal_cash/1),
-        capture_cost => maybe_unmarshal(CaptureCost, fun unmarshal_cash/1),
-        created_at => maybe_unmarshal(CreatedAt, fun unmarshal_string/1),
-        flow => maybe_unmarshal(Flow, fun unmarshal_payment_processing_invoice_payment_flow/1),
-        payer => maybe_unmarshal(Payer, fun unmarshal_payment_processing_invoice_payment_payer/1),
-        effective_adjustment => maybe_unmarshal(
-            EffectiveAdjustment,
-            fun unmarshal_payment_processing_invoice_payment_adjustment/1
-        ),
-        effective_refund => maybe_unmarshal(EffectiveRefund, fun unmarshal_payment_processing_invoice_payment_refund/1),
-        effective_chargeback => maybe_unmarshal(
-            EffectiveChargeback,
-            fun unmarshal_payment_processing_invoice_payment_chargeback/1
-        )
-    }).
-
-unmarshal_payment_processing_invoice_payment_flow({Flow, _}) ->
-    Flow.
-
-unmarshal_payment_processing_invoice_payment_payer({Payer, _}) ->
-    Payer.
-
-unmarshal_payment_processing_invoice_payment_adjustment(#limiter_context_InvoicePaymentAdjustment{
-    id = ID,
-    created_at = CreatedAt
-}) ->
-    genlib_map:compact(#{
-        id => maybe_unmarshal(ID, fun unmarshal_string/1),
-        created_at => maybe_unmarshal(CreatedAt, fun unmarshal_string/1)
-    }).
-
-unmarshal_payment_processing_invoice_payment_refund(#limiter_context_InvoicePaymentRefund{
-    id = ID,
-    cost = Cost,
-    created_at = CreatedAt
-}) ->
-    genlib_map:compact(#{
-        id => maybe_unmarshal(ID, fun unmarshal_string/1),
-        cost => maybe_unmarshal(Cost, fun unmarshal_cash/1),
-        created_at => maybe_unmarshal(CreatedAt, fun unmarshal_string/1)
-    }).
-
-unmarshal_payment_processing_invoice_payment_chargeback(#limiter_context_InvoicePaymentChargeback{
-    id = ID,
-    levy = Levy,
-    body = Body,
-    created_at = CreatedAt
-}) ->
-    genlib_map:compact(#{
-        id => maybe_unmarshal(ID, fun unmarshal_string/1),
-        levy => maybe_unmarshal(Levy, fun unmarshal_cash/1),
-        body => maybe_unmarshal(Body, fun unmarshal_cash/1),
-        created_at => maybe_unmarshal(CreatedAt, fun unmarshal_string/1)
-    }).
-
-unmarshal_cash(#limiter_base_Cash{amount = Amount, currency = #limiter_base_CurrencyRef{symbolic_code = Currency}}) ->
-    #{amount => Amount, currency => Currency}.
-
-unmarshal_string(Value) ->
-    Value.
-
-maybe_unmarshal(undefined, _) ->
-    undefined;
-maybe_unmarshal(Value, UnmarshalFun) ->
-    UnmarshalFun(Value).

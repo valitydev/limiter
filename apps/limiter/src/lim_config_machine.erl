@@ -38,7 +38,7 @@
 
 -type limit_type() :: {turnover, lim_turnover_metric:t()}.
 -type limit_scope() :: ordsets:ordset(limit_scope_type()).
--type limit_scope_type() :: party | shop | wallet | identity.
+-type limit_scope_type() :: party | shop | wallet | identity | payment_tool.
 -type shard_size() :: pos_integer().
 -type shard_id() :: binary().
 -type prefix() :: binary().
@@ -560,11 +560,27 @@ append_context_bits(shop, Bits) ->
         % Also we need to preserve order between party / shop to ensure backwards compatibility.
         {order, 1, {from, payment_processing, owner_id, invoice}},
         {order, 2, {from, payment_processing, shop_id, invoice}}
-    ]).
+    ]);
+append_context_bits(payment_tool, Bits) ->
+    ordsets:add_element(
+        {from, payment_processing, payer, invoice_payment},
+        Bits
+    ).
 
 -spec extract_context_bit(context_bit(), lim_context()) -> {ok, binary()}.
 extract_context_bit({order, _, Bit}, LimitContext) ->
     extract_context_bit(Bit, LimitContext);
+extract_context_bit({from, payment_processing, payer, Op}, LimitContext) ->
+    {ok, {_, PayerData}} = lim_context:get_from_context(payment_processing, payer, Op, LimitContext),
+    #{payment_tool := {PaymentToolType, PaymentToolData}} = PayerData,
+    case PaymentToolType of
+        bank_card ->
+            Token = maps:get(token, PaymentToolData),
+            ExpData = maps:get(exp_date, PaymentToolData, <<>>),
+            {ok, <<Token/binary, "/", ExpData/binary>>};
+        _ ->
+            {error, {unsupported_payment_tool_type, PaymentToolType}}
+    end;
 extract_context_bit({from, ContextType, ValueName, Op}, LimitContext) ->
     lim_context:get_from_context(ContextType, ValueName, Op, LimitContext).
 

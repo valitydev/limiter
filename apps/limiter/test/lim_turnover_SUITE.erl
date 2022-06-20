@@ -40,6 +40,12 @@
 -export([commit_refund_keep_number_unchanged/1]).
 -export([partial_commit_number_counts_as_single_op/1]).
 
+-export([payproc_hold_ok/1]).
+-export([payproc_commit_ok/1]).
+-export([payproc_rollback_ok/1]).
+-export([payproc_refund_ok/1]).
+-export([payproc_commit_with_payment_tool_scope_ok/1]).
+
 -type group_name() :: atom().
 -type test_case_name() :: atom().
 
@@ -72,7 +78,12 @@ groups() ->
             refund_ok,
             commit_inexistent_hold_fails,
             partial_commit_inexistent_hold_fails,
-            commit_multirange_limit_ok
+            commit_multirange_limit_ok,
+            payproc_hold_ok,
+            payproc_commit_ok,
+            payproc_rollback_ok,
+            payproc_refund_ok,
+            payproc_commit_with_payment_tool_scope_ok
         ]},
         {cashless, [parallel], [
             commit_number_ok,
@@ -145,13 +156,13 @@ commit_with_default_exchange(C) ->
     _ = mock_exchange(Rational, C),
     ID = configure_limit(?time_range_month(), ?global(), C),
     Context = #limiter_context_LimitContext{
-        payment_processing = #limiter_context_ContextPaymentProcessing{
+        limiter_payment_processing = #limiter_context_ContextPaymentProcessing{
             op = {invoice, #limiter_context_PaymentProcessingOperationInvoice{}},
             invoice = #limiter_context_Invoice{
                 created_at = <<"2000-01-01T00:00:00Z">>,
-                cost = #limiter_base_Cash{
+                cost = #domain_Cash{
                     amount = 10000,
-                    currency = #limiter_base_CurrencyRef{symbolic_code = <<"SOME_CURRENCY">>}
+                    currency = #domain_CurrencyRef{symbolic_code = <<"SOME_CURRENCY">>}
                 }
             }
         }
@@ -165,18 +176,18 @@ partial_commit_with_exchange(C) ->
     _ = mock_exchange(Rational, C),
     ID = configure_limit(?time_range_month(), ?global(), C),
     Context = #limiter_context_LimitContext{
-        payment_processing = #limiter_context_ContextPaymentProcessing{
+        limiter_payment_processing = #limiter_context_ContextPaymentProcessing{
             op = {invoice_payment, #limiter_context_PaymentProcessingOperationInvoicePayment{}},
             invoice = #limiter_context_Invoice{
                 effective_payment = #limiter_context_InvoicePayment{
                     created_at = <<"2000-01-01T00:00:00Z">>,
-                    cost = #limiter_base_Cash{
+                    cost = #domain_Cash{
                         amount = 10000,
-                        currency = #limiter_base_CurrencyRef{symbolic_code = <<"USD">>}
+                        currency = #domain_CurrencyRef{symbolic_code = <<"USD">>}
                     },
-                    capture_cost = #limiter_base_Cash{
+                    capture_cost = #domain_Cash{
                         amount = 8000,
-                        currency = #limiter_base_CurrencyRef{symbolic_code = <<"USD">>}
+                        currency = #domain_CurrencyRef{symbolic_code = <<"USD">>}
                     }
                 }
             }
@@ -191,13 +202,13 @@ commit_with_exchange(C) ->
     _ = mock_exchange(Rational, C),
     ID = configure_limit(?time_range_month(), ?global(), C),
     Context = #limiter_context_LimitContext{
-        payment_processing = #limiter_context_ContextPaymentProcessing{
+        limiter_payment_processing = #limiter_context_ContextPaymentProcessing{
             op = {invoice, #limiter_context_PaymentProcessingOperationInvoice{}},
             invoice = #limiter_context_Invoice{
                 created_at = <<"2000-01-01T00:00:00Z">>,
-                cost = #limiter_base_Cash{
+                cost = #domain_Cash{
                     amount = 10000,
-                    currency = #limiter_base_CurrencyRef{symbolic_code = <<"USD">>}
+                    currency = #domain_CurrencyRef{symbolic_code = <<"USD">>}
                 }
             }
         }
@@ -251,13 +262,13 @@ hold_ok(C) ->
 commit_ok(C) ->
     ID = configure_limit(?time_range_month(), ?global(), C),
     Context = #limiter_context_LimitContext{
-        payment_processing = #limiter_context_ContextPaymentProcessing{
+        limiter_payment_processing = #limiter_context_ContextPaymentProcessing{
             op = {invoice, #limiter_context_PaymentProcessingOperationInvoice{}},
             invoice = #limiter_context_Invoice{
                 created_at = <<"2000-01-01T00:00:00Z">>,
-                cost = #limiter_base_Cash{
+                cost = #domain_Cash{
                     amount = 10,
-                    currency = #limiter_base_CurrencyRef{symbolic_code = <<"RUB">>}
+                    currency = #domain_CurrencyRef{symbolic_code = <<"RUB">>}
                 }
             }
         }
@@ -299,7 +310,7 @@ commit_inexistent_hold_fails(C) ->
     % NOTE
     % We do not expect `LimitChangeNotFound` here because we no longer reconcile with accounter
     % before requesting him to hold / commit.
-    {exception, #limiter_base_InvalidRequest{}} =
+    {exception, #'InvalidRequest'{}} =
         lim_client:commit(?LIMIT_CHANGE(ID), Context, ?config(client, C)).
 
 -spec partial_commit_inexistent_hold_fails(config()) -> _.
@@ -309,7 +320,7 @@ partial_commit_inexistent_hold_fails(C) ->
     % NOTE
     % We do not expect `LimitChangeNotFound` here because we no longer reconcile with accounter
     % before requesting him to hold / commit.
-    {exception, #limiter_base_InvalidRequest{}} =
+    {exception, #'InvalidRequest'{}} =
         lim_client:commit(?LIMIT_CHANGE(ID), Context, ?config(client, C)).
 
 -spec commit_multirange_limit_ok(config()) -> _.
@@ -461,6 +472,79 @@ partial_commit_number_counts_as_single_op(C) ->
     {ok, LimitState0} = lim_client:get(ID, Context, Client),
     _ = hold_and_commit(?LIMIT_CHANGE(ID), Context, ContextPartial, Client),
     {ok, LimitState1} = lim_client:get(ID, Context, Client),
+    ?assertEqual(
+        LimitState1#limiter_Limit.amount,
+        LimitState0#limiter_Limit.amount + 1
+    ).
+
+%%
+
+-spec payproc_hold_ok(config()) -> _.
+payproc_hold_ok(C) ->
+    ID = configure_limit(?time_range_month(), ?global(), C),
+    Context = ?payproc_ctx_invoice(?cash(10)),
+    {ok, {vector, #limiter_VectorClock{}}} = lim_client:hold(?LIMIT_CHANGE(ID), Context, ?config(client, C)),
+    {ok, #limiter_Limit{}} = lim_client:get(ID, Context, ?config(client, C)).
+
+-spec payproc_commit_ok(config()) -> _.
+payproc_commit_ok(C) ->
+    ID = configure_limit(?time_range_year(), ?global(), C),
+    Context = ?payproc_ctx_invoice(?cash(10)),
+    {ok, {vector, _}} = hold_and_commit(?LIMIT_CHANGE(ID), Context, ?config(client, C)),
+    {ok, #limiter_Limit{}} = lim_client:get(ID, Context, ?config(client, C)).
+
+-spec payproc_rollback_ok(config()) -> _.
+payproc_rollback_ok(C) ->
+    ID = configure_limit(?time_range_week(), ?global(), C),
+    Context0 = ?payproc_ctx_invoice_payment(?cash(10), ?cash(10)),
+    Context1 = ?payproc_ctx_invoice_payment(?cash(10), ?cash(0)),
+    Change = ?LIMIT_CHANGE(ID),
+    {ok, {vector, _}} = lim_client:hold(Change, Context0, ?config(client, C)),
+    {ok, {vector, _}} = lim_client:commit(Change, Context1, ?config(client, C)).
+
+-spec payproc_refund_ok(config()) -> _.
+payproc_refund_ok(C) ->
+    Client = ?config(client, C),
+    OwnerID = <<"WWWcool Ltd">>,
+    ShopID = <<"shop">>,
+    ID = configure_limit(?time_range_day(), ?scope([?scope_party(), ?scope_shop()]), C),
+    Context0 = ?payproc_ctx_invoice_payment(OwnerID, ShopID, ?cash(15), ?cash(15)),
+    RefundContext1 = ?payproc_ctx_invoice_payment_refund(OwnerID, ShopID, ?cash(10), ?cash(10), ?cash(10)),
+    {ok, {vector, _}} = hold_and_commit(?LIMIT_CHANGE(ID, <<"Payment">>), Context0, Client),
+    {ok, {vector, _}} = hold_and_commit(?LIMIT_CHANGE(ID, <<"Refund">>), RefundContext1, Client),
+    {ok, #limiter_Limit{} = Limit2} = lim_client:get(ID, RefundContext1, Client),
+    ?assertEqual(Limit2#limiter_Limit.amount, 5).
+
+-spec payproc_commit_with_payment_tool_scope_ok(config()) -> _.
+payproc_commit_with_payment_tool_scope_ok(C) ->
+    Client = ?config(client, C),
+    ID = configure_limit(?time_range_week(), ?scope([?scope_payment_tool()]), ?turnover_metric_number(), C),
+    Context0 = ?payproc_ctx_invoice_payment(
+        ?payproc_invoice_payment(
+            ?cash(10),
+            ?cash(10),
+            {bank_card, ?payproc_bank_card()}
+        )
+    ),
+    Context1 = ?payproc_ctx_invoice_payment(
+        ?payproc_invoice_payment(
+            ?cash(10),
+            ?cash(10),
+            {bank_card, ?payproc_bank_card(<<"OtherToken">>, 2, 2022)}
+        )
+    ),
+    Context2 = ?payproc_ctx_invoice_payment(
+        ?payproc_invoice_payment(
+            ?cash(10),
+            ?cash(10),
+            {bank_card, ?payproc_bank_card(?string, 3, 2022)}
+        )
+    ),
+    {ok, LimitState0} = lim_client:get(ID, Context0, Client),
+    _ = hold_and_commit(?LIMIT_CHANGE(ID, 1), Context0, Client),
+    _ = hold_and_commit(?LIMIT_CHANGE(ID, 2), Context1, Client),
+    _ = hold_and_commit(?LIMIT_CHANGE(ID, 3), Context2, Client),
+    {ok, LimitState1} = lim_client:get(ID, Context0, Client),
     ?assertEqual(
         LimitState1#limiter_Limit.amount,
         LimitState0#limiter_Limit.amount + 1
