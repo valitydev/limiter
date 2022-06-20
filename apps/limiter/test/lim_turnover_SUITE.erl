@@ -541,9 +541,9 @@ payproc_commit_with_payment_tool_scope_ok(C) ->
         )
     ),
     {ok, LimitState0} = lim_client:get(ID, Context0, Client),
-    _ = hold_and_commit(?LIMIT_CHANGE(ID), Context0, Client),
-    _ = hold_and_commit(?LIMIT_CHANGE(ID, 1), Context1, Client),
-    _ = hold_and_commit(?LIMIT_CHANGE(ID, 2), Context2, Client),
+    _ = hold_and_commit(?LIMIT_CHANGE(ID, 1), Context0, Client),
+    _ = hold_and_commit(?LIMIT_CHANGE(ID, 2), Context1, Client),
+    _ = hold_and_commit(?LIMIT_CHANGE(ID, 3), Context2, Client),
     {ok, LimitState1} = lim_client:get(ID, Context0, Client),
     ?assertEqual(
         LimitState1#limiter_Limit.amount,
