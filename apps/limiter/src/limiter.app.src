@@ -5,7 +5,6 @@
     {applications, [
         kernel,
         stdlib,
-        damsel,
         limiter_proto,
         xrates_proto,
         machinery,

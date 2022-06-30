@@ -70,13 +70,13 @@ unmarshal(T, V, C) when
 -spec marshal_event(machinery_mg_schema:version(), event(), context()) -> {machinery_msgpack:t(), context()}.
 marshal_event(1, TimestampedChange, Context) ->
     ThriftChange = lim_config_codec:marshal(timestamped_change, TimestampedChange),
-    Type = {struct, struct, {lim_limiter_config_thrift, 'TimestampedChange'}},
+    Type = {struct, struct, {limproto_config_thrift, 'TimestampedChange'}},
     {{bin, lim_proto_utils:serialize(Type, ThriftChange)}, Context}.
 
 -spec unmarshal_event(machinery_mg_schema:version(), machinery_msgpack:t(), context()) -> {event(), context()}.
 unmarshal_event(1, EncodedChange, Context) ->
     {bin, EncodedThriftChange} = EncodedChange,
-    Type = {struct, struct, {lim_limiter_config_thrift, 'TimestampedChange'}},
+    Type = {struct, struct, {limproto_config_thrift, 'TimestampedChange'}},
     ThriftChange = lim_proto_utils:deserialize(Type, EncodedThriftChange),
     {lim_config_codec:unmarshal(timestamped_change, ThriftChange), Context}.
 
@@ -104,7 +104,7 @@ marshal_unmarshal_created_test() ->
             scope => ordsets:from_list([party]),
             description => <<"description">>
         }},
-    Context = #{machine_ref => ID, machine_ns => config},
+    Context = #{machine_id => ID, machine_ns => config},
     Event = {ev, lim_time:machinery_now(), Created},
     {Marshaled, _} = marshal_event(1, Event, Context),
     {Unmarshaled, _} = unmarshal_event(1, Marshaled, Context),

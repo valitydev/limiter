@@ -1,6 +1,6 @@
 -module(lim_context).
 
--include_lib("limiter_proto/include/lim_limiter_context_thrift.hrl").
+-include_lib("limiter_proto/include/limproto_limiter_thrift.hrl").
 
 -export([create/1]).
 -export([woody_context/1]).
@@ -15,8 +15,8 @@
 
 -type woody_context() :: woody_context:ctx().
 -type timestamp() :: binary().
--type thrift_context() :: lim_limiter_thrift:'LimitContext'().
--type clock() :: lim_limiter_thrift:'Clock'().
+-type thrift_context() :: limproto_limiter_thrift:'LimitContext'().
+-type clock() :: limproto_limiter_thrift:'Clock'().
 -type id() :: binary().
 -type token() :: binary().
 -type exp_date() :: binary().
@@ -199,11 +199,7 @@ get_payment_processing_operation_context(_, _) ->
 
 %%
 
-unmarshal_context(#limiter_context_LimitContext{limiter_payment_processing = PaymentProcessing}) when
-    PaymentProcessing =/= undefined
-->
-    #{payment_processing => lim_limiter_context:unmarshal(PaymentProcessing)};
-unmarshal_context(#limiter_context_LimitContext{payment_processing = PaymentProcessing}) when
+unmarshal_context(#limiter_LimitContext{payment_processing = PaymentProcessing}) when
     PaymentProcessing =/= undefined
 ->
     #{payment_processing => lim_payproc_context:unmarshal(PaymentProcessing)};

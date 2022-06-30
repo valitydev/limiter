@@ -1,6 +1,6 @@
 -module(lim_client).
 
--include_lib("limiter_proto/include/lim_limiter_thrift.hrl").
+-include_lib("limiter_proto/include/limproto_limiter_thrift.hrl").
 
 -export([new/0]).
 -export([get/3]).
@@ -13,12 +13,12 @@
 
 -type client() :: woody_context:ctx().
 
--type limit_id() :: lim_limiter_thrift:'LimitID'().
--type limit_change() :: lim_limiter_thrift:'LimitChange'().
--type limit_context() :: lim_limiter_thrift:'LimitContext'().
--type clock() :: lim_limiter_thrift:'Clock'().
--type legacy_create_params() :: lim_configurator_thrift:'LimitCreateParams'().
--type limit_config_params() :: lim_limiter_config_thrift:'LimitConfigParams'().
+-type limit_id() :: limproto_limiter_thrift:'LimitID'().
+-type limit_change() :: limproto_limiter_thrift:'LimitChange'().
+-type limit_context() :: limproto_limiter_thrift:'LimitContext'().
+-type clock() :: limproto_limiter_thrift:'Clock'().
+-type legacy_create_params() :: limproto_configurator_thrift:'LimitCreateParams'().
+-type limit_config_params() :: limproto_config_thrift:'LimitConfigParams'().
 
 %%% API
 
@@ -56,7 +56,7 @@ get_config(LimitConfigID, Client) ->
 
 -spec call(atom(), tuple(), client()) -> woody:result() | no_return().
 call(Function, Args, Client) ->
-    Call = {{lim_limiter_thrift, 'Limiter'}, Function, Args},
+    Call = {{limproto_limiter_thrift, 'Limiter'}, Function, Args},
     Opts = #{
         url => <<"http://limiter:8022/v1/limiter">>,
         event_handler => scoper_woody_event_handler,
@@ -68,7 +68,7 @@ call(Function, Args, Client) ->
 
 -spec call_configurator(atom(), tuple(), client()) -> woody:result() | no_return().
 call_configurator(Function, Args, Client) ->
-    Call = {{lim_configurator_thrift, 'Configurator'}, Function, Args},
+    Call = {{limproto_configurator_thrift, 'Configurator'}, Function, Args},
     Opts = #{
         url => <<"http://limiter:8022/v1/configurator">>,
         event_handler => scoper_woody_event_handler,

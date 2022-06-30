@@ -70,13 +70,13 @@ unmarshal(T, V, C) when
 -spec marshal_event(machinery_mg_schema:version(), event(), context()) -> {machinery_msgpack:t(), context()}.
 marshal_event(1, TimestampedChange, Context) ->
     ThriftChange = lim_range_codec:marshal(timestamped_change, TimestampedChange),
-    Type = {struct, struct, {lim_limiter_range_thrift, 'TimestampedChange'}},
+    Type = {struct, struct, {limproto_range_thrift, 'TimestampedChange'}},
     {{bin, lim_proto_utils:serialize(Type, ThriftChange)}, Context}.
 
 -spec unmarshal_event(machinery_mg_schema:version(), machinery_msgpack:t(), context()) -> {event(), context()}.
 unmarshal_event(1, EncodedChange, Context) ->
     {bin, EncodedThriftChange} = EncodedChange,
-    Type = {struct, struct, {lim_limiter_range_thrift, 'TimestampedChange'}},
+    Type = {struct, struct, {limproto_range_thrift, 'TimestampedChange'}},
     ThriftChange = lim_proto_utils:deserialize(Type, EncodedThriftChange),
     {lim_range_codec:unmarshal(timestamped_change, ThriftChange), Context}.
 
@@ -98,7 +98,7 @@ marshal_unmarshal_created_test() ->
             created_at => <<"2000-01-01T00:00:00Z">>,
             currency => <<"USD">>
         }},
-    Context = #{machine_ref => ID, machine_ns => limrange},
+    Context = #{machine_id => ID, machine_ns => limrange},
     Event = {ev, lim_time:machinery_now(), Created},
     {Marshaled, _} = marshal_event(1, Event, Context),
     {Unmarshaled, _} = unmarshal_event(1, Marshaled, Context),
@@ -113,7 +113,7 @@ marshal_unmarshal_time_range_created_test() ->
             upper => <<"2000-01-01T00:00:00Z">>,
             lower => <<"2000-01-01T00:00:00Z">>
         }},
-    Context = #{machine_ref => <<"id">>, machine_ns => limrange},
+    Context = #{machine_id => <<"id">>, machine_ns => limrange},
     Event = {ev, lim_time:machinery_now(), TimeRangeCreated},
     {Marshaled, _} = marshal_event(1, Event, Context),
     {Unmarshaled, _} = unmarshal_event(1, Marshaled, Context),

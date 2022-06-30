@@ -1,6 +1,7 @@
 -module(lim_range_codec).
 
--include_lib("limiter_proto/include/lim_limiter_range_thrift.hrl").
+-include_lib("limiter_proto/include/limproto_range_thrift.hrl").
+-include_lib("limiter_proto/include/limproto_timerange_thrift.hrl").
 
 -export([marshal/2]).
 -export([unmarshal/2]).
@@ -20,14 +21,14 @@
 
 -spec marshal(type_name(), decoded_value()) -> encoded_value().
 marshal(timestamped_change, {ev, Timestamp, Change}) ->
-    #limiter_range_TimestampedChange{
+    #range_TimestampedChange{
         change = marshal(change, Change),
         occured_at = marshal(timestamp, Timestamp)
     };
 marshal(change, {created, Range}) ->
-    {created, #limiter_range_CreatedChange{limit_range = marshal(range, Range)}};
+    {created, #range_CreatedChange{limit_range = marshal(range, Range)}};
 marshal(change, {time_range_created, TimeRange}) ->
-    {time_range_created, #limiter_range_TimeRangeCreatedChange{time_range = marshal(time_range, TimeRange)}};
+    {time_range_created, #range_TimeRangeCreatedChange{time_range = marshal(time_range, TimeRange)}};
 marshal(
     range,
     Range = #{
@@ -36,7 +37,7 @@ marshal(
         created_at := CreatedAt
     }
 ) ->
-    #limiter_range_LimitRange{
+    #range_LimitRange{
         id = ID,
         type = marshal(time_range_type, Type),
         created_at = CreatedAt,
@@ -48,7 +49,7 @@ marshal(time_range, #{
     account_id_from := AccountIDFrom,
     account_id_to := AccountIDTo
 }) ->
-    #limiter_time_range_TimeRange{
+    #timerange_TimeRange{
         upper = Upper,
         lower = Lower,
         account_id_from = AccountIDFrom,
@@ -57,15 +58,15 @@ marshal(time_range, #{
 marshal(time_range_type, {calendar, SubType}) ->
     {calendar, marshal(time_range_sub_type, SubType)};
 marshal(time_range_type, {interval, Interval}) ->
-    {interval, #limiter_time_range_TimeRangeTypeInterval{amount = Interval}};
+    {interval, #timerange_TimeRangeTypeInterval{amount = Interval}};
 marshal(time_range_sub_type, year) ->
-    {year, #limiter_time_range_TimeRangeTypeCalendarYear{}};
+    {year, #timerange_TimeRangeTypeCalendarYear{}};
 marshal(time_range_sub_type, month) ->
-    {month, #limiter_time_range_TimeRangeTypeCalendarMonth{}};
+    {month, #timerange_TimeRangeTypeCalendarMonth{}};
 marshal(time_range_sub_type, week) ->
-    {week, #limiter_time_range_TimeRangeTypeCalendarWeek{}};
+    {week, #timerange_TimeRangeTypeCalendarWeek{}};
 marshal(time_range_sub_type, day) ->
-    {day, #limiter_time_range_TimeRangeTypeCalendarDay{}};
+    {day, #timerange_TimeRangeTypeCalendarDay{}};
 marshal(timestamp, {DateTime, USec}) ->
     DateTimeinSeconds = genlib_time:daytime_to_unixtime(DateTime),
     {TimeinUnit, Unit} =
@@ -80,14 +81,14 @@ marshal(timestamp, {DateTime, USec}) ->
 
 -spec unmarshal(type_name(), encoded_value()) -> decoded_value().
 unmarshal(timestamped_change, TimestampedChange) ->
-    Timestamp = unmarshal(timestamp, TimestampedChange#limiter_range_TimestampedChange.occured_at),
-    Change = unmarshal(change, TimestampedChange#limiter_range_TimestampedChange.change),
+    Timestamp = unmarshal(timestamp, TimestampedChange#range_TimestampedChange.occured_at),
+    Change = unmarshal(change, TimestampedChange#range_TimestampedChange.change),
     {ev, Timestamp, Change};
-unmarshal(change, {created, #limiter_range_CreatedChange{limit_range = Range}}) ->
+unmarshal(change, {created, #range_CreatedChange{limit_range = Range}}) ->
     {created, unmarshal(range, Range)};
-unmarshal(change, {time_range_created, #limiter_range_TimeRangeCreatedChange{time_range = Range}}) ->
+unmarshal(change, {time_range_created, #range_TimeRangeCreatedChange{time_range = Range}}) ->
     {time_range_created, unmarshal(time_range, Range)};
-unmarshal(range, #limiter_range_LimitRange{
+unmarshal(range, #range_LimitRange{
     id = ID,
     type = Type,
     created_at = CreatedAt,
@@ -99,7 +100,7 @@ unmarshal(range, #limiter_range_LimitRange{
         created_at => CreatedAt,
         currency => Currency
     });
-unmarshal(time_range, #limiter_time_range_TimeRange{
+unmarshal(time_range, #timerange_TimeRange{
     upper = Upper,
     lower = Lower,
     account_id_from = AccountIDFrom,
@@ -113,7 +114,7 @@ unmarshal(time_range, #limiter_time_range_TimeRange{
     };
 unmarshal(time_range_type, {calendar, SubType}) ->
     {calendar, unmarshal(time_range_sub_type, SubType)};
-unmarshal(time_range_type, {interval, #limiter_time_range_TimeRangeTypeInterval{amount = Interval}}) ->
+unmarshal(time_range_type, {interval, #timerange_TimeRangeTypeInterval{amount = Interval}}) ->
     {interval, Interval};
 unmarshal(time_range_sub_type, {year, _}) ->
     year;

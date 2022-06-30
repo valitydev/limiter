@@ -1,6 +1,6 @@
 -module(lim_turnover_processor).
 
--include_lib("limiter_proto/include/lim_limiter_thrift.hrl").
+-include_lib("limiter_proto/include/limproto_limiter_thrift.hrl").
 
 -behaviour(lim_config_machine).
 

@@ -1,6 +1,6 @@
 -module(lim_config_machine).
 
--include_lib("limiter_proto/include/lim_limiter_thrift.hrl").
+-include_lib("limiter_proto/include/limproto_limiter_thrift.hrl").
 
 %% Accessors
 
@@ -79,10 +79,10 @@
 -type op_behaviour() :: #{operation_type() := addition | subtraction}.
 -type operation_type() :: invoice_payment_refund.
 
--type lim_id() :: lim_limiter_thrift:'LimitID'().
--type lim_change() :: lim_limiter_thrift:'LimitChange'().
--type limit() :: lim_limiter_thrift:'Limit'().
--type timestamp() :: lim_base_thrift:'Timestamp'().
+-type lim_id() :: limproto_limiter_thrift:'LimitID'().
+-type lim_change() :: limproto_limiter_thrift:'LimitChange'().
+-type limit() :: limproto_limiter_thrift:'Limit'().
+-type timestamp() :: dmsl_base_thrift:'Timestamp'().
 
 -export_type([config/0]).
 -export_type([limit_type/0]).

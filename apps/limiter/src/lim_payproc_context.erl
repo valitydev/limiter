@@ -1,15 +1,16 @@
 -module(lim_payproc_context).
 
--include_lib("limiter_proto/include/lim_limiter_payproc_context_thrift.hrl").
+-include_lib("limiter_proto/include/limproto_context_payproc_thrift.hrl").
+-include_lib("damsel/include/dmsl_domain_thrift.hrl").
 
 -export([unmarshal/1]).
 
--type thrift_context() :: lim_limiter_payproc_context_thrift:'Context'().
+-type thrift_context() :: limproto_context_payproc_thrift:'Context'().
 
 %%
 
 -spec unmarshal(thrift_context()) -> lim_context:context().
-unmarshal(#limiter_context_payproc_Context{
+unmarshal(#context_payproc_Context{
     op = {Operation, _},
     invoice = Invoice
 }) ->
@@ -18,7 +19,7 @@ unmarshal(#limiter_context_payproc_Context{
         invoice => maybe_unmarshal(Invoice, fun unmarshal_payment_processing_invoice/1)
     }).
 
-unmarshal_payment_processing_invoice(#limiter_context_payproc_Invoice{
+unmarshal_payment_processing_invoice(#context_payproc_Invoice{
     invoice = #domain_Invoice{
         id = ID,
         owner_id = OwnerID,
@@ -45,7 +46,7 @@ unmarshal_payment_processing_invoice(#limiter_context_payproc_Invoice{
 unmarshal_payment_processing_invoice_adjustment(#domain_InvoiceAdjustment{id = ID}) ->
     #{id => unmarshal_string(ID)}.
 
-unmarshal_payment_processing_invoice_payment(#limiter_context_payproc_InvoicePayment{
+unmarshal_payment_processing_invoice_payment(#context_payproc_InvoicePayment{
     payment = #domain_InvoicePayment{
         id = ID,
         owner_id = OwnerID,

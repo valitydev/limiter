@@ -3,7 +3,7 @@
 -export([compute/4]).
 
 -type amount() :: lim_body:amount().
--type currency() :: lim_domain_thrift:'CurrencySymbolicCode'().
+-type currency() :: dmsl_domain_thrift:'CurrencySymbolicCode'().
 -type stage() :: hold | commit.
 -type t() :: number | {amount, currency()}.
 
