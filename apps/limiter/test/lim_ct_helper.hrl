@@ -5,7 +5,9 @@
 -include_lib("limiter_proto/include/limproto_timerange_thrift.hrl").
 -include_lib("limiter_proto/include/limproto_limiter_thrift.hrl").
 -include_lib("limiter_proto/include/limproto_context_payproc_thrift.hrl").
+-include_lib("limiter_proto/include/limproto_context_withdrawal_thrift.hrl").
 -include_lib("damsel/include/dmsl_domain_thrift.hrl").
+-include_lib("damsel/include/dmsl_wthd_domain_thrift.hrl").
 
 -define(currency, <<"RUB">>).
 -define(string, <<"STRING">>).
@@ -58,6 +60,10 @@
 
 -define(ctx_type_payproc(),
     {payment_processing, #config_LimitContextTypePaymentProcessing{}}
+).
+
+-define(ctx_type_wthdproc(),
+    {withdrawal_processing, #config_LimitContextTypeWithdrawalProcessing{}}
 ).
 
 %% Payproc
@@ -164,6 +170,33 @@
                     cash = RefundCost
                 }
             }
+        }
+    }
+}).
+
+%% Wthdproc
+
+-define(identity(OwnerID), #wthd_domain_Identity{
+    id = OwnerID,
+    owner_id = OwnerID
+}).
+
+-define(withdrawal(Body), ?withdrawal(Body, ?paytool, ?string)).
+
+-define(withdrawal(Body, Destination, OwnerID), #wthd_domain_Withdrawal{
+    body = Body,
+    created_at = ?timestamp,
+    destination = Destination,
+    sender = ?identity(OwnerID)
+}).
+
+-define(op_withdrawal, {withdrawal, #context_withdrawal_OperationWithdrawal{}}).
+
+-define(wthdproc_ctx_withdrawal(Cost), #limiter_LimitContext{
+    withdrawal_processing = #context_withdrawal_Context{
+        op = ?op_withdrawal,
+        withdrawal = #context_withdrawal_Withdrawal{
+            withdrawal = ?withdrawal(Cost)
         }
     }
 }).

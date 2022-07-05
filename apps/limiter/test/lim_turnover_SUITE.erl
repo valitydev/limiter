@@ -47,6 +47,7 @@
 all() ->
     [
         {group, default},
+        {group, withdrawals},
         {group, cashless},
         {group, idempotency}
     ].
@@ -69,6 +70,12 @@ groups() ->
             partial_commit_inexistent_hold_fails,
             commit_multirange_limit_ok,
             commit_with_payment_tool_scope_ok
+        ]},
+        {withdrawals, [parallel], [
+            get_limit_ok,
+            hold_ok,
+            commit_ok,
+            rollback_ok
         ]},
         {cashless, [parallel], [
             commit_number_ok,
@@ -169,7 +176,11 @@ commit_with_exchange(C) ->
 -spec get_limit_ok(config()) -> _.
 get_limit_ok(C) ->
     ID = configure_limit(?time_range_month(), ?global(), C),
-    Context = ?payproc_ctx_invoice(?cash(0)),
+    Context =
+        case get_group_name(C) of
+            default -> ?payproc_ctx_invoice(?cash(0));
+            withdrawals -> ?wthdproc_ctx_withdrawal(?cash(0))
+        end,
     ?assertMatch(
         {ok, #limiter_Limit{amount = 0}},
         lim_client:get(ID, Context, ?config(client, C))
@@ -186,22 +197,35 @@ get_limit_notfound(C) ->
 -spec hold_ok(config()) -> _.
 hold_ok(C) ->
     ID = configure_limit(?time_range_month(), ?global(), C),
-    Context = ?payproc_ctx_invoice(?cash(10)),
+    Context =
+        case get_group_name(C) of
+            default -> ?payproc_ctx_invoice(?cash(10));
+            withdrawals -> ?wthdproc_ctx_withdrawal(?cash(10))
+        end,
     {ok, {vector, #limiter_VectorClock{}}} = lim_client:hold(?LIMIT_CHANGE(ID), Context, ?config(client, C)),
     {ok, #limiter_Limit{}} = lim_client:get(ID, Context, ?config(client, C)).
 
 -spec commit_ok(config()) -> _.
 commit_ok(C) ->
     ID = configure_limit(?time_range_month(), ?global(), C),
-    Context = ?payproc_ctx_invoice(?cash(10, <<"RUB">>)),
+    Context =
+        case get_group_name(C) of
+            default -> ?payproc_ctx_invoice(?cash(10, <<"RUB">>));
+            withdrawals -> ?wthdproc_ctx_withdrawal(?cash(10, <<"RUB">>))
+        end,
     {ok, {vector, _}} = hold_and_commit(?LIMIT_CHANGE(ID), Context, ?config(client, C)),
     {ok, #limiter_Limit{}} = lim_client:get(ID, Context, ?config(client, C)).
 
 -spec rollback_ok(config()) -> _.
 rollback_ok(C) ->
     ID = configure_limit(?time_range_week(), ?global(), C),
-    Context0 = ?payproc_ctx_payment(?cash(10), ?cash(10)),
-    Context1 = ?payproc_ctx_payment(?cash(10), ?cash(0)),
+    {Context0, Context1} =
+        case get_group_name(C) of
+            default ->
+                {?payproc_ctx_payment(?cash(10), ?cash(10)), ?payproc_ctx_payment(?cash(10), ?cash(0))};
+            withdrawals ->
+                {?wthdproc_ctx_withdrawal(?cash(10)), ?wthdproc_ctx_withdrawal(?cash(0))}
+        end,
     Change = ?LIMIT_CHANGE(ID),
     {ok, {vector, _}} = lim_client:hold(Change, Context0, ?config(client, C)),
     {ok, {vector, _}} = lim_client:commit(Change, Context1, ?config(client, C)).
@@ -444,6 +468,11 @@ configure_limit(TimeRange, Scope, C) ->
 
 configure_limit(TimeRange, Scope, Metric, C) ->
     ID = ?config(id, C),
+    ContextType =
+        case get_group_name(C) of
+            withdrawals -> ?ctx_type_wthdproc();
+            _Default -> ?ctx_type_payproc()
+        end,
     Params = #config_LimitConfigParams{
         id = ID,
         started_at = <<"2000-01-01T00:00:00Z">>,
@@ -451,7 +480,7 @@ configure_limit(TimeRange, Scope, Metric, C) ->
         shard_size = 1,
         type = ?lim_type_turnover(Metric),
         scope = Scope,
-        context_type = ?ctx_type_payproc(),
+        context_type = ContextType,
         op_behaviour = ?op_behaviour(?op_subtraction())
     },
     {ok, _LimitConfig} = lim_client:create_config(Params, ?config(client, C)),
@@ -459,3 +488,7 @@ configure_limit(TimeRange, Scope, Metric, C) ->
 
 gen_unique_id(Prefix) ->
     genlib:format("~s/~B", [Prefix, lim_time:now()]).
+
+get_group_name(C) ->
+    GroupProps = ?config(tc_group_properties, C),
+    proplists:get_value(name, GroupProps).
