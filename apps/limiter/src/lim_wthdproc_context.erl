@@ -23,10 +23,7 @@ get_operation(#context_withdrawal_Context{op = {Operation, _}}) ->
 get_operation(#context_withdrawal_Context{op = undefined}) ->
     {error, notfound}.
 
--spec get_value(atom(), context()) ->
-    {ok, term()}
-    | {error, notfound}
-    | {error, {unsupported, _}}.
+-spec get_value(atom(), context()) -> {ok, term()} | {error, notfound | {unsupported, _}}.
 get_value(ValueName, Context) ->
     case get_operation(Context) of
         {ok, Operation} ->
@@ -35,16 +32,16 @@ get_value(ValueName, Context) ->
             Error
     end.
 
-get_value(owner_id, _Operation, CtxWithdrawal) ->
-    get_owner_id(CtxWithdrawal);
-get_value(created_at, Operation, CtxWithdrawal) ->
-    get_created_at(Operation, CtxWithdrawal);
-get_value(cost, Operation, CtxWithdrawal) ->
-    get_cost(Operation, CtxWithdrawal);
-get_value(capture_cost, Operation, CtxWithdrawal) ->
-    get_cost(Operation, CtxWithdrawal);
-get_value(payment_tool, Operation, CtxWithdrawal) ->
-    get_payment_tool(Operation, CtxWithdrawal).
+get_value(owner_id, _Operation, Context) ->
+    get_owner_id(Context);
+get_value(created_at, Operation, Context) ->
+    get_created_at(Operation, Context);
+get_value(cost, Operation, Context) ->
+    get_cost(Operation, Context);
+get_value(payment_tool, Operation, Context) ->
+    get_payment_tool(Operation, Context);
+get_value(ValueName, _Operation, _Context) ->
+    {error, {unsupported, ValueName}}.
 
 -define(WITHDRAWAL(V), #context_withdrawal_Context{
     withdrawal = #context_withdrawal_Withdrawal{

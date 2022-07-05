@@ -39,7 +39,7 @@ get_commit_body(Config, LimitContext) ->
     case lim_body:get(partial, Config, LimitContext) of
         {ok, Body} ->
             Body;
-        {error, notfound} ->
+        {error, _} ->
             get_body(Config, LimitContext)
     end.
 

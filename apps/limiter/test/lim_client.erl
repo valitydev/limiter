@@ -6,6 +6,7 @@
 -export([get/3]).
 -export([hold/3]).
 -export([commit/3]).
+-export([rollback/3]).
 
 -export([legacy_create_config/2]).
 -export([create_config/2]).
@@ -37,6 +38,10 @@ hold(LimitChange, Context, Client) ->
 -spec commit(limit_change(), limit_context(), client()) -> woody:result() | no_return().
 commit(LimitChange, Context, Client) ->
     call('Commit', {LimitChange, clock(), Context}, Client).
+
+-spec rollback(limit_change(), limit_context(), client()) -> woody:result() | no_return().
+rollback(LimitChange, Context, Client) ->
+    call('Rollback', {LimitChange, clock(), Context}, Client).
 
 %%
 

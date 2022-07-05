@@ -21,6 +21,7 @@
 -export([hold_ok/1]).
 -export([commit_ok/1]).
 -export([rollback_ok/1]).
+-export([partial_zero_commit_rollbacks/1]).
 -export([refund_ok/1]).
 -export([get_config_ok/1]).
 -export([commit_inexistent_hold_fails/1]).
@@ -64,6 +65,7 @@ groups() ->
             hold_ok,
             commit_ok,
             rollback_ok,
+            partial_zero_commit_rollbacks,
             get_config_ok,
             refund_ok,
             commit_inexistent_hold_fails,
@@ -219,16 +221,28 @@ commit_ok(C) ->
 -spec rollback_ok(config()) -> _.
 rollback_ok(C) ->
     ID = configure_limit(?time_range_week(), ?global(), C),
-    {Context0, Context1} =
+    Context =
         case get_group_name(C) of
-            default ->
-                {?payproc_ctx_payment(?cash(10), ?cash(10)), ?payproc_ctx_payment(?cash(10), ?cash(0))};
-            withdrawals ->
-                {?wthdproc_ctx_withdrawal(?cash(10)), ?wthdproc_ctx_withdrawal(?cash(0))}
+            default -> ?payproc_ctx_invoice(?cash(10, <<"RUB">>));
+            withdrawals -> ?wthdproc_ctx_withdrawal(?cash(10, <<"RUB">>))
         end,
     Change = ?LIMIT_CHANGE(ID),
+    {ok, {vector, _}} = lim_client:hold(Change, Context, ?config(client, C)),
+    {ok, {vector, _}} = lim_client:rollback(Change, Context, ?config(client, C)).
+
+-spec partial_zero_commit_rollbacks(config()) -> _.
+partial_zero_commit_rollbacks(C) ->
+    ID = configure_limit(?time_range_week(), ?global(), C),
+    Context0 = ?payproc_ctx_payment(?cash(10), ?cash(10)),
+    Context1 = ?payproc_ctx_payment(?cash(10), ?cash(0)),
+    Change = ?LIMIT_CHANGE(ID),
     {ok, {vector, _}} = lim_client:hold(Change, Context0, ?config(client, C)),
-    {ok, {vector, _}} = lim_client:commit(Change, Context1, ?config(client, C)).
+    {ok, {vector, _}} = lim_client:commit(Change, Context1, ?config(client, C)),
+    % NOTE
+    % Successful rollback here means that partial commit with zero is handled exactly
+    % like rollback, thus subsequent rollback succeeds idempotently. This is a backwards
+    % compatibility measure.
+    {ok, {vector, _}} = lim_client:rollback(Change, Context0, ?config(client, C)).
 
 -spec refund_ok(config()) -> _.
 refund_ok(C) ->
