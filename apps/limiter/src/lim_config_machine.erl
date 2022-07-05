@@ -522,14 +522,14 @@ mk_shard_id(Prefix, Units, ShardSize) ->
 
 -spec mk_scope_prefix(config(), lim_context()) -> prefix().
 mk_scope_prefix(Config, LimitContext) ->
-    mk_scope_prefix_impl(scope(Config), LimitContext).
+    mk_scope_prefix_impl(scope(Config), context_type(Config), LimitContext).
 
--spec mk_scope_prefix_impl(limit_scope(), lim_context()) -> prefix().
-mk_scope_prefix_impl(Scope, LimitContext) ->
+-spec mk_scope_prefix_impl(limit_scope(), context_type(), lim_context()) -> prefix().
+mk_scope_prefix_impl(Scope, ContextType, LimitContext) ->
     Bits = enumerate_context_bits(Scope),
     ordsets:fold(
         fun(Bit, Acc) ->
-            {ok, Value} = extract_context_bit(Bit, LimitContext),
+            {ok, Value} = extract_context_bit(Bit, ContextType, LimitContext),
             append_prefix(Value, Acc)
         end,
         <<>>,
@@ -541,7 +541,7 @@ append_prefix(Fragment, Acc) ->
     <<Acc/binary, "/", Fragment/binary>>.
 
 -type context_bit() ::
-    {from, lim_context:context_type(), _Name :: atom(), lim_context:context_operation()}
+    {from, _ValueName :: atom()}
     | {order, integer(), context_bit()}.
 
 -spec enumerate_context_bits(limit_scope()) -> ordsets:ordset(context_bit()).
@@ -550,7 +550,7 @@ enumerate_context_bits(Types) ->
 
 append_context_bits(party, Bits) ->
     ordsets:add_element(
-        {order, 1, {from, payment_processing, owner_id, invoice}},
+        {order, 1, {from, owner_id}},
         Bits
     );
 append_context_bits(shop, Bits) ->
@@ -558,31 +558,33 @@ append_context_bits(shop, Bits) ->
         % NOTE
         % Shop scope implies party scope.
         % Also we need to preserve order between party / shop to ensure backwards compatibility.
-        {order, 1, {from, payment_processing, owner_id, invoice}},
-        {order, 2, {from, payment_processing, shop_id, invoice}}
+        {order, 1, {from, owner_id}},
+        {order, 2, {from, shop_id}}
     ]);
 append_context_bits(payment_tool, Bits) ->
     ordsets:add_element(
-        {from, payment_processing, payer, invoice_payment},
+        {from, payment_tool},
         Bits
     ).
 
--spec extract_context_bit(context_bit(), lim_context()) -> {ok, binary()}.
-extract_context_bit({order, _, Bit}, LimitContext) ->
-    extract_context_bit(Bit, LimitContext);
-extract_context_bit({from, payment_processing, payer, Op}, LimitContext) ->
-    {ok, {_, PayerData}} = lim_context:get_from_context(payment_processing, payer, Op, LimitContext),
-    #{payment_tool := {PaymentToolType, PaymentToolData}} = PayerData,
-    case PaymentToolType of
-        bank_card ->
-            Token = maps:get(token, PaymentToolData),
-            ExpData = maps:get(exp_date, PaymentToolData, <<>>),
-            {ok, <<Token/binary, "/", ExpData/binary>>};
-        _ ->
-            {error, {unsupported_payment_tool_type, PaymentToolType}}
+-spec extract_context_bit(context_bit(), context_type(), lim_context()) -> {ok, binary()}.
+extract_context_bit({order, _, Bit}, ContextType, LimitContext) ->
+    extract_context_bit(Bit, ContextType, LimitContext);
+extract_context_bit({from, payment_tool}, ContextType, LimitContext) ->
+    {ok, PaymentTool} = lim_context:get_value(ContextType, payment_tool, LimitContext),
+    case PaymentTool of
+        {bank_card, #{token := Token, exp_date := {Month, Year}}} ->
+            {ok, mk_scope_component([Token, Month, Year])};
+        {bank_card, #{token := Token, exp_date := undefined}} ->
+            {ok, mk_scope_component([Token, <<"undefined">>])};
+        {digital_wallet, #{id := ID, service := Service}} ->
+            {ok, mk_scope_component([<<"DW">>, Service, ID])}
     end;
-extract_context_bit({from, ContextType, ValueName, Op}, LimitContext) ->
-    lim_context:get_from_context(ContextType, ValueName, Op, LimitContext).
+extract_context_bit({from, ValueName}, ContextType, LimitContext) ->
+    lim_context:get_value(ContextType, ValueName, LimitContext).
+
+mk_scope_component(Fragments) ->
+    lim_string:join($/, Fragments).
 
 %%% Machinery callbacks
 
@@ -639,6 +641,9 @@ apply_event_({created, Config}, undefined) ->
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
+
+-include_lib("limiter_proto/include/limproto_context_payproc_thrift.hrl").
+-include_lib("damsel/include/dmsl_domain_thrift.hrl").
 
 -spec test() -> _.
 
@@ -782,32 +787,42 @@ check_calculate_year_shard_id_test() ->
     ?assertEqual(<<"past/year/1">>, calculate_calendar_shard_id(year, <<"2000-01-01T00:00:00Z">>, StartedAt2, 1)),
     ?assertEqual(<<"future/year/0">>, calculate_calendar_shard_id(year, <<"2001-01-01T00:00:00Z">>, StartedAt2, 1)).
 
--define(LIMIT_CONTEXT, #{
-    context => #{
-        payment_processing => #{
-            op => invoice,
-            invoice => #{
-                owner_id => <<"OWNER">>,
-                shop_id => <<"SHLOP">>
-            }
+-define(PAYPROC_CTX_INVOICE(Invoice), #limiter_LimitContext{
+    payment_processing = #context_payproc_Context{
+        op = {invoice, #context_payproc_OperationInvoice{}},
+        invoice = #context_payproc_Invoice{
+            invoice = Invoice
         }
     }
 }).
 
+-define(INVOICE(OwnerID, ShopID), #domain_Invoice{
+    id = <<"ID">>,
+    owner_id = OwnerID,
+    shop_id = ShopID,
+    created_at = <<"2000-02-02T12:12:12Z">>,
+    status = {unpaid, #domain_InvoiceUnpaid{}},
+    details = #domain_InvoiceDetails{},
+    due = <<"2222-02-02T12:12:12Z">>,
+    cost = #domain_Cash{amount = 42, currency = #domain_CurrencyRef{symbolic_code = <<"CNY">>}}
+}).
+
 -spec global_scope_empty_prefix_test() -> _.
 global_scope_empty_prefix_test() ->
-    ?assertEqual(<<>>, mk_scope_prefix_impl(ordsets:new(), ?LIMIT_CONTEXT)).
+    Context = #{context => ?PAYPROC_CTX_INVOICE(?INVOICE(<<"OWNER">>, <<"SHOP">>))},
+    ?assertEqual(<<>>, mk_scope_prefix_impl(ordsets:new(), payment_processing, Context)).
 
 -spec preserve_scope_prefix_order_test_() -> [_TestGen].
 preserve_scope_prefix_order_test_() ->
+    Context = #{context => ?PAYPROC_CTX_INVOICE(?INVOICE(<<"OWNER">>, <<"SHLOP">>))},
     [
         ?_assertEqual(
             <<"/OWNER/SHLOP">>,
-            mk_scope_prefix_impl(ordsets:from_list([shop, party]), ?LIMIT_CONTEXT)
+            mk_scope_prefix_impl(ordsets:from_list([shop, party]), payment_processing, Context)
         ),
         ?_assertEqual(
             <<"/OWNER/SHLOP">>,
-            mk_scope_prefix_impl(ordsets:from_list([shop]), ?LIMIT_CONTEXT)
+            mk_scope_prefix_impl(ordsets:from_list([shop]), payment_processing, Context)
         )
     ].
 
