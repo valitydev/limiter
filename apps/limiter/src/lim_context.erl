@@ -13,25 +13,25 @@
 -export([clock/1]).
 
 -type woody_context() :: woody_context:ctx().
--type context() :: limproto_limiter_thrift:'LimitContext'().
+-type limit_context() :: limproto_limiter_thrift:'LimitContext'().
 -type clock() :: limproto_limiter_thrift:'Clock'().
 
 -type t() :: #{
     woody_context => woody_context(),
-    context => context(),
+    context => limit_context(),
     clock => clock()
 }.
 
 -type context_type() :: payment_processing | withdrawal_processing.
--type context_operation() :: lim_payproc_context:operation().
+-type context_inner() :: lim_payproc_context:context() | lim_wthdproc_context:context().
+-type context_operation() :: lim_payproc_context:operation() | lim_wthdproc_context:operation().
 
 -export_type([t/0]).
--export_type([context/0]).
 -export_type([context_type/0]).
 -export_type([context_operation/0]).
 
--callback get_operation(context()) -> {ok, context_operation()} | {error, notfound}.
--callback get_value(_Name :: atom(), context()) -> {ok, term()} | {error, notfound | {unsupported, _}}.
+-callback get_operation(context_inner()) -> {ok, context_operation()} | {error, notfound}.
+-callback get_value(_Name :: atom(), context_inner()) -> {ok, term()} | {error, notfound | {unsupported, _}}.
 
 -spec create(woody_context()) -> t().
 create(WoodyContext) ->
@@ -47,7 +47,7 @@ clock(#{clock := Clock}) ->
 clock(_) ->
     {error, notfound}.
 
--spec set_context(context(), t()) -> t().
+-spec set_context(limit_context(), t()) -> t().
 set_context(Context, LimContext) ->
     LimContext#{context => Context}.
 

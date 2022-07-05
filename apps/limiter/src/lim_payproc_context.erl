@@ -18,6 +18,7 @@
     | invoice_payment_chargeback.
 
 -export_type([operation/0]).
+-export_type([context/0]).
 
 %%
 

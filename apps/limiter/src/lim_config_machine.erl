@@ -802,7 +802,7 @@ check_calculate_year_shard_id_test() ->
     shop_id = ShopID,
     created_at = <<"2000-02-02T12:12:12Z">>,
     status = {unpaid, #domain_InvoiceUnpaid{}},
-    details = #domain_InvoiceDetails{},
+    details = #domain_InvoiceDetails{product = <<>>},
     due = <<"2222-02-02T12:12:12Z">>,
     cost = #domain_Cash{amount = 42, currency = #domain_CurrencyRef{symbolic_code = <<"CNY">>}}
 }).

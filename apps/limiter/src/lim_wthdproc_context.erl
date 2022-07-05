@@ -13,6 +13,7 @@
     withdrawal.
 
 -export_type([operation/0]).
+-export_type([context/0]).
 
 %%
 
