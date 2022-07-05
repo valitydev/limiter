@@ -98,7 +98,9 @@ marshal_calendar_time_range_type(year) ->
     {year, #timerange_TimeRangeTypeCalendarYear{}}.
 
 marshal_context_type(payment_processing) ->
-    {payment_processing, #config_LimitContextTypePaymentProcessing{}}.
+    {payment_processing, #config_LimitContextTypePaymentProcessing{}};
+marshal_context_type(withdrawal_processing) ->
+    {withdrawal_processing, #config_LimitContextTypeWithdrawalProcessing{}}.
 
 marshal_type({turnover, Metric}) ->
     {turnover, #config_LimitTypeTurnover{
@@ -249,7 +251,9 @@ unmarshal_calendar_time_range_type({year, _}) ->
     year.
 
 unmarshal_context_type({payment_processing, #config_LimitContextTypePaymentProcessing{}}) ->
-    payment_processing.
+    payment_processing;
+unmarshal_context_type({withdrawal_processing, #config_LimitContextTypeWithdrawalProcessing{}}) ->
+    withdrawal_processing.
 
 unmarshal_type({turnover, #config_LimitTypeTurnover{metric = Metric}}) ->
     {turnover, maybe_apply(Metric, fun unmarshal_turnover_metric/1, number)}.
