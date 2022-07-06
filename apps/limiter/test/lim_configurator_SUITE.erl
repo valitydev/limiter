@@ -17,6 +17,7 @@
 -export([create_config/1]).
 -export([create_config_single_scope/1]).
 -export([get_config/1]).
+-export([get_inexistent_config/1]).
 
 -type group_name() :: atom().
 -type test_case_name() :: atom().
@@ -36,7 +37,8 @@ groups() ->
             legacy_create_config,
             create_config,
             create_config_single_scope,
-            get_config
+            get_config,
+            get_inexistent_config
         ]}
     ].
 
@@ -145,6 +147,13 @@ get_config(C) ->
     ID = ?config(limit_id, C),
     #{client := Client} = prepare_environment(ID, <<"GlobalMonthTurnover">>, C),
     {ok, #config_LimitConfig{id = ID}} = lim_client:get_config(ID, Client).
+
+-spec get_inexistent_config(config()) -> _.
+get_inexistent_config(_C) ->
+    ?assertEqual(
+        {exception, #configurator_LimitConfigNotFound{}},
+        lim_client:get_config(<<"NOSUCHCONFIG">>, lim_client:new())
+    ).
 
 %%
 

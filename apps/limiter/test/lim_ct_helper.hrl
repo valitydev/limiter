@@ -74,12 +74,29 @@
 
 -define(bank_card(), ?bank_card(?string, 2, 2022)).
 
--define(bank_card(Token, Month, Year), #domain_BankCard{
-    token = Token,
-    bin = ?string,
-    last_digits = ?string,
-    exp_date = #domain_BankCardExpDate{month = Month, year = Year}
-}).
+-define(bank_card(Token),
+    {bank_card, #domain_BankCard{
+        token = Token,
+        bin = ?string,
+        last_digits = ?string
+    }}
+).
+
+-define(bank_card(Token, Month, Year),
+    {bank_card, #domain_BankCard{
+        token = Token,
+        bin = ?string,
+        last_digits = ?string,
+        exp_date = #domain_BankCardExpDate{month = Month, year = Year}
+    }}
+).
+
+-define(digital_wallet(ID, Service),
+    {digital_wallet, #domain_DigitalWallet{
+        id = ID,
+        payment_service = #domain_PaymentServiceRef{id = Service}
+    }}
+).
 
 -define(invoice(OwnerID, ShopID, Cost), #domain_Invoice{
     id = ?string,
@@ -92,10 +109,8 @@
     cost = Cost
 }).
 
--define(paytool, {bank_card, ?bank_card()}).
-
 -define(invoice_payment(Cost, CaptureCost),
-    ?invoice_payment(Cost, CaptureCost, ?paytool)
+    ?invoice_payment(Cost, CaptureCost, ?bank_card())
 ).
 
 -define(invoice_payment(Cost, CaptureCost, PaymentTool),
@@ -181,7 +196,7 @@
     owner_id = OwnerID
 }).
 
--define(withdrawal(Body), ?withdrawal(Body, ?paytool, ?string)).
+-define(withdrawal(Body), ?withdrawal(Body, ?bank_card(), ?string)).
 
 -define(withdrawal(Body, Destination, OwnerID), #wthd_domain_Withdrawal{
     body = Body,

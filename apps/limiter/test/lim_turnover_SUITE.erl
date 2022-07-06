@@ -300,11 +300,11 @@ commit_multirange_limit_ok(C) ->
     % NOTE
     % Expecting those 3 changes will be accounted in the same limit range machine.
     % We have no way to verify it here though.
-    PaymentJan = ?invoice_payment(?cash(42), ?cash(42), ?paytool, <<"2020-01-01T00:00:00Z">>),
+    PaymentJan = ?invoice_payment(?cash(42), ?cash(42), ?bank_card(), <<"2020-01-01T00:00:00Z">>),
     {ok, _} = hold_and_commit(?LIMIT_CHANGE(ID, 1), ?payproc_ctx_payment(PaymentJan), Client),
-    PaymentFeb = ?invoice_payment(?cash(43), ?cash(43), ?paytool, <<"2020-02-01T00:00:00Z">>),
+    PaymentFeb = ?invoice_payment(?cash(43), ?cash(43), ?bank_card(), <<"2020-02-01T00:00:00Z">>),
     {ok, _} = hold_and_commit(?LIMIT_CHANGE(ID, 2), ?payproc_ctx_payment(PaymentFeb), Client),
-    PaymentApr = ?invoice_payment(?cash(44), ?cash(44), ?paytool, <<"2020-04-01T00:00:00Z">>),
+    PaymentApr = ?invoice_payment(?cash(44), ?cash(44), ?bank_card(), <<"2020-04-01T00:00:00Z">>),
     {ok, _} = hold_and_commit(?LIMIT_CHANGE(ID, 3), ?payproc_ctx_payment(PaymentApr), Client),
     {ok, #limiter_Limit{amount = 42}} = lim_client:get(ID, ?payproc_ctx_payment(PaymentJan), Client),
     {ok, #limiter_Limit{amount = 43}} = lim_client:get(ID, ?payproc_ctx_payment(PaymentFeb), Client),
@@ -314,32 +314,28 @@ commit_multirange_limit_ok(C) ->
 commit_with_payment_tool_scope_ok(C) ->
     Client = ?config(client, C),
     ID = configure_limit(?time_range_week(), ?scope([?scope_payment_tool()]), ?turnover_metric_number(), C),
-    Context0 = ?payproc_ctx_payment(
-        ?invoice_payment(
-            ?cash(10),
-            ?cash(10),
-            {bank_card, ?bank_card()}
-        )
-    ),
     Context1 = ?payproc_ctx_payment(
-        ?invoice_payment(
-            ?cash(10),
-            ?cash(10),
-            {bank_card, ?bank_card(<<"OtherToken">>, 2, 2022)}
-        )
+        ?invoice_payment(?cash(10), ?cash(10), ?bank_card(<<"Token">>, 2, 2022))
     ),
     Context2 = ?payproc_ctx_payment(
-        ?invoice_payment(
-            ?cash(10),
-            ?cash(10),
-            {bank_card, ?bank_card(?string, 3, 2022)}
-        )
+        ?invoice_payment(?cash(10), ?cash(10), ?bank_card(<<"OtherToken">>, 2, 2022))
     ),
-    {ok, LimitState0} = lim_client:get(ID, Context0, Client),
-    _ = hold_and_commit(?LIMIT_CHANGE(ID, 1), Context0, Client),
-    _ = hold_and_commit(?LIMIT_CHANGE(ID, 2), Context1, Client),
-    _ = hold_and_commit(?LIMIT_CHANGE(ID, 3), Context2, Client),
-    {ok, LimitState1} = lim_client:get(ID, Context0, Client),
+    Context3 = ?payproc_ctx_payment(
+        ?invoice_payment(?cash(10), ?cash(10), ?bank_card(?string, 3, 2022))
+    ),
+    Context4 = ?payproc_ctx_payment(
+        ?invoice_payment(?cash(10), ?cash(10), ?bank_card(?string))
+    ),
+    Context5 = ?payproc_ctx_payment(
+        ?invoice_payment(?cash(10), ?cash(10), ?digital_wallet(<<"ID42">>, <<"Pepal">>))
+    ),
+    {ok, LimitState0} = lim_client:get(ID, Context1, Client),
+    _ = hold_and_commit(?LIMIT_CHANGE(ID, 1), Context1, Client),
+    _ = hold_and_commit(?LIMIT_CHANGE(ID, 2), Context2, Client),
+    _ = hold_and_commit(?LIMIT_CHANGE(ID, 3), Context3, Client),
+    _ = hold_and_commit(?LIMIT_CHANGE(ID, 4), Context4, Client),
+    _ = hold_and_commit(?LIMIT_CHANGE(ID, 5), Context5, Client),
+    {ok, LimitState1} = lim_client:get(ID, Context1, Client),
     ?assertEqual(
         LimitState1#limiter_Limit.amount,
         LimitState0#limiter_Limit.amount + 1
