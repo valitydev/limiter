@@ -2,7 +2,7 @@
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("stdlib/include/assert.hrl").
--include_lib("limiter_proto/include/lim_configurator_thrift.hrl").
+-include_lib("limiter_proto/include/limproto_configurator_thrift.hrl").
 -include("lim_ct_helper.hrl").
 
 -export([all/0]).
@@ -17,6 +17,7 @@
 -export([create_config/1]).
 -export([create_config_single_scope/1]).
 -export([get_config/1]).
+-export([get_inexistent_config/1]).
 
 -type group_name() :: atom().
 -type test_case_name() :: atom().
@@ -36,7 +37,8 @@ groups() ->
             legacy_create_config,
             create_config,
             create_config_single_scope,
-            get_config
+            get_config,
+            get_inexistent_config
         ]}
     ].
 
@@ -81,14 +83,14 @@ legacy_create_config(C) ->
     Client = lim_client:new(),
     ID = ?config(limit_id, C),
     Description = genlib:unique(),
-    Params = #limiter_configurator_LimitCreateParams{
+    Params = #configurator_LimitCreateParams{
         id = ID,
         name = <<"GlobalMonthTurnover">>,
         description = Description,
         started_at = <<"2000-01-01T00:00:00Z">>
     },
     ?assertMatch(
-        {ok, #limiter_config_LimitConfig{
+        {ok, #config_LimitConfig{
             id = ID,
             description = Description
         }},
@@ -100,7 +102,7 @@ create_config(C) ->
     Client = lim_client:new(),
     ID = ?config(limit_id, C),
     Description = genlib:unique(),
-    Params = #limiter_config_LimitConfigParams{
+    Params = #config_LimitConfigParams{
         id = ?config(limit_id, C),
         description = Description,
         started_at = <<"2000-01-01T00:00:00Z">>,
@@ -115,7 +117,7 @@ create_config(C) ->
         context_type = ?ctx_type_payproc()
     },
     ?assertMatch(
-        {ok, #limiter_config_LimitConfig{
+        {ok, #config_LimitConfig{
             id = ID,
             description = Description
         }},
@@ -125,7 +127,7 @@ create_config(C) ->
 -spec create_config_single_scope(config()) -> _.
 create_config_single_scope(C) ->
     Client = lim_client:new(),
-    Params = #limiter_config_LimitConfigParams{
+    Params = #config_LimitConfigParams{
         id = ?config(limit_id, C),
         started_at = <<"2000-01-01T00:00:00Z">>,
         time_range_type = ?time_range_week(),
@@ -135,7 +137,7 @@ create_config_single_scope(C) ->
         context_type = ?ctx_type_payproc(),
         op_behaviour = ?op_behaviour()
     },
-    {ok, #limiter_config_LimitConfig{
+    {ok, #config_LimitConfig{
         scope = Scope
     }} = lim_client:create_config(Params, Client),
     ?assertEqual(?scope([?scope_party()]), Scope).
@@ -144,13 +146,20 @@ create_config_single_scope(C) ->
 get_config(C) ->
     ID = ?config(limit_id, C),
     #{client := Client} = prepare_environment(ID, <<"GlobalMonthTurnover">>, C),
-    {ok, #limiter_config_LimitConfig{id = ID}} = lim_client:get_config(ID, Client).
+    {ok, #config_LimitConfig{id = ID}} = lim_client:get_config(ID, Client).
+
+-spec get_inexistent_config(config()) -> _.
+get_inexistent_config(_C) ->
+    ?assertEqual(
+        {exception, #configurator_LimitConfigNotFound{}},
+        lim_client:get_config(<<"NOSUCHCONFIG">>, lim_client:new())
+    ).
 
 %%
 
 prepare_environment(ID, LimitName, _C) ->
     Client = lim_client:new(),
-    Params = #limiter_configurator_LimitCreateParams{
+    Params = #configurator_LimitCreateParams{
         id = ID,
         name = LimitName,
         description = <<"description">>,

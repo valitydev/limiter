@@ -161,7 +161,7 @@ call_accounter(Function, Args, LimitContext) ->
     WoodyContext = lim_context:woody_context(LimitContext),
     lim_client_woody:call(accounter, Function, Args, WoodyContext).
 
-convert_exception(#'InvalidRequest'{errors = Errors}) ->
+convert_exception(#base_InvalidRequest{errors = Errors}) ->
     Errors;
 convert_exception(#accounter_InvalidPostingParams{wrong_postings = Errors}) ->
     maps:fold(fun(_, Error, Acc) -> [Error | Acc] end, [], Errors).

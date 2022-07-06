@@ -1,213 +1,247 @@
 -module(lim_payproc_context).
 
--include_lib("limiter_proto/include/lim_limiter_payproc_context_thrift.hrl").
+-include_lib("limiter_proto/include/limproto_context_payproc_thrift.hrl").
+-include_lib("damsel/include/dmsl_domain_thrift.hrl").
 
--export([unmarshal/1]).
+-behaviour(lim_context).
+-export([get_operation/1]).
+-export([get_value/2]).
 
--type thrift_context() :: lim_limiter_payproc_context_thrift:'Context'().
+-type context() :: limproto_context_payproc_thrift:'Context'().
+
+-type operation() ::
+    invoice
+    | invoice_adjustment
+    | invoice_payment
+    | invoice_payment_adjustment
+    | invoice_payment_refund
+    | invoice_payment_chargeback.
+
+-export_type([operation/0]).
+-export_type([context/0]).
 
 %%
 
--spec unmarshal(thrift_context()) -> lim_context:context().
-unmarshal(#limiter_context_payproc_Context{
-    op = {Operation, _},
-    invoice = Invoice
-}) ->
-    genlib_map:compact(#{
-        op => Operation,
-        invoice => maybe_unmarshal(Invoice, fun unmarshal_payment_processing_invoice/1)
-    }).
+-spec get_operation(context()) -> {ok, operation()} | {error, notfound}.
+get_operation(#context_payproc_Context{op = {Operation, _}}) ->
+    {ok, Operation};
+get_operation(#context_payproc_Context{op = undefined}) ->
+    {error, notfound}.
 
-unmarshal_payment_processing_invoice(#limiter_context_payproc_Invoice{
-    invoice = #domain_Invoice{
-        id = ID,
-        owner_id = OwnerID,
-        shop_id = ShopID,
-        cost = Cost,
-        created_at = CreatedAt
-    },
-    payment = Payment,
-    adjustment = Adjustment
-}) ->
-    genlib_map:compact(#{
-        id => maybe_unmarshal(ID, fun unmarshal_string/1),
-        owner_id => maybe_unmarshal(OwnerID, fun unmarshal_string/1),
-        shop_id => maybe_unmarshal(ShopID, fun unmarshal_string/1),
-        cost => maybe_unmarshal(Cost, fun unmarshal_cash/1),
-        created_at => maybe_unmarshal(CreatedAt, fun unmarshal_string/1),
-        adjustment => maybe_unmarshal(
-            Adjustment,
-            fun unmarshal_payment_processing_invoice_adjustment/1
-        ),
-        payment => maybe_unmarshal(Payment, fun unmarshal_payment_processing_invoice_payment/1)
-    }).
+-spec get_value(atom(), context()) -> {ok, term()} | {error, notfound | {unsupported, _}}.
+get_value(ValueName, Context) ->
+    case get_operation(Context) of
+        {ok, Operation} ->
+            get_value(ValueName, Operation, Context);
+        {error, _} = Error ->
+            Error
+    end.
 
-unmarshal_payment_processing_invoice_adjustment(#domain_InvoiceAdjustment{id = ID}) ->
-    #{id => unmarshal_string(ID)}.
+get_value(owner_id, _Operation, Context) ->
+    get_owner_id(Context);
+get_value(shop_id, _Operation, Context) ->
+    get_shop_id(Context);
+get_value(created_at, Operation, Context) ->
+    get_created_at(Operation, Context);
+get_value(cost, Operation, Context) ->
+    get_cost(Operation, Context);
+get_value(capture_cost, Operation, Context) ->
+    get_capture_cost(Operation, Context);
+get_value(payment_tool, Operation, Context) ->
+    get_payment_tool(Operation, Context);
+get_value(ValueName, _Operation, _Context) ->
+    {error, {unsupported, ValueName}}.
 
-unmarshal_payment_processing_invoice_payment(#limiter_context_payproc_InvoicePayment{
-    payment = #domain_InvoicePayment{
-        id = ID,
-        owner_id = OwnerID,
-        shop_id = ShopID,
-        cost = Cost,
-        created_at = CreatedAt,
-        flow = Flow,
-        status = Status,
-        payer = Payer
-    },
-    adjustment = Adjustment,
-    refund = EffectiveRefund,
-    chargeback = EffectiveChargeback
-}) ->
-    genlib_map:compact(#{
-        id => maybe_unmarshal(ID, fun unmarshal_string/1),
-        owner_id => maybe_unmarshal(OwnerID, fun unmarshal_string/1),
-        shop_id => maybe_unmarshal(ShopID, fun unmarshal_string/1),
-        cost => maybe_unmarshal(Cost, fun unmarshal_cash/1),
-        capture_cost => get_capture_cost_from_status(Status),
-        created_at => maybe_unmarshal(CreatedAt, fun unmarshal_string/1),
-        flow => maybe_unmarshal(Flow, fun unmarshal_payment_processing_invoice_payment_flow/1),
-        payer => maybe_unmarshal(Payer, fun unmarshal_payment_processing_invoice_payment_payer/1),
-        adjustment => maybe_unmarshal(
-            Adjustment,
-            fun unmarshal_payment_processing_invoice_payment_adjustment/1
-        ),
-        refund => maybe_unmarshal(EffectiveRefund, fun unmarshal_payment_processing_invoice_payment_refund/1),
-        chargeback => maybe_unmarshal(
-            EffectiveChargeback,
-            fun unmarshal_payment_processing_invoice_payment_chargeback/1
-        )
-    }).
+%%
 
-get_capture_cost_from_status({captured, #domain_InvoicePaymentCaptured{cost = Cost}}) ->
-    maybe_unmarshal(Cost, fun unmarshal_cash/1);
-get_capture_cost_from_status(_) ->
-    undefined.
+-define(INVOICE(V), #context_payproc_Context{
+    invoice = #context_payproc_Invoice{
+        invoice = V = #domain_Invoice{}
+    }
+}).
 
-unmarshal_payment_processing_invoice_payment_flow({Flow, _}) ->
-    Flow.
+-define(INVOICE_ADJUSTMENT(V), #context_payproc_Context{
+    invoice = #context_payproc_Invoice{
+        adjustment = V = #domain_InvoiceAdjustment{}
+    }
+}).
 
-unmarshal_payment_processing_invoice_payment_payer({Payer, Data}) ->
-    {Payer, unmarshal_payment_processing_invoice_payment_payer_data(Data)}.
+-define(INVOICE_PAYMENT(V), #context_payproc_Context{
+    invoice = #context_payproc_Invoice{
+        payment = #context_payproc_InvoicePayment{payment = V = #domain_InvoicePayment{}}
+    }
+}).
 
-unmarshal_payment_processing_invoice_payment_payer_data(#domain_PaymentResourcePayer{
-    resource = #domain_DisposablePaymentResource{payment_tool = PaymentTool}
-}) ->
-    genlib_map:compact(#{
-        payment_tool => maybe_unmarshal(PaymentTool, fun unmarshal_payment_processing_payment_tool/1)
-    });
-unmarshal_payment_processing_invoice_payment_payer_data(#domain_CustomerPayer{payment_tool = PaymentTool}) ->
-    genlib_map:compact(#{
-        payment_tool => maybe_unmarshal(PaymentTool, fun unmarshal_payment_processing_payment_tool/1)
-    });
-unmarshal_payment_processing_invoice_payment_payer_data(#domain_RecurrentPayer{payment_tool = PaymentTool}) ->
-    genlib_map:compact(#{
-        payment_tool => maybe_unmarshal(PaymentTool, fun unmarshal_payment_processing_payment_tool/1)
-    }).
+-define(INVOICE_PAYMENT_ADJUSTMENT(V), #context_payproc_Context{
+    invoice = #context_payproc_Invoice{
+        payment = #context_payproc_InvoicePayment{adjustment = V = #domain_InvoicePaymentAdjustment{}}
+    }
+}).
 
-unmarshal_payment_processing_payment_tool({bank_card, #domain_BankCard{token = Token, exp_date = ExpDate}}) ->
-    {bank_card, #{
-        token => Token,
-        exp_date => maybe_unmarshal(ExpDate, fun unmarshal_payment_processing_bank_card_exp_data/1)
-    }};
-unmarshal_payment_processing_payment_tool(_) ->
-    undefined.
+-define(INVOICE_PAYMENT_REFUND(V), #context_payproc_Context{
+    invoice = #context_payproc_Invoice{
+        payment = #context_payproc_InvoicePayment{refund = V = #domain_InvoicePaymentRefund{}}
+    }
+}).
 
-unmarshal_payment_processing_bank_card_exp_data(#domain_BankCardExpDate{month = Month, year = Year}) ->
-    BinaryMonth = integer_to_binary(Month),
-    BinaryYear = integer_to_binary(Year),
-    <<BinaryMonth/binary, "/", BinaryYear/binary>>.
+-define(INVOICE_PAYMENT_CHARGEBACK(V), #context_payproc_Context{
+    invoice = #context_payproc_Invoice{
+        payment = #context_payproc_InvoicePayment{chargeback = V = #domain_InvoicePaymentChargeback{}}
+    }
+}).
 
-unmarshal_payment_processing_invoice_payment_adjustment(#domain_InvoicePaymentAdjustment{
-    id = ID,
-    created_at = CreatedAt
-}) ->
-    genlib_map:compact(#{
-        id => maybe_unmarshal(ID, fun unmarshal_string/1),
-        created_at => maybe_unmarshal(CreatedAt, fun unmarshal_string/1)
-    }).
+get_owner_id(?INVOICE(Invoice)) ->
+    {ok, Invoice#domain_Invoice.owner_id};
+get_owner_id(_) ->
+    {error, notfound}.
 
-unmarshal_payment_processing_invoice_payment_refund(#domain_InvoicePaymentRefund{
-    id = ID,
-    cash = Cost,
-    created_at = CreatedAt
-}) ->
-    genlib_map:compact(#{
-        id => maybe_unmarshal(ID, fun unmarshal_string/1),
-        cost => maybe_unmarshal(Cost, fun unmarshal_cash/1),
-        created_at => maybe_unmarshal(CreatedAt, fun unmarshal_string/1)
-    }).
+get_shop_id(?INVOICE(Invoice)) ->
+    {ok, Invoice#domain_Invoice.shop_id};
+get_shop_id(_) ->
+    {error, notfound}.
 
-unmarshal_payment_processing_invoice_payment_chargeback(#domain_InvoicePaymentChargeback{
-    id = ID,
-    levy = Levy,
-    body = Body,
-    created_at = CreatedAt
-}) ->
-    genlib_map:compact(#{
-        id => maybe_unmarshal(ID, fun unmarshal_string/1),
-        levy => maybe_unmarshal(Levy, fun unmarshal_cash/1),
-        body => maybe_unmarshal(Body, fun unmarshal_cash/1),
-        created_at => maybe_unmarshal(CreatedAt, fun unmarshal_string/1)
-    }).
+get_created_at(invoice, ?INVOICE(Invoice)) ->
+    {ok, Invoice#domain_Invoice.created_at};
+get_created_at(invoice_adjustment, ?INVOICE_ADJUSTMENT(Adjustment)) ->
+    {ok, Adjustment#domain_InvoiceAdjustment.created_at};
+get_created_at(invoice_payment, ?INVOICE_PAYMENT(Payment)) ->
+    {ok, Payment#domain_InvoicePayment.created_at};
+get_created_at(invoice_payment_adjustment, ?INVOICE_PAYMENT_ADJUSTMENT(Adjustment)) ->
+    {ok, Adjustment#domain_InvoicePaymentAdjustment.created_at};
+get_created_at(invoice_payment_refund, ?INVOICE_PAYMENT_REFUND(Refund)) ->
+    {ok, Refund#domain_InvoicePaymentRefund.created_at};
+get_created_at(invoice_payment_chargeback, ?INVOICE_PAYMENT_CHARGEBACK(Chargeback)) ->
+    {ok, Chargeback#domain_InvoicePaymentChargeback.created_at};
+get_created_at(_, _CtxInvoice) ->
+    {error, notfound}.
 
-unmarshal_cash(#domain_Cash{amount = Amount, currency = #domain_CurrencyRef{symbolic_code = Currency}}) ->
-    #{amount => Amount, currency => Currency}.
+get_cost(invoice, ?INVOICE(Invoice)) ->
+    lim_payproc_utils:cash(Invoice#domain_Invoice.cost);
+get_cost(invoice_payment, ?INVOICE_PAYMENT(Payment)) ->
+    lim_payproc_utils:cash(Payment#domain_InvoicePayment.cost);
+get_cost(invoice_payment_refund, ?INVOICE_PAYMENT_REFUND(Refund)) ->
+    lim_payproc_utils:cash(Refund#domain_InvoicePaymentRefund.cash);
+get_cost(invoice_payment_chargeback, ?INVOICE_PAYMENT_CHARGEBACK(Chargeback)) ->
+    lim_payproc_utils:cash(Chargeback#domain_InvoicePaymentChargeback.body);
+get_cost(_, _CtxInvoice) ->
+    {error, notfound}.
 
-unmarshal_string(Value) ->
-    Value.
+get_capture_cost(invoice_payment, ?INVOICE_PAYMENT(Payment)) ->
+    get_capture_cost(Payment#domain_InvoicePayment.status);
+get_capture_cost(_, _CtxInvoice) ->
+    {error, notfound}.
 
-maybe_unmarshal(undefined, _) ->
-    undefined;
-maybe_unmarshal(Value, UnmarshalFun) ->
-    UnmarshalFun(Value).
+get_capture_cost({captured, #domain_InvoicePaymentCaptured{cost = Cost}}) when Cost /= undefined ->
+    lim_payproc_utils:cash(Cost);
+get_capture_cost({_Status, _}) ->
+    {error, notfound}.
+
+get_payment_tool(Operation, ?INVOICE_PAYMENT(Payment)) when
+    Operation == invoice_payment;
+    Operation == invoice_payment_adjustment;
+    Operation == invoice_payment_refund;
+    Operation == invoice_payment_chargeback
+->
+    {_Type, Payer} = Payment#domain_InvoicePayment.payer,
+    get_payer_payment_tool(Payer);
+get_payment_tool(_, _CtxInvoice) ->
+    {error, notfound}.
+
+get_payer_payment_tool(#domain_PaymentResourcePayer{resource = #domain_DisposablePaymentResource{payment_tool = PT}}) ->
+    lim_payproc_utils:payment_tool(PT);
+get_payer_payment_tool(#domain_CustomerPayer{payment_tool = PT}) ->
+    lim_payproc_utils:payment_tool(PT);
+get_payer_payment_tool(#domain_RecurrentPayer{payment_tool = PT}) ->
+    lim_payproc_utils:payment_tool(PT).
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
 
 -spec test() -> _.
 
--spec marshal_unmarshal_created_test() -> _.
-marshal_unmarshal_created_test() ->
-    ExpDate = #domain_BankCardExpDate{month = 2, year = 2022},
+-define(PAYMENT_W_PAYER(Payer), #domain_InvoicePayment{
+    id = <<"ID">>,
+    created_at = <<"2000-02-02T12:12:12Z">>,
+    status = {pending, #domain_InvoicePaymentPending{}},
+    cost = #domain_Cash{
+        amount = 42,
+        currency = #domain_CurrencyRef{symbolic_code = <<"CNY">>}
+    },
+    domain_revision = 42,
+    flow = {instant, #domain_InvoicePaymentFlowInstant{}},
+    payer = Payer
+}).
+
+-define(CONTEXT_PAYMENT(Payment), #context_payproc_Context{
+    op = {invoice_payment, #context_payproc_OperationInvoicePayment{}},
+    invoice = #context_payproc_Invoice{
+        payment = #context_payproc_InvoicePayment{
+            payment = Payment
+        }
+    }
+}).
+
+-spec get_payment_tool_test_() -> [_TestGen].
+get_payment_tool_test_() ->
     PaymentTool =
         {bank_card, #domain_BankCard{
             token = <<"Token">>,
-            bin = <<"bin">>,
-            exp_date = ExpDate,
+            bin = <<"654321">>,
+            exp_date = #domain_BankCardExpDate{month = 2, year = 2022},
             last_digits = <<"1234">>
         }},
-    Data0 = #domain_PaymentResourcePayer{
-        resource = #domain_DisposablePaymentResource{payment_tool = PaymentTool},
-        contact_info = #domain_ContactInfo{}
-    },
-    #{payment_tool := _} = unmarshal_payment_processing_invoice_payment_payer_data(Data0),
-    Data1 = #domain_CustomerPayer{
-        customer_id = <<"customer_id">>,
-        customer_binding_id = <<"customer_binding_id">>,
-        rec_payment_tool_id = <<"rec_payment_tool_id">>,
-        payment_tool = PaymentTool,
-        contact_info = #domain_ContactInfo{}
-    },
-    #{payment_tool := _} = unmarshal_payment_processing_invoice_payment_payer_data(Data1),
-    Data2 = #domain_RecurrentPayer{
-        payment_tool = PaymentTool,
-        recurrent_parent = #domain_RecurrentParentPayment{
-            invoice_id = <<"invoice_id">>,
-            payment_id = <<"payment_id">>
-        },
-        contact_info = #domain_ContactInfo{}
-    },
-    #{payment_tool := _} = unmarshal_payment_processing_invoice_payment_payer_data(Data2),
-    Data3 = #domain_RecurrentPayer{
-        payment_tool = {payment_terminal, #domain_PaymentTerminal{}},
-        recurrent_parent = #domain_RecurrentParentPayment{
-            invoice_id = <<"invoice_id">>,
-            payment_id = <<"payment_id">>
-        },
-        contact_info = #domain_ContactInfo{}
-    },
-    #{} = unmarshal_payment_processing_invoice_payment_payer_data(Data3).
+    PaymentResourcePayer =
+        {payment_resource, #domain_PaymentResourcePayer{
+            resource = #domain_DisposablePaymentResource{payment_tool = PaymentTool},
+            contact_info = #domain_ContactInfo{}
+        }},
+    CustomerPayer =
+        {customer, #domain_CustomerPayer{
+            customer_id = <<"customer_id">>,
+            customer_binding_id = <<"customer_binding_id">>,
+            rec_payment_tool_id = <<"rec_payment_tool_id">>,
+            payment_tool = PaymentTool,
+            contact_info = #domain_ContactInfo{}
+        }},
+    RecurrentPayer =
+        {recurrent, #domain_RecurrentPayer{
+            payment_tool = PaymentTool,
+            recurrent_parent = #domain_RecurrentParentPayment{
+                invoice_id = <<"invoice_id">>,
+                payment_id = <<"payment_id">>
+            },
+            contact_info = #domain_ContactInfo{}
+        }},
+    ExpectedValue = {bank_card, #{token => <<"Token">>, exp_date => {2, 2022}}},
+    [
+        ?_assertEqual(
+            {ok, ExpectedValue},
+            get_value(payment_tool, ?CONTEXT_PAYMENT(?PAYMENT_W_PAYER(PaymentResourcePayer)))
+        ),
+        ?_assertEqual(
+            {ok, ExpectedValue},
+            get_value(payment_tool, ?CONTEXT_PAYMENT(?PAYMENT_W_PAYER(CustomerPayer)))
+        ),
+        ?_assertEqual(
+            {ok, ExpectedValue},
+            get_value(payment_tool, ?CONTEXT_PAYMENT(?PAYMENT_W_PAYER(RecurrentPayer)))
+        )
+    ].
+
+-spec get_payment_tool_unsupported_test_() -> _TestGen.
+get_payment_tool_unsupported_test_() ->
+    Payer =
+        {recurrent, #domain_RecurrentPayer{
+            payment_tool = {payment_terminal, #domain_PaymentTerminal{}},
+            recurrent_parent = #domain_RecurrentParentPayment{
+                invoice_id = <<"invoice_id">>,
+                payment_id = <<"payment_id">>
+            },
+            contact_info = #domain_ContactInfo{}
+        }},
+    ?_assertEqual(
+        {error, {unsupported, {payment_tool, payment_terminal}}},
+        get_value(payment_tool, ?CONTEXT_PAYMENT(?PAYMENT_W_PAYER(Payer)))
+    ).
 
 -endif.

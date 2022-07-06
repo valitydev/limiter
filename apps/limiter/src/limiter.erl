@@ -91,11 +91,11 @@ get_handler_specs(ServiceOpts) ->
     [
         {
             maps:get(path, LimiterService, <<"/v1/limiter">>),
-            {{lim_limiter_thrift, 'Limiter'}, lim_handler}
+            {{limproto_limiter_thrift, 'Limiter'}, lim_handler}
         },
         {
             maps:get(path, ConfiguratorService, <<"/v1/configurator">>),
-            {{lim_configurator_thrift, 'Configurator'}, lim_configurator}
+            {{limproto_configurator_thrift, 'Configurator'}, lim_configurator}
         }
     ].
 

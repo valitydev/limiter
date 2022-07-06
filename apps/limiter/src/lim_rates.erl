@@ -20,7 +20,7 @@
     | {error, conversion_error()}.
 convert(#{amount := Amount, currency := Currency}, DestinationCurrency, Config, LimitContext) ->
     ContextType = lim_config_machine:context_type(Config),
-    {ok, Timestamp} = lim_context:get_from_context(ContextType, created_at, LimitContext),
+    {ok, Timestamp} = lim_context:get_value(ContextType, created_at, LimitContext),
     Request = #rate_ConversionRequest{
         source = Currency,
         destination = DestinationCurrency,

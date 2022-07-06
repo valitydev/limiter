@@ -1,6 +1,6 @@
 -module(lim_turnover_processor).
 
--include_lib("limiter_proto/include/lim_limiter_thrift.hrl").
+-include_lib("limiter_proto/include/limproto_limiter_thrift.hrl").
 
 -behaviour(lim_config_machine).
 
@@ -108,13 +108,13 @@ rollback(LimitChange = #limiter_LimitChange{id = LimitID}, Config, LimitContext)
     end).
 
 compute_limit_time_range_location(LimitID, Config, LimitContext) ->
-    {ok, Timestamp} = lim_context:get_from_context(payment_processing, created_at, LimitContext),
+    Timestamp = get_timestamp(Config, LimitContext),
     LimitRangeID = construct_range_id(LimitID, Timestamp, Config, LimitContext),
     TimeRange = lim_config_machine:calculate_time_range(Timestamp, Config),
     {LimitRangeID, TimeRange}.
 
 ensure_limit_time_range(LimitID, Config, LimitContext) ->
-    {ok, Timestamp} = lim_context:get_from_context(payment_processing, created_at, LimitContext),
+    Timestamp = get_timestamp(Config, LimitContext),
     {LimitRangeID, TimeRange} = compute_limit_time_range_location(LimitID, Config, LimitContext),
     CreateParams = genlib_map:compact(#{
         id => LimitRangeID,
@@ -123,6 +123,11 @@ ensure_limit_time_range(LimitID, Config, LimitContext) ->
         currency => currency(Config)
     }),
     unwrap(lim_range_machine:ensure_exists(CreateParams, TimeRange, LimitContext)).
+
+get_timestamp(Config, LimitContext) ->
+    ContextType = lim_config_machine:context_type(Config),
+    {ok, Timestamp} = lim_context:get_value(ContextType, created_at, LimitContext),
+    Timestamp.
 
 construct_plan_id(#limiter_LimitChange{change_id = ChangeID}) ->
     % DISCUSS

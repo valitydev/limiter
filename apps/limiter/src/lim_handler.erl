@@ -1,6 +1,8 @@
 -module(lim_handler).
 
--include_lib("limiter_proto/include/lim_limiter_thrift.hrl").
+-include_lib("limiter_proto/include/limproto_limiter_thrift.hrl").
+-include_lib("limiter_proto/include/limproto_base_thrift.hrl").
+-include_lib("damsel/include/dmsl_base_thrift.hrl").
 
 %% Woody handler
 
@@ -84,7 +86,7 @@ handle_get_error(Error) ->
 
 -spec handle_hold_error(_) -> no_return().
 handle_hold_error({_, {invalid_request, Errors}}) ->
-    woody_error:raise(business, #'InvalidRequest'{errors = Errors});
+    woody_error:raise(business, #base_InvalidRequest{errors = Errors});
 handle_hold_error(Error) ->
     handle_default_error(Error).
 
@@ -92,13 +94,13 @@ handle_hold_error(Error) ->
 handle_commit_error({_, {forbidden_operation_amount, Error}}) ->
     handle_forbidden_operation_amount_error(Error);
 handle_commit_error({_, {invalid_request, Errors}}) ->
-    woody_error:raise(business, #'InvalidRequest'{errors = Errors});
+    woody_error:raise(business, #base_InvalidRequest{errors = Errors});
 handle_commit_error(Error) ->
     handle_default_error(Error).
 
 -spec handle_rollback_error(_) -> no_return().
 handle_rollback_error({_, {invalid_request, Errors}}) ->
-    woody_error:raise(business, #'InvalidRequest'{errors = Errors});
+    woody_error:raise(business, #base_InvalidRequest{errors = Errors});
 handle_rollback_error(Error) ->
     handle_default_error(Error).
 
@@ -122,7 +124,7 @@ handle_forbidden_operation_amount_error(#{
         positive ->
             woody_error:raise(business, #limiter_ForbiddenOperationAmount{
                 amount = Partial,
-                allowed_range = #limiter_base_AmountRange{
+                allowed_range = #base_AmountRange{
                     upper = {inclusive, Full},
                     lower = {inclusive, 0}
                 }
@@ -130,7 +132,7 @@ handle_forbidden_operation_amount_error(#{
         negative ->
             woody_error:raise(business, #limiter_ForbiddenOperationAmount{
                 amount = Partial,
-                allowed_range = #limiter_base_AmountRange{
+                allowed_range = #base_AmountRange{
                     upper = {inclusive, 0},
                     lower = {inclusive, Full}
                 }
