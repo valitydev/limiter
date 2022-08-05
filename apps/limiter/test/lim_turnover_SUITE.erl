@@ -39,6 +39,8 @@
 -export([commit_refund_keep_number_unchanged/1]).
 -export([partial_commit_number_counts_as_single_op/1]).
 
+-export([party_limit_commit_ok/1]).
+
 -type group_name() :: atom().
 -type test_case_name() :: atom().
 
@@ -71,13 +73,15 @@ groups() ->
             commit_inexistent_hold_fails,
             partial_commit_inexistent_hold_fails,
             commit_multirange_limit_ok,
-            commit_with_payment_tool_scope_ok
+            commit_with_payment_tool_scope_ok,
+            party_limit_commit_ok
         ]},
         {withdrawals, [parallel], [
             get_limit_ok,
             hold_ok,
             commit_ok,
-            rollback_ok
+            rollback_ok,
+            party_limit_commit_ok
         ]},
         {cashless, [parallel], [
             commit_number_ok,
@@ -457,6 +461,19 @@ partial_commit_number_counts_as_single_op(C) ->
         LimitState1#limiter_Limit.amount,
         LimitState0#limiter_Limit.amount + 1
     ).
+
+%%
+
+-spec party_limit_commit_ok(config()) -> _.
+party_limit_commit_ok(C) ->
+    ID = configure_limit(?time_range_month(), ?scope([?scope_party()]), C),
+    Context =
+        case get_group_name(C) of
+            default -> ?payproc_ctx_invoice(?cash(10, <<"RUB">>));
+            withdrawals -> ?wthdproc_ctx_withdrawal(?cash(10, <<"RUB">>))
+        end,
+    {ok, {vector, _}} = hold_and_commit(?LIMIT_CHANGE(ID), Context, ?config(client, C)),
+    {ok, #limiter_Limit{}} = lim_client:get(ID, Context, ?config(client, C)).
 
 %%
 
