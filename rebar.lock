@@ -25,7 +25,7 @@
  {<<"jsx">>,{pkg,<<"jsx">>,<<"3.1.0">>},1},
  {<<"limiter_proto">>,
   {git,"https://github.com/valitydev/limiter-proto.git",
-       {ref,"f77551f794efb34cc752716e95394a1a7fa41873"}},
+       {ref,"31de59b17ad20e426b158ace6097e35330926bea"}},
   0},
  {<<"machinery">>,
   {git,"https://github.com/valitydev/machinery-erlang.git",
