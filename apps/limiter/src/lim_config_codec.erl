@@ -124,7 +124,13 @@ marshal_scope_type(wallet) ->
 marshal_scope_type(identity) ->
     {identity, #config_LimitScopeEmptyDetails{}};
 marshal_scope_type(payment_tool) ->
-    {payment_tool, #config_LimitScopeEmptyDetails{}}.
+    {payment_tool, #config_LimitScopeEmptyDetails{}};
+marshal_scope_type(provider) ->
+    {provider, #config_LimitScopeEmptyDetails{}};
+marshal_scope_type(terminal) ->
+    {terminal, #config_LimitScopeEmptyDetails{}};
+marshal_scope_type(payer_contact_email) ->
+    {payer_contact_email, #config_LimitScopeEmptyDetails{}}.
 
 %%
 
@@ -277,7 +283,13 @@ unmarshal_scope_type({wallet, _}) ->
 unmarshal_scope_type({identity, _}) ->
     identity;
 unmarshal_scope_type({payment_tool, _}) ->
-    payment_tool.
+    payment_tool;
+unmarshal_scope_type({provider, _}) ->
+    provider;
+unmarshal_scope_type({terminal, _}) ->
+    terminal;
+unmarshal_scope_type({payer_contact_email, _}) ->
+    payer_contact_email.
 
 %%
 

@@ -1,7 +1,9 @@
 -module(lim_wthdproc_context).
 
 -include_lib("limiter_proto/include/limproto_context_withdrawal_thrift.hrl").
+-include_lib("limiter_proto/include/limproto_base_thrift.hrl").
 -include_lib("damsel/include/dmsl_wthd_domain_thrift.hrl").
+-include_lib("damsel/include/dmsl_domain_thrift.hrl").
 
 -behaviour(lim_context).
 -export([get_operation/1]).
@@ -40,12 +42,32 @@ get_value(cost, Operation, Context) ->
     get_cost(Operation, Context);
 get_value(payment_tool, Operation, Context) ->
     get_payment_tool(Operation, Context);
+get_value(identity_id, Operation, Context) ->
+    get_identity_id(Operation, Context);
+get_value(wallet_id, Operation, Context) ->
+    get_wallet_id(Operation, Context);
+get_value(provider_id, Operation, Context) ->
+    get_provider_id(Operation, Context);
+get_value(terminal_id, Operation, Context) ->
+    get_terminal_id(Operation, Context);
 get_value(ValueName, _Operation, _Context) ->
     {error, {unsupported, ValueName}}.
 
 -define(WITHDRAWAL(V), #context_withdrawal_Context{
     withdrawal = #context_withdrawal_Withdrawal{
         withdrawal = V = #wthd_domain_Withdrawal{}
+    }
+}).
+
+-define(WALLET_ID(V), #context_withdrawal_Context{
+    withdrawal = #context_withdrawal_Withdrawal{
+        wallet_id = V
+    }
+}).
+
+-define(ROUTE(V), #context_withdrawal_Context{
+    withdrawal = #context_withdrawal_Withdrawal{
+        route = V = #base_Route{}
     }
 }).
 
@@ -70,4 +92,25 @@ get_payment_tool(withdrawal, ?WITHDRAWAL(Wthd)) ->
     Destination = Wthd#wthd_domain_Withdrawal.destination,
     lim_payproc_utils:payment_tool(Destination);
 get_payment_tool(_, _CtxWithdrawal) ->
+    {error, notfound}.
+
+get_identity_id(withdrawal, ?WITHDRAWAL(Wthd)) ->
+    Identity = Wthd#wthd_domain_Withdrawal.sender,
+    {ok, Identity#wthd_domain_Identity.id};
+get_identity_id(_, _CtxWithdrawal) ->
+    {error, notfound}.
+
+get_wallet_id(withdrawal, ?WALLET_ID(WalletID)) ->
+    {ok, WalletID};
+get_wallet_id(_, _CtxWithdrawal) ->
+    {error, notfound}.
+
+get_provider_id(withdrawal, ?ROUTE(Route)) ->
+    lim_context_utils:route_provider_id(Route);
+get_provider_id(_, _CtxWithdrawal) ->
+    {error, notfound}.
+
+get_terminal_id(withdrawal, ?ROUTE(Route)) ->
+    lim_context_utils:route_terminal_id(Route);
+get_terminal_id(_, _CtxWithdrawal) ->
     {error, notfound}.

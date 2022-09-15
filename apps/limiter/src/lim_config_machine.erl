@@ -38,7 +38,7 @@
 
 -type limit_type() :: {turnover, lim_turnover_metric:t()}.
 -type limit_scope() :: ordsets:ordset(limit_scope_type()).
--type limit_scope_type() :: party | shop | wallet | identity | payment_tool.
+-type limit_scope_type() :: party | shop | wallet | identity | payment_tool | provider | terminal | payer_contact_email.
 -type shard_size() :: pos_integer().
 -type shard_id() :: binary().
 -type prefix() :: binary().
@@ -564,6 +564,31 @@ append_context_bits(shop, Bits) ->
 append_context_bits(payment_tool, Bits) ->
     ordsets:add_element(
         {from, payment_tool},
+        Bits
+    );
+append_context_bits(identity, Bits) ->
+    ordsets:add_element(
+        {from, identity_id},
+        Bits
+    );
+append_context_bits(wallet, Bits) ->
+    ordsets:add_element(
+        {from, wallet_id},
+        Bits
+    );
+append_context_bits(provider, Bits) ->
+    ordsets:add_element(
+        {from, provider_id},
+        Bits
+    );
+append_context_bits(terminal, Bits) ->
+    ordsets:add_element(
+        {from, terminal_id},
+        Bits
+    );
+append_context_bits(payer_contact_email, Bits) ->
+    ordsets:add_element(
+        {from, payer_contact_email},
         Bits
     ).
 

@@ -16,6 +16,7 @@
 -export([legacy_create_config/1]).
 -export([create_config/1]).
 -export([create_config_single_scope/1]).
+-export([create_config_multi_scope/1]).
 -export([get_config/1]).
 -export([get_inexistent_config/1]).
 
@@ -37,6 +38,7 @@ groups() ->
             legacy_create_config,
             create_config,
             create_config_single_scope,
+            create_config_multi_scope,
             get_config,
             get_inexistent_config
         ]}
@@ -141,6 +143,24 @@ create_config_single_scope(C) ->
         scope = Scope
     }} = lim_client:create_config(Params, Client),
     ?assertEqual(?scope([?scope_party()]), Scope).
+
+-spec create_config_multi_scope(config()) -> _.
+create_config_multi_scope(C) ->
+    Client = lim_client:new(),
+    Params = #config_LimitConfigParams{
+        id = ?config(limit_id, C),
+        started_at = <<"2000-01-01T00:00:00Z">>,
+        time_range_type = ?time_range_week(),
+        shard_size = 1,
+        type = ?lim_type_turnover(),
+        scope = {multi, ordsets:from_list([?scope_terminal(), ?scope_payment_tool()])},
+        context_type = ?ctx_type_payproc(),
+        op_behaviour = ?op_behaviour()
+    },
+    {ok, #config_LimitConfig{
+        scope = Scope
+    }} = lim_client:create_config(Params, Client),
+    ?assertEqual(?scope([?scope_terminal(), ?scope_payment_tool()]), Scope).
 
 -spec get_config(config()) -> _.
 get_config(C) ->
