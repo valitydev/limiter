@@ -36,6 +36,8 @@
 -define(scope_provider(), {provider, #config_LimitScopeEmptyDetails{}}).
 -define(scope_terminal(), {terminal, #config_LimitScopeEmptyDetails{}}).
 -define(scope_payer_contact_email(), {payer_contact_email, #config_LimitScopeEmptyDetails{}}).
+-define(scope_identity(), {identity, #config_LimitScopeEmptyDetails{}}).
+-define(scope_wallet(), {wallet, #config_LimitScopeEmptyDetails{}}).
 
 -define(lim_type_turnover(), ?lim_type_turnover(?turnover_metric_number())).
 -define(lim_type_turnover(Metric),
@@ -226,7 +228,8 @@
         op = ?op_withdrawal,
         withdrawal = #context_withdrawal_Withdrawal{
             withdrawal = ?withdrawal(Cost),
-            route = ?route()
+            route = ?route(),
+            wallet_id = ?string
         }
     }
 }).
