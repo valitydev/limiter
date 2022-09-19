@@ -572,20 +572,26 @@ append_context_bits(identity, Bits) ->
         Bits
     );
 append_context_bits(wallet, Bits) ->
-    ordsets:add_element(
-        {from, wallet_id},
-        Bits
-    );
+    lists:foldl(fun ordsets:add_element/2, Bits, [
+        % NOTE
+        % Wallet scope implies identity scope.
+        % Also we need to preserve order between identity / wallet to ensure backwards compatibility.
+        {order, 1, {from, identity_id}},
+        {order, 2, {from, wallet_id}}
+    ]);
 append_context_bits(provider, Bits) ->
     ordsets:add_element(
         {from, provider_id},
         Bits
     );
 append_context_bits(terminal, Bits) ->
-    ordsets:add_element(
-        {from, terminal_id},
-        Bits
-    );
+    lists:foldl(fun ordsets:add_element/2, Bits, [
+        % NOTE
+        % Terminal scope implies provider scope.
+        % Also we need to preserve order between provider / terminal to ensure backwards compatibility.
+        {order, 1, {from, provider_id}},
+        {order, 2, {from, terminal_id}}
+    ]);
 append_context_bits(payer_contact_email, Bits) ->
     ordsets:add_element(
         {from, payer_contact_email},
