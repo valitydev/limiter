@@ -180,7 +180,8 @@
         invoice = #context_payproc_Invoice{
             invoice = ?invoice(?string, ?string, ?cash(10)),
             payment = #context_payproc_InvoicePayment{
-                payment = Payment
+                payment = Payment,
+                route = ?route()
             }
         }
     }

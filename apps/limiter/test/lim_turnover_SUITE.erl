@@ -46,6 +46,7 @@
 
 -export([commit_with_identity_scope_ok/1]).
 -export([commit_with_wallet_scope_ok/1]).
+-export([commit_with_multi_scope_ok/1]).
 
 -type group_name() :: atom().
 -type test_case_name() :: atom().
@@ -83,7 +84,8 @@ groups() ->
             commit_with_party_scope_ok,
             commit_with_provider_scope_ok,
             commit_with_terminal_scope_ok,
-            commit_with_email_scope_ok
+            commit_with_email_scope_ok,
+            commit_with_multi_scope_ok
         ]},
         {withdrawals, [parallel], [
             get_limit_ok,
@@ -519,6 +521,37 @@ commit_with_wallet_scope_ok(C) ->
     Context = ?wthdproc_ctx_withdrawal(?cash(10, <<"RUB">>)),
     {ok, {vector, _}} = hold_and_commit(?LIMIT_CHANGE(ID), Context, ?config(client, C)),
     {ok, #limiter_Limit{}} = lim_client:get(ID, Context, ?config(client, C)).
+
+-spec commit_with_multi_scope_ok(config()) -> _.
+commit_with_multi_scope_ok(C) ->
+    Client = ?config(client, C),
+    ID = configure_limit(?time_range_week(), ?scope([?scope_provider(), ?scope_payment_tool()]), C),
+    Context1 = ?payproc_ctx_payment(
+        ?invoice_payment(?cash(10), ?cash(10), ?bank_card(<<"Token">>, 2, 2022))
+    ),
+    Context2 = ?payproc_ctx_payment(
+        ?invoice_payment(?cash(10), ?cash(10), ?bank_card(<<"OtherToken">>, 2, 2022))
+    ),
+    Context3 = ?payproc_ctx_payment(
+        ?invoice_payment(?cash(10), ?cash(10), ?bank_card(?string, 3, 2022))
+    ),
+    Context4 = ?payproc_ctx_payment(
+        ?invoice_payment(?cash(10), ?cash(10), ?bank_card(?string))
+    ),
+    Context5 = ?payproc_ctx_payment(
+        ?invoice_payment(?cash(10), ?cash(10), ?digital_wallet(<<"ID42">>, <<"Pepal">>))
+    ),
+    {ok, LimitState0} = lim_client:get(ID, Context1, Client),
+    _ = hold_and_commit(?LIMIT_CHANGE(ID, 1), Context1, Client),
+    _ = hold_and_commit(?LIMIT_CHANGE(ID, 2), Context2, Client),
+    _ = hold_and_commit(?LIMIT_CHANGE(ID, 3), Context3, Client),
+    _ = hold_and_commit(?LIMIT_CHANGE(ID, 4), Context4, Client),
+    _ = hold_and_commit(?LIMIT_CHANGE(ID, 5), Context5, Client),
+    {ok, LimitState1} = lim_client:get(ID, Context1, Client),
+    ?assertEqual(
+        LimitState1#limiter_Limit.amount,
+        LimitState0#limiter_Limit.amount + 10
+    ).
 
 %%
 
