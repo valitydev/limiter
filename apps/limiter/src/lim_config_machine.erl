@@ -541,7 +541,7 @@ append_prefix(Fragment, Acc) ->
     <<Acc/binary, "/", Fragment/binary>>.
 
 -type context_bit() ::
-    {from, _ValueName :: atom()}
+    {from, _ValueName :: atom() | {prefix, prefix()}}
     | {order, integer(), context_bit()}.
 
 -spec enumerate_context_bits(limit_scope()) -> ordsets:ordset(context_bit()).
@@ -567,36 +567,36 @@ append_context_bits(payment_tool, Bits) ->
         Bits
     );
 append_context_bits(identity, Bits) ->
-    ordsets:add_element(
-        {from, identity_id},
-        Bits
-    );
+    lists:foldl(fun ordsets:add_element/2, Bits, [
+        {order, 1, {from, {prefix, <<"identity">>}}},
+        {order, 2, {from, identity_id}}
+    ]);
 append_context_bits(wallet, Bits) ->
     lists:foldl(fun ordsets:add_element/2, Bits, [
         % NOTE
         % Wallet scope implies identity scope.
-        % Also we need to preserve order between identity / wallet to ensure backwards compatibility.
-        {order, 1, {from, identity_id}},
-        {order, 2, {from, wallet_id}}
+        {order, 1, {from, {prefix, <<"wallet">>}}},
+        {order, 2, {from, identity_id}},
+        {order, 3, {from, wallet_id}}
     ]);
 append_context_bits(provider, Bits) ->
-    ordsets:add_element(
-        {from, provider_id},
-        Bits
-    );
+    lists:foldl(fun ordsets:add_element/2, Bits, [
+        {order, 1, {from, {prefix, <<"provider">>}}},
+        {order, 2, {from, provider_id}}
+    ]);
 append_context_bits(terminal, Bits) ->
     lists:foldl(fun ordsets:add_element/2, Bits, [
         % NOTE
         % Terminal scope implies provider scope.
-        % Also we need to preserve order between provider / terminal to ensure backwards compatibility.
-        {order, 1, {from, provider_id}},
-        {order, 2, {from, terminal_id}}
+        {order, 1, {from, {prefix, <<"terminal">>}}},
+        {order, 2, {from, provider_id}},
+        {order, 3, {from, terminal_id}}
     ]);
 append_context_bits(payer_contact_email, Bits) ->
-    ordsets:add_element(
-        {from, payer_contact_email},
-        Bits
-    ).
+    lists:foldl(fun ordsets:add_element/2, Bits, [
+        {order, 1, {from, {prefix, <<"payer_contact_email">>}}},
+        {order, 2, {from, payer_contact_email}}
+    ]).
 
 -spec extract_context_bit(context_bit(), context_type(), lim_context()) -> {ok, binary()}.
 extract_context_bit({order, _, Bit}, ContextType, LimitContext) ->
@@ -611,6 +611,8 @@ extract_context_bit({from, payment_tool}, ContextType, LimitContext) ->
         {digital_wallet, #{id := ID, service := Service}} ->
             {ok, mk_scope_component([<<"DW">>, Service, ID])}
     end;
+extract_context_bit({from, {prefix, Prefix}}, _ContextType, _LimitContext) ->
+    {ok, Prefix};
 extract_context_bit({from, ValueName}, ContextType, LimitContext) ->
     lim_context:get_value(ContextType, ValueName, LimitContext).
 
