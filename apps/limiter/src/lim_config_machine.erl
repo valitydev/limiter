@@ -544,67 +544,102 @@ append_prefix(Fragment, Acc) ->
     {from, _ValueName :: atom()}
     | {prefix, prefix()}.
 
--type context_bit_command() ::
-    {add, context_bit()}
-    | {remove, context_bit()}.
+-type context_data() :: #{
+    id := limit_scope_type(),
+    order := integer(),
+    bits := [context_bit()],
+    overwrite => limit_scope_type()
+}.
 
 -spec enumerate_context_bits(limit_scope()) -> [context_bit()].
 enumerate_context_bits(Types) ->
-    Commands = ordsets:fold(fun append_context_bit_commands/2, [], Types),
-    {AddCommands, RemoveCommands} = lists:foldl(fun split_commands/2, {[], []}, Commands),
-    Filtered = lists:filter(fun({_, Bit}) -> not lists:member({remove, Bit}, RemoveCommands) end, AddCommands),
-    _ = logger:error("[enumerate_context_bits][~p:~p] filtered: ~p", [Types, Commands, Filtered]),
-    lists:map(fun({_, Bit}) -> Bit end, Filtered).
+    Data = ordsets:fold(fun append_context_data/2, sets:new(), Types),
+    Filtered = sets:filter(fun(#{id := ID}) -> not need_overwrite(ID, Data) end, Data),
+    lists:foldl(fun(#{bits := Bits}, Acc) -> Acc ++ Bits end, [], sort_data(sets:to_list(Filtered))).
 
-split_commands(Cmd = {add, _}, {Add, Remove}) ->
-    case lists:member(Cmd, Add) of
-        true ->
-            {Add, Remove};
-        false ->
-            {Add ++ [Cmd], Remove}
-    end;
-split_commands(Cmd = {remove, _}, {Add, Remove}) ->
-    case lists:member(Cmd, Remove) of
-        true ->
-            {Add, Remove};
-        false ->
-            {Add, Remove ++ [Cmd]}
-    end.
+need_overwrite(Type, Data) ->
+    {_, Result} = sets:fold(
+        fun
+            (_, Result = {_, true}) -> Result;
+            (#{overwrite := Overwrite}, {Overwrite, _}) -> {Overwrite, true};
+            (_, Result) -> Result
+        end,
+        {Type, false},
+        Data
+    ),
+    Result.
 
--spec append_context_bit_commands(limit_scope_type(), [context_bit_command()]) -> [context_bit_command()].
-append_context_bit_commands(party, Bits) ->
-    Bits ++ [{add, {from, owner_id}}];
-append_context_bit_commands(shop, Bits) ->
+sort_data(Data) ->
+    lists:sort(
+        fun
+            (#{order := A}, #{order := B}) when A =< B -> true;
+            (_, _) -> false
+        end,
+        Data
+    ).
+
+-spec append_context_data(limit_scope_type(), sets:set(context_data())) -> sets:set(context_data()).
+append_context_data(Type = party, Bits) ->
+    sets:add_element(
+        #{id => Type, order => 1, bits => [{from, owner_id}]},
+        Bits
+    );
+append_context_data(Type = shop, Bits) ->
     % NOTE
     % Shop scope implies party scope.
     % Also we need to preserve order between party / shop to ensure backwards compatibility.
-    Bits ++ [{add, {from, owner_id}}, {add, {from, shop_id}}];
-append_context_bit_commands(payment_tool, Bits) ->
-    Bits ++ [{add, {from, payment_tool}}];
-append_context_bit_commands(identity, Bits) ->
-    Bits ++ [{add, {prefix, <<"identity">>}}, {add, {from, identity_id}}];
-append_context_bit_commands(wallet, Bits) ->
-    Bits ++ [
-        % NOTE
-        % Wallet scope implies identity scope.
-        {remove, {prefix, <<"identity">>}},
-        {add, {prefix, <<"wallet">>}},
-        {add, {from, identity_id}},
-        {add, {from, wallet_id}}
-    ];
-append_context_bit_commands(provider, Bits) ->
-    Bits ++ [{add, {prefix, <<"provider">>}}, {add, {from, provider_id}}];
-append_context_bit_commands(terminal, Bits) ->
-    Bits ++ [
-        % NOTE
-        % Terminal scope implies provider scope.
-        {remove, {prefix, <<"provider">>}},
-        {add, {prefix, <<"terminal">>}},
-        {add, {from, provider_id}},
-        {add, {from, terminal_id}}
-    ];
-append_context_bit_commands(payer_contact_email, Bits) ->
-    Bits ++ [{add, {prefix, <<"payer_contact_email">>}}, {add, {from, payer_contact_email}}].
+    sets:add_element(
+        #{id => Type, order => 2, bits => [{from, owner_id}, {from, shop_id}], overwrite => party},
+        Bits
+    );
+append_context_data(Type = payment_tool, Bits) ->
+    sets:add_element(
+        #{id => Type, order => 7, bits => [{from, payment_tool}]},
+        Bits
+    );
+append_context_data(Type = identity, Bits) ->
+    sets:add_element(
+        #{id => Type, order => 2, bits => [{prefix, <<"identity">>}, {from, identity_id}]},
+        Bits
+    );
+append_context_data(Type = wallet, Bits) ->
+    sets:add_element(
+        #{
+            id => Type,
+            order => 3,
+            bits => [
+                {prefix, <<"wallet">>},
+                {from, identity_id},
+                {from, wallet_id}
+            ],
+            overwrite => identity
+        },
+        Bits
+    );
+append_context_data(Type = provider, Bits) ->
+    sets:add_element(
+        #{id => Type, order => 4, bits => [{prefix, <<"provider">>}, {from, provider_id}]},
+        Bits
+    );
+append_context_data(Type = terminal, Bits) ->
+    sets:add_element(
+        #{
+            id => Type,
+            order => 5,
+            bits => [
+                {prefix, <<"terminal">>},
+                {from, provider_id},
+                {from, terminal_id}
+            ],
+            overwrite => provider
+        },
+        Bits
+    );
+append_context_data(Type = payer_contact_email, Bits) ->
+    sets:add_element(
+        #{id => Type, order => 6, bits => [{prefix, <<"payer_contact_email">>}, {from, payer_contact_email}]},
+        Bits
+    ).
 
 -spec extract_context_bit(context_bit(), context_type(), lim_context()) -> {ok, binary()}.
 extract_context_bit({prefix, Prefix}, _ContextType, _LimitContext) ->
@@ -871,17 +906,21 @@ check_calculate_year_shard_id_test() ->
     payer = Payer
 }).
 
--define(PAYER(PaymentTool), {payment_resource, #domain_PaymentResourcePayer{
-    resource = #domain_DisposablePaymentResource{payment_tool = PaymentTool},
-    contact_info = #domain_ContactInfo{email = <<"email">>}
-}}).
+-define(PAYER(PaymentTool),
+    {payment_resource, #domain_PaymentResourcePayer{
+        resource = #domain_DisposablePaymentResource{payment_tool = PaymentTool},
+        contact_info = #domain_ContactInfo{email = <<"email">>}
+    }}
+).
 
--define(PAYMENT_TOOL, {bank_card, #domain_BankCard{
-    token = <<"token">>,
-    bin = <<"****">>,
-    last_digits = <<"last_digits">>,
-    exp_date = #domain_BankCardExpDate{month = 2, year = 2022}
-}}).
+-define(PAYMENT_TOOL,
+    {bank_card, #domain_BankCard{
+        token = <<"token">>,
+        bin = <<"****">>,
+        last_digits = <<"last_digits">>,
+        exp_date = #domain_BankCardExpDate{month = 2, year = 2022}
+    }}
+).
 
 -define(WITHDRAWAL_CTX(Withdrawal, WalletID, Route), #limiter_LimitContext{
     withdrawal_processing = #context_withdrawal_Context{
@@ -931,16 +970,20 @@ preserve_scope_prefix_order_test_() ->
 
 -spec prefix_content_test_() -> [_TestGen].
 prefix_content_test_() ->
-    Context = #{context => ?PAYPROC_CTX_INVOICE(
-        ?INVOICE(<<"OWNER">>, <<"SHOP">>),
-        ?PAYMENT(?PAYER(?PAYMENT_TOOL)),
-        ?ROUTE(22, 2)
-    )},
-    WithdrawalContext = #{context => ?WITHDRAWAL_CTX(
-        ?WITHDRAWAL(<<"OWNER">>, <<"IDENTITY">>, ?PAYMENT_TOOL),
-        <<"WALLET">>,
-        ?ROUTE(22, 2)
-    )},
+    Context = #{
+        context => ?PAYPROC_CTX_INVOICE(
+            ?INVOICE(<<"OWNER">>, <<"SHOP">>),
+            ?PAYMENT(?PAYER(?PAYMENT_TOOL)),
+            ?ROUTE(22, 2)
+        )
+    },
+    WithdrawalContext = #{
+        context => ?WITHDRAWAL_CTX(
+            ?WITHDRAWAL(<<"OWNER">>, <<"IDENTITY">>, ?PAYMENT_TOOL),
+            <<"WALLET">>,
+            ?ROUTE(22, 2)
+        )
+    },
     [
         ?_assertEqual(
             <<"/terminal/22/2">>,
