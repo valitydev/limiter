@@ -195,7 +195,7 @@ get_payer_contact_email(Operation, ?INVOICE_PAYMENT(Payment)) when
 ->
     {_Type, Payer} = Payment#domain_InvoicePayment.payer,
     CI = get_payer_contact_info(Payer),
-    {ok, genlib_string:to_lower(CI#domain_ContactInfo.email)};
+    {ok, string:lowercase(CI#domain_ContactInfo.email)};
 get_payer_contact_email(_, _CtxInvoice) ->
     {error, notfound}.
 
