@@ -544,74 +544,49 @@ append_prefix(Fragment, Acc) ->
     {from, _ValueName :: atom()}
     | {prefix, prefix()}.
 
--type context_data() :: #{
-    id := limit_scope_type(),
-    bits := [context_bit()],
-    overwrite => limit_scope_type()
-}.
-
 -spec enumerate_context_bits(limit_scope()) -> [context_bit()].
 enumerate_context_bits(Types) ->
     TypesOrder = [party, shop, identity, wallet, payment_tool, provider, terminal, payer_contact_email],
     SortedTypes = lists:filter(fun(T) -> ordsets:is_element(T, Types) end, TypesOrder),
-    Data = lists:foldl(fun append_context_data/2, [], SortedTypes),
-    Filtered = lists:filter(fun(#{id := ID}) -> not need_overwrite(ID, Data) end, Data),
-    lists:foldl(fun(#{bits := Bits}, Acc) -> Acc ++ Bits end, [], Filtered).
+    SquashedTypes = squash_scope_types(SortedTypes),
+    lists:flatmap(fun get_context_bits/1, SquashedTypes).
 
-need_overwrite(Type, Data) ->
-    {_, Result} = lists:foldl(
-        fun
-            (_, Result = {_, true}) -> Result;
-            (#{overwrite := Overwrite}, {Overwrite, _}) -> {Overwrite, true};
-            (_, Result) -> Result
-        end,
-        {Type, false},
-        Data
-    ),
-    Result.
-
--spec append_context_data(limit_scope_type(), [context_data()]) -> [context_data()].
-append_context_data(Type = party, Bits) ->
-    Bits ++ [#{id => Type, bits => [{from, owner_id}]}];
-append_context_data(Type = shop, Bits) ->
+squash_scope_types([party, shop | Rest]) ->
     % NOTE
     % Shop scope implies party scope.
-    % Also we need to preserve order between party / shop to ensure backwards compatibility.
-    Bits ++ [#{id => Type, bits => [{from, owner_id}, {from, shop_id}], overwrite => party}];
-append_context_data(Type = payment_tool, Bits) ->
-    Bits ++ [#{id => Type, bits => [{from, payment_tool}]}];
-append_context_data(Type = identity, Bits) ->
-    Bits ++ [#{id => Type, bits => [{prefix, <<"identity">>}, {from, identity_id}]}];
-append_context_data(Type = wallet, Bits) ->
-    Bits ++
-        [
-            #{
-                id => Type,
-                bits => [
-                    {prefix, <<"wallet">>},
-                    {from, identity_id},
-                    {from, wallet_id}
-                ],
-                overwrite => identity
-            }
-        ];
-append_context_data(Type = provider, Bits) ->
-    Bits ++ [#{id => Type, bits => [{prefix, <<"provider">>}, {from, provider_id}]}];
-append_context_data(Type = terminal, Bits) ->
-    Bits ++
-        [
-            #{
-                id => Type,
-                bits => [
-                    {prefix, <<"terminal">>},
-                    {from, provider_id},
-                    {from, terminal_id}
-                ],
-                overwrite => provider
-            }
-        ];
-append_context_data(Type = payer_contact_email, Bits) ->
-    Bits ++ [#{id => Type, bits => [{prefix, <<"payer_contact_email">>}, {from, payer_contact_email}]}].
+    [shop | squash_scope_types(Rest)];
+squash_scope_types([identity, wallet | Rest]) ->
+    % NOTE
+    % Wallet scope implies identity scope.
+    [wallet | squash_scope_types(Rest)];
+squash_scope_types([provider, terminal | Rest]) ->
+    % NOTE
+    % Provider scope implies identity scope.
+    [terminal | squash_scope_types(Rest)];
+squash_scope_types([Type | Rest]) ->
+    [Type | squash_scope_types(Rest)];
+squash_scope_types([]) ->
+    [].
+
+-spec get_context_bits(limit_scope_type()) -> [context_bit()].
+get_context_bits(party) ->
+    [{from, owner_id}];
+get_context_bits(shop) ->
+    % NOTE
+    % We need to preserve order between party / shop to ensure backwards compatibility.
+    [{from, owner_id}, {from, shop_id}];
+get_context_bits(payment_tool) ->
+    [{from, payment_tool}];
+get_context_bits(identity) ->
+    [{prefix, <<"identity">>}, {from, identity_id}];
+get_context_bits(wallet) ->
+    [{prefix, <<"wallet">>}, {from, identity_id}, {from, wallet_id}];
+get_context_bits(provider) ->
+    [{prefix, <<"provider">>}, {from, provider_id}];
+get_context_bits(terminal) ->
+    [{prefix, <<"terminal">>}, {from, provider_id}, {from, terminal_id}];
+get_context_bits(payer_contact_email) ->
+    [{prefix, <<"payer_contact_email">>}, {from, payer_contact_email}].
 
 -spec extract_context_bit(context_bit(), context_type(), lim_context()) -> {ok, binary()}.
 extract_context_bit({prefix, Prefix}, _ContextType, _LimitContext) ->
