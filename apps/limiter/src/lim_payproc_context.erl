@@ -1,6 +1,7 @@
 -module(lim_payproc_context).
 
 -include_lib("limiter_proto/include/limproto_context_payproc_thrift.hrl").
+-include_lib("limiter_proto/include/limproto_base_thrift.hrl").
 -include_lib("damsel/include/dmsl_domain_thrift.hrl").
 
 -behaviour(lim_context).
@@ -49,6 +50,12 @@ get_value(capture_cost, Operation, Context) ->
     get_capture_cost(Operation, Context);
 get_value(payment_tool, Operation, Context) ->
     get_payment_tool(Operation, Context);
+get_value(provider_id, Operation, Context) ->
+    get_provider_id(Operation, Context);
+get_value(terminal_id, Operation, Context) ->
+    get_terminal_id(Operation, Context);
+get_value(payer_contact_email, Operation, Context) ->
+    get_payer_contact_email(Operation, Context);
 get_value(ValueName, _Operation, _Context) ->
     {error, {unsupported, ValueName}}.
 
@@ -87,6 +94,12 @@ get_value(ValueName, _Operation, _Context) ->
 -define(INVOICE_PAYMENT_CHARGEBACK(V), #context_payproc_Context{
     invoice = #context_payproc_Invoice{
         payment = #context_payproc_InvoicePayment{chargeback = V = #domain_InvoicePaymentChargeback{}}
+    }
+}).
+
+-define(INVOICE_PAYMENT_ROUTE(V), #context_payproc_Context{
+    invoice = #context_payproc_Invoice{
+        payment = #context_payproc_InvoicePayment{route = V = #base_Route{}}
     }
 }).
 
@@ -153,6 +166,45 @@ get_payer_payment_tool(#domain_CustomerPayer{payment_tool = PT}) ->
     lim_payproc_utils:payment_tool(PT);
 get_payer_payment_tool(#domain_RecurrentPayer{payment_tool = PT}) ->
     lim_payproc_utils:payment_tool(PT).
+
+get_provider_id(Operation, ?INVOICE_PAYMENT_ROUTE(Route)) when
+    Operation == invoice_payment;
+    Operation == invoice_payment_adjustment;
+    Operation == invoice_payment_refund;
+    Operation == invoice_payment_chargeback
+->
+    lim_context_utils:route_provider_id(Route);
+get_provider_id(_, _CtxInvoice) ->
+    {error, notfound}.
+
+get_terminal_id(Operation, ?INVOICE_PAYMENT_ROUTE(Route)) when
+    Operation == invoice_payment;
+    Operation == invoice_payment_adjustment;
+    Operation == invoice_payment_refund;
+    Operation == invoice_payment_chargeback
+->
+    lim_context_utils:route_terminal_id(Route);
+get_terminal_id(_, _CtxInvoice) ->
+    {error, notfound}.
+
+get_payer_contact_email(Operation, ?INVOICE_PAYMENT(Payment)) when
+    Operation == invoice_payment;
+    Operation == invoice_payment_adjustment;
+    Operation == invoice_payment_refund;
+    Operation == invoice_payment_chargeback
+->
+    {_Type, Payer} = Payment#domain_InvoicePayment.payer,
+    CI = get_payer_contact_info(Payer),
+    {ok, string:lowercase(CI#domain_ContactInfo.email)};
+get_payer_contact_email(_, _CtxInvoice) ->
+    {error, notfound}.
+
+get_payer_contact_info(#domain_PaymentResourcePayer{contact_info = CI}) ->
+    CI;
+get_payer_contact_info(#domain_CustomerPayer{contact_info = CI}) ->
+    CI;
+get_payer_contact_info(#domain_RecurrentPayer{contact_info = CI}) ->
+    CI.
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").

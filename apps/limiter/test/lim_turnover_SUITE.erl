@@ -39,7 +39,14 @@
 -export([commit_refund_keep_number_unchanged/1]).
 -export([partial_commit_number_counts_as_single_op/1]).
 
--export([party_limit_commit_ok/1]).
+-export([commit_with_party_scope_ok/1]).
+-export([commit_with_provider_scope_ok/1]).
+-export([commit_with_terminal_scope_ok/1]).
+-export([commit_with_email_scope_ok/1]).
+
+-export([commit_with_identity_scope_ok/1]).
+-export([commit_with_wallet_scope_ok/1]).
+-export([commit_with_multi_scope_ok/1]).
 
 -type group_name() :: atom().
 -type test_case_name() :: atom().
@@ -74,14 +81,22 @@ groups() ->
             partial_commit_inexistent_hold_fails,
             commit_multirange_limit_ok,
             commit_with_payment_tool_scope_ok,
-            party_limit_commit_ok
+            commit_with_party_scope_ok,
+            commit_with_provider_scope_ok,
+            commit_with_terminal_scope_ok,
+            commit_with_email_scope_ok,
+            commit_with_multi_scope_ok
         ]},
         {withdrawals, [parallel], [
             get_limit_ok,
             hold_ok,
             commit_ok,
             rollback_ok,
-            party_limit_commit_ok
+            commit_with_party_scope_ok,
+            commit_with_provider_scope_ok,
+            commit_with_terminal_scope_ok,
+            commit_with_identity_scope_ok,
+            commit_with_wallet_scope_ok
         ]},
         {cashless, [parallel], [
             commit_number_ok,
@@ -464,16 +479,79 @@ partial_commit_number_counts_as_single_op(C) ->
 
 %%
 
--spec party_limit_commit_ok(config()) -> _.
-party_limit_commit_ok(C) ->
-    ID = configure_limit(?time_range_month(), ?scope([?scope_party()]), C),
+-spec commit_with_party_scope_ok(config()) -> _.
+commit_with_party_scope_ok(C) ->
+    _ = commit_with_some_scope(?scope([?scope_party()]), C).
+
+-spec commit_with_provider_scope_ok(config()) -> _.
+commit_with_provider_scope_ok(C) ->
+    _ = commit_with_some_scope(?scope([?scope_provider()]), C).
+
+-spec commit_with_terminal_scope_ok(config()) -> _.
+commit_with_terminal_scope_ok(C) ->
+    _ = commit_with_some_scope(?scope([?scope_terminal()]), C).
+
+commit_with_some_scope(Scope, C) ->
+    ID = configure_limit(?time_range_month(), Scope, C),
     Context =
         case get_group_name(C) of
-            default -> ?payproc_ctx_invoice(?cash(10, <<"RUB">>));
+            default -> ?payproc_ctx_payment(?cash(10, <<"RUB">>), ?cash(10, <<"RUB">>));
             withdrawals -> ?wthdproc_ctx_withdrawal(?cash(10, <<"RUB">>))
         end,
     {ok, {vector, _}} = hold_and_commit(?LIMIT_CHANGE(ID), Context, ?config(client, C)),
     {ok, #limiter_Limit{}} = lim_client:get(ID, Context, ?config(client, C)).
+
+-spec commit_with_email_scope_ok(config()) -> _.
+commit_with_email_scope_ok(C) ->
+    ID = configure_limit(?time_range_month(), ?scope([?scope_payer_contact_email()]), C),
+    Context = ?payproc_ctx_payment(?cash(10, <<"RUB">>), ?cash(10, <<"RUB">>)),
+    {ok, {vector, _}} = hold_and_commit(?LIMIT_CHANGE(ID), Context, ?config(client, C)),
+    {ok, #limiter_Limit{}} = lim_client:get(ID, Context, ?config(client, C)).
+
+-spec commit_with_identity_scope_ok(config()) -> _.
+commit_with_identity_scope_ok(C) ->
+    ID = configure_limit(?time_range_month(), ?scope([?scope_identity()]), C),
+    Context = ?wthdproc_ctx_withdrawal(?cash(10, <<"RUB">>)),
+    {ok, {vector, _}} = hold_and_commit(?LIMIT_CHANGE(ID), Context, ?config(client, C)),
+    {ok, #limiter_Limit{}} = lim_client:get(ID, Context, ?config(client, C)).
+
+-spec commit_with_wallet_scope_ok(config()) -> _.
+commit_with_wallet_scope_ok(C) ->
+    ID = configure_limit(?time_range_month(), ?scope([?scope_wallet()]), C),
+    Context = ?wthdproc_ctx_withdrawal(?cash(10, <<"RUB">>)),
+    {ok, {vector, _}} = hold_and_commit(?LIMIT_CHANGE(ID), Context, ?config(client, C)),
+    {ok, #limiter_Limit{}} = lim_client:get(ID, Context, ?config(client, C)).
+
+-spec commit_with_multi_scope_ok(config()) -> _.
+commit_with_multi_scope_ok(C) ->
+    Client = ?config(client, C),
+    ID = configure_limit(?time_range_week(), ?scope([?scope_provider(), ?scope_payment_tool()]), C),
+    Context1 = ?payproc_ctx_payment(
+        ?invoice_payment(?cash(10), ?cash(10), ?bank_card(<<"Token">>, 2, 2022))
+    ),
+    Context2 = ?payproc_ctx_payment(
+        ?invoice_payment(?cash(10), ?cash(10), ?bank_card(<<"OtherToken">>, 2, 2022))
+    ),
+    Context3 = ?payproc_ctx_payment(
+        ?invoice_payment(?cash(10), ?cash(10), ?bank_card(?string, 3, 2022))
+    ),
+    Context4 = ?payproc_ctx_payment(
+        ?invoice_payment(?cash(10), ?cash(10), ?bank_card(?string))
+    ),
+    Context5 = ?payproc_ctx_payment(
+        ?invoice_payment(?cash(10), ?cash(10), ?digital_wallet(<<"ID42">>, <<"Pepal">>))
+    ),
+    {ok, LimitState0} = lim_client:get(ID, Context1, Client),
+    _ = hold_and_commit(?LIMIT_CHANGE(ID, 1), Context1, Client),
+    _ = hold_and_commit(?LIMIT_CHANGE(ID, 2), Context2, Client),
+    _ = hold_and_commit(?LIMIT_CHANGE(ID, 3), Context3, Client),
+    _ = hold_and_commit(?LIMIT_CHANGE(ID, 4), Context4, Client),
+    _ = hold_and_commit(?LIMIT_CHANGE(ID, 5), Context5, Client),
+    {ok, LimitState1} = lim_client:get(ID, Context1, Client),
+    ?assertEqual(
+        LimitState1#limiter_Limit.amount,
+        LimitState0#limiter_Limit.amount + 10
+    ).
 
 %%
 

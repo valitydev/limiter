@@ -1,6 +1,7 @@
 -ifndef(__limiter_ct_helper__).
 -define(__limiter_ct_helper__, 42).
 
+-include_lib("limiter_proto/include/limproto_base_thrift.hrl").
 -include_lib("limiter_proto/include/limproto_config_thrift.hrl").
 -include_lib("limiter_proto/include/limproto_timerange_thrift.hrl").
 -include_lib("limiter_proto/include/limproto_limiter_thrift.hrl").
@@ -11,6 +12,7 @@
 
 -define(currency, <<"RUB">>).
 -define(string, <<"STRING">>).
+-define(integer, 999).
 -define(timestamp, <<"2000-01-01T00:00:00Z">>).
 
 -define(cash(Amount), ?cash(Amount, ?currency)).
@@ -19,12 +21,23 @@
     currency = #domain_CurrencyRef{symbolic_code = Currency}
 }).
 
+-define(route(), ?route(?integer, ?integer)).
+-define(route(ProviderID, TerminalID), #base_Route{
+    provider = #domain_ProviderRef{id = ProviderID},
+    terminal = #domain_TerminalRef{id = TerminalID}
+}).
+
 -define(scope(Types), {multi, ordsets:from_list(Types)}).
 -define(global(), ?scope([])).
 
 -define(scope_party(), {party, #config_LimitScopeEmptyDetails{}}).
 -define(scope_shop(), {shop, #config_LimitScopeEmptyDetails{}}).
 -define(scope_payment_tool(), {payment_tool, #config_LimitScopeEmptyDetails{}}).
+-define(scope_provider(), {provider, #config_LimitScopeEmptyDetails{}}).
+-define(scope_terminal(), {terminal, #config_LimitScopeEmptyDetails{}}).
+-define(scope_payer_contact_email(), {payer_contact_email, #config_LimitScopeEmptyDetails{}}).
+-define(scope_identity(), {identity, #config_LimitScopeEmptyDetails{}}).
+-define(scope_wallet(), {wallet, #config_LimitScopeEmptyDetails{}}).
 
 -define(lim_type_turnover(), ?lim_type_turnover(?turnover_metric_number())).
 -define(lim_type_turnover(Metric),
@@ -129,7 +142,9 @@
             resource = #domain_DisposablePaymentResource{
                 payment_tool = PaymentTool
             },
-            contact_info = #domain_ContactInfo{}
+            contact_info = #domain_ContactInfo{
+                email = ?string
+            }
         }}
 }).
 
@@ -152,7 +167,8 @@
         invoice = #context_payproc_Invoice{
             invoice = ?invoice(OwnerID, ShopID, Cost),
             payment = #context_payproc_InvoicePayment{
-                payment = ?invoice_payment(Cost, CaptureCost)
+                payment = ?invoice_payment(Cost, CaptureCost),
+                route = ?route()
             }
         }
     }
@@ -164,7 +180,8 @@
         invoice = #context_payproc_Invoice{
             invoice = ?invoice(?string, ?string, ?cash(10)),
             payment = #context_payproc_InvoicePayment{
-                payment = Payment
+                payment = Payment,
+                route = ?route()
             }
         }
     }
@@ -211,7 +228,9 @@
     withdrawal_processing = #context_withdrawal_Context{
         op = ?op_withdrawal,
         withdrawal = #context_withdrawal_Withdrawal{
-            withdrawal = ?withdrawal(Cost)
+            withdrawal = ?withdrawal(Cost),
+            route = ?route(),
+            wallet_id = ?string
         }
     }
 }).
