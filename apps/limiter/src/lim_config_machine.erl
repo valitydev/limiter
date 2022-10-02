@@ -546,19 +546,20 @@ append_prefix(Fragment, Acc) ->
 
 -type context_data() :: #{
     id := limit_scope_type(),
-    order := integer(),
     bits := [context_bit()],
     overwrite => limit_scope_type()
 }.
 
 -spec enumerate_context_bits(limit_scope()) -> [context_bit()].
 enumerate_context_bits(Types) ->
-    Data = ordsets:fold(fun append_context_data/2, sets:new(), Types),
-    Filtered = sets:filter(fun(#{id := ID}) -> not need_overwrite(ID, Data) end, Data),
-    lists:foldl(fun(#{bits := Bits}, Acc) -> Acc ++ Bits end, [], sort_data(sets:to_list(Filtered))).
+    TypesOrder = [party, shop, identity, wallet, payment_tool, provider, terminal, payer_contact_email],
+    SortedTypes = lists:filter(fun(T) -> ordsets:is_element(T, Types) end, TypesOrder),
+    Data = lists:foldl(fun append_context_data/2, [], SortedTypes),
+    Filtered = lists:filter(fun(#{id := ID}) -> not need_overwrite(ID, Data) end, Data),
+    lists:foldl(fun(#{bits := Bits}, Acc) -> Acc ++ Bits end, [], Filtered).
 
 need_overwrite(Type, Data) ->
-    {_, Result} = sets:fold(
+    {_, Result} = lists:foldl(
         fun
             (_, Result = {_, true}) -> Result;
             (#{overwrite := Overwrite}, {Overwrite, _}) -> {Overwrite, true};
@@ -569,77 +570,48 @@ need_overwrite(Type, Data) ->
     ),
     Result.
 
-sort_data(Data) ->
-    lists:sort(
-        fun
-            (#{order := A}, #{order := B}) when A =< B -> true;
-            (_, _) -> false
-        end,
-        Data
-    ).
-
--spec append_context_data(limit_scope_type(), sets:set(context_data())) -> sets:set(context_data()).
+-spec append_context_data(limit_scope_type(), [context_data()]) -> [context_data()].
 append_context_data(Type = party, Bits) ->
-    sets:add_element(
-        #{id => Type, order => 1, bits => [{from, owner_id}]},
-        Bits
-    );
+    Bits ++ [#{id => Type, bits => [{from, owner_id}]}];
 append_context_data(Type = shop, Bits) ->
     % NOTE
     % Shop scope implies party scope.
     % Also we need to preserve order between party / shop to ensure backwards compatibility.
-    sets:add_element(
-        #{id => Type, order => 2, bits => [{from, owner_id}, {from, shop_id}], overwrite => party},
-        Bits
-    );
+    Bits ++ [#{id => Type, bits => [{from, owner_id}, {from, shop_id}], overwrite => party}];
 append_context_data(Type = payment_tool, Bits) ->
-    sets:add_element(
-        #{id => Type, order => 7, bits => [{from, payment_tool}]},
-        Bits
-    );
+    Bits ++ [#{id => Type, bits => [{from, payment_tool}]}];
 append_context_data(Type = identity, Bits) ->
-    sets:add_element(
-        #{id => Type, order => 2, bits => [{prefix, <<"identity">>}, {from, identity_id}]},
-        Bits
-    );
+    Bits ++ [#{id => Type, bits => [{prefix, <<"identity">>}, {from, identity_id}]}];
 append_context_data(Type = wallet, Bits) ->
-    sets:add_element(
-        #{
-            id => Type,
-            order => 3,
-            bits => [
-                {prefix, <<"wallet">>},
-                {from, identity_id},
-                {from, wallet_id}
-            ],
-            overwrite => identity
-        },
-        Bits
-    );
+    Bits ++
+        [
+            #{
+                id => Type,
+                bits => [
+                    {prefix, <<"wallet">>},
+                    {from, identity_id},
+                    {from, wallet_id}
+                ],
+                overwrite => identity
+            }
+        ];
 append_context_data(Type = provider, Bits) ->
-    sets:add_element(
-        #{id => Type, order => 4, bits => [{prefix, <<"provider">>}, {from, provider_id}]},
-        Bits
-    );
+    Bits ++ [#{id => Type, bits => [{prefix, <<"provider">>}, {from, provider_id}]}];
 append_context_data(Type = terminal, Bits) ->
-    sets:add_element(
-        #{
-            id => Type,
-            order => 5,
-            bits => [
-                {prefix, <<"terminal">>},
-                {from, provider_id},
-                {from, terminal_id}
-            ],
-            overwrite => provider
-        },
-        Bits
-    );
+    Bits ++
+        [
+            #{
+                id => Type,
+                bits => [
+                    {prefix, <<"terminal">>},
+                    {from, provider_id},
+                    {from, terminal_id}
+                ],
+                overwrite => provider
+            }
+        ];
 append_context_data(Type = payer_contact_email, Bits) ->
-    sets:add_element(
-        #{id => Type, order => 6, bits => [{prefix, <<"payer_contact_email">>}, {from, payer_contact_email}]},
-        Bits
-    ).
+    Bits ++ [#{id => Type, bits => [{prefix, <<"payer_contact_email">>}, {from, payer_contact_email}]}].
 
 -spec extract_context_bit(context_bit(), context_type(), lim_context()) -> {ok, binary()}.
 extract_context_bit({prefix, Prefix}, _ContextType, _LimitContext) ->
@@ -998,7 +970,7 @@ prefix_content_test_() ->
             mk_scope_prefix_impl(ordsets:from_list([wallet, identity, party]), withdrawal_processing, WithdrawalContext)
         ),
         ?_assertEqual(
-            <<"/payer_contact_email/email/token/2/2022">>,
+            <<"/token/2/2022/payer_contact_email/email">>,
             mk_scope_prefix_impl(ordsets:from_list([payer_contact_email, payment_tool]), payment_processing, Context)
         )
     ].
