@@ -176,7 +176,7 @@ commit_with_long_change_id(C) ->
         >>,
     ChangeID = <<LongBinary/binary, LongBinary/binary, LongBinary/binary, LongBinary/binary, LongBinary/binary>>,
     {ok, {vector, _}} = hold_and_commit(?LIMIT_CHANGE(ID, ChangeID), Context, ?config(client, C)),
-    {ok, #limiter_Limit{}} = lim_client:get(ID, Context, ?config(client, C)).
+    {ok, #limiter_Limit{amount = 10}} = lim_client:get(ID, Context, ?config(client, C)).
 
 -spec commit_with_default_exchange(config()) -> _.
 commit_with_default_exchange(C) ->
