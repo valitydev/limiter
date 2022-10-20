@@ -167,11 +167,8 @@ end_per_testcase(_Name, C) ->
 
 -spec commit_with_long_change_id(config()) -> _.
 commit_with_long_change_id(C) ->
-    Rational = #base_Rational{p = 1000000, q = 100},
-    _ = mock_exchange(Rational, C),
     ID = configure_limit(?time_range_month(), ?global(), C),
-    Cost = ?cash(10000, <<"SOME_CURRENCY">>),
-    Context = ?payproc_ctx_invoice(Cost),
+    Context = ?payproc_ctx_invoice(?cash(10, <<"RUB">>)),
     LongBinary =
         <<
             "LongBinaryLongBinaryLongBinaryLongBinaryLongBinaryLong\n"
@@ -179,7 +176,7 @@ commit_with_long_change_id(C) ->
         >>,
     ChangeID = <<LongBinary/binary, LongBinary/binary, LongBinary/binary, LongBinary/binary, LongBinary/binary>>,
     {ok, {vector, _}} = hold_and_commit(?LIMIT_CHANGE(ID, ChangeID), Context, ?config(client, C)),
-    {ok, #limiter_Limit{amount = 10000}} = lim_client:get(ID, Context, ?config(client, C)).
+    {ok, #limiter_Limit{}} = lim_client:get(ID, Context, ?config(client, C)).
 
 -spec commit_with_default_exchange(config()) -> _.
 commit_with_default_exchange(C) ->
