@@ -13,6 +13,7 @@
 -export([init_per_testcase/2]).
 -export([end_per_testcase/2]).
 
+-export([commit_with_long_change_id/1]).
 -export([commit_with_default_exchange/1]).
 -export([partial_commit_with_exchange/1]).
 -export([commit_with_exchange/1]).
@@ -66,6 +67,7 @@ all() ->
 groups() ->
     [
         {default, [], [
+            commit_with_long_change_id,
             commit_with_default_exchange,
             partial_commit_with_exchange,
             commit_with_exchange,
@@ -162,6 +164,22 @@ end_per_testcase(_Name, C) ->
 -define(CHANGE_ID, 42).
 -define(LIMIT_CHANGE(ID), ?LIMIT_CHANGE(ID, ?CHANGE_ID)).
 -define(LIMIT_CHANGE(ID, ChangeID), #limiter_LimitChange{id = ID, change_id = gen_change_id(ID, ChangeID)}).
+
+-spec commit_with_long_change_id(config()) -> _.
+commit_with_long_change_id(C) ->
+    Rational = #base_Rational{p = 1000000, q = 100},
+    _ = mock_exchange(Rational, C),
+    ID = configure_limit(?time_range_month(), ?global(), C),
+    Cost = ?cash(10000, <<"SOME_CURRENCY">>),
+    Context = ?payproc_ctx_invoice(Cost),
+    LongBinary =
+        <<
+            "LongBinaryLongBinaryLongBinaryLongBinaryLongBinaryLong\n"
+            "    BinaryLongBinaryLongBinaryLongBinaryLongBinaryLongBinary"
+        >>,
+    ChangeID = <<LongBinary/binary, LongBinary/binary, LongBinary/binary, LongBinary/binary, LongBinary/binary>>,
+    {ok, {vector, _}} = hold_and_commit(?LIMIT_CHANGE(ID, ChangeID), Context, ?config(client, C)),
+    {ok, #limiter_Limit{amount = 10000}} = lim_client:get(ID, Context, ?config(client, C)).
 
 -spec commit_with_default_exchange(config()) -> _.
 commit_with_default_exchange(C) ->

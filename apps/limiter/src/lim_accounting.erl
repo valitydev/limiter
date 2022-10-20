@@ -57,19 +57,19 @@ plan(PlanID, Batches, LimitContext) ->
 
 -spec hold(plan_id(), batch(), lim_context()) -> ok | {error, invalid_request_error()}.
 hold(PlanID, Batch, LimitContext) ->
-    do('Hold', construct_plan_change(PlanID, Batch), LimitContext).
+    do('Hold', construct_plan_change(wrap_plan_id(PlanID), Batch), LimitContext).
 
 -spec commit(plan_id(), [batch()], lim_context()) -> ok | {error, invalid_request_error()}.
 commit(PlanID, Batches, LimitContext) ->
-    do('CommitPlan', construct_plan(PlanID, Batches), LimitContext).
+    do('CommitPlan', construct_plan(wrap_plan_id(PlanID), Batches), LimitContext).
 
 -spec rollback(plan_id(), [batch()], lim_context()) -> ok | {error, invalid_request_error()}.
 rollback(PlanID, Batches, LimitContext) ->
-    do('RollbackPlan', construct_plan(PlanID, Batches), LimitContext).
+    do('RollbackPlan', construct_plan(wrap_plan_id(PlanID), Batches), LimitContext).
 
 -spec get_plan(plan_id(), lim_context()) -> {ok, [batch()]} | {error, notfound}.
 get_plan(PlanID, LimitContext) ->
-    case call_accounter('GetPlan', {PlanID}, LimitContext) of
+    case call_accounter('GetPlan', {wrap_plan_id(PlanID)}, LimitContext) of
         {ok, #accounter_PostingPlan{batch_list = BatchList}} ->
             {ok, decode_batch_list(BatchList)};
         {exception, #accounter_PlanNotFound{}} ->
@@ -156,6 +156,16 @@ construct_prototype(CurrencyCode, Description) ->
     }.
 
 %%
+
+wrap_plan_id(PlanID) ->
+    %% Accounter requires max 64 byte plan id
+    case byte_size(PlanID) < 64 of
+        true ->
+            %% For backward compatibility
+            PlanID;
+        false ->
+            crypto:hash(sha512, PlanID)
+    end.
 
 call_accounter(Function, Args, LimitContext) ->
     WoodyContext = lim_context:woody_context(LimitContext),
