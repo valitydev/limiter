@@ -164,7 +164,7 @@ wrap_plan_id(PlanID) ->
             %% For backward compatibility
             PlanID;
         false ->
-            crypto:hash(sha512, PlanID)
+            base64:encode(crypto:hash(sha384, PlanID))
     end.
 
 call_accounter(Function, Args, LimitContext) ->
