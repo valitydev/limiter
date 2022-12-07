@@ -51,11 +51,12 @@ denominate(#{amount := Amount, currency := Currency}, Currency, _Config, _LimitC
     {ok, Amount};
 denominate(#{currency := Currency}, DestinationCurrency, _Config, _LimitContext) ->
     {error,
-        {invalid_request,
-            [genlib:format(
+        {invalid_request, [
+            genlib:format(
                 "Invalid operation currency: ~p, expected limit currency: ~p",
                 [Currency, DestinationCurrency]
-            )]}}.
+            )
+        ]}}.
 %% NOTE conversion disabled temporarily
 %%denominate(Body = #{}, DestinationCurrency, Config, LimitContext) ->
 %%    case lim_rates:convert(Body, DestinationCurrency, Config, LimitContext) of
