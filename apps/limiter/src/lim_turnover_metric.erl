@@ -47,13 +47,16 @@ get_commit_body(Config, LimitContext) ->
 
 denominate(#{amount := Amount, currency := Currency}, Currency, _Config, _LimitContext) ->
     {ok, Amount};
-denominate(Body = #{}, DestinationCurrency, Config, LimitContext) ->
-    case lim_rates:convert(Body, DestinationCurrency, Config, LimitContext) of
-        {ok, #{amount := AmountConverted}} ->
-            {ok, AmountConverted};
-        {error, _} = Error ->
-            Error
-    end.
+denominate(_Body, _Currency, _Config, _LimitContext) ->
+    {error, conversion_required}.
+%% NOTE conversion disabled temporarily
+%%denominate(Body = #{}, DestinationCurrency, Config, LimitContext) ->
+%%    case lim_rates:convert(Body, DestinationCurrency, Config, LimitContext) of
+%%        {ok, #{amount := AmountConverted}} ->
+%%            {ok, AmountConverted};
+%%        {error, _} = Error ->
+%%            Error
+%%    end.
 
 sign(Amount) when Amount > 0 ->
     +1;
