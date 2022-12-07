@@ -50,7 +50,7 @@ denominate(#{amount := Amount, currency := Currency}, Currency, _Config, _LimitC
 denominate(#{currency := Currency}, DestinationCurrency, _Config, _LimitContext) ->
     {error,
         {invalid_request,
-            io:format(
+            io_lib:format(
                 "Invalid operation currency: ~p, expected limit currency: ~p",
                 [Currency, DestinationCurrency]
             )}}.
