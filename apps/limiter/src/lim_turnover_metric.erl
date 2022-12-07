@@ -47,8 +47,8 @@ get_commit_body(Config, LimitContext) ->
 
 denominate(#{amount := Amount, currency := Currency}, Currency, _Config, _LimitContext) ->
     {ok, Amount};
-denominate(_Body, _Currency, _Config, _LimitContext) ->
-    {error, conversion_required}.
+denominate(#{currency := Currency}, DestinationCurrency, _Config, _LimitContext) ->
+    {error, {invalid_request, io:format("Need currency conversion from ~p to ~p", [Currency, DestinationCurrency])}}.
 %% NOTE conversion disabled temporarily
 %%denominate(Body = #{}, DestinationCurrency, Config, LimitContext) ->
 %%    case lim_rates:convert(Body, DestinationCurrency, Config, LimitContext) of
