@@ -68,9 +68,10 @@ groups() ->
     [
         {default, [], [
             commit_with_long_change_id,
-            commit_with_default_exchange,
-            partial_commit_with_exchange,
-            commit_with_exchange,
+            % NOTE disabled to stop exchange
+            %%            commit_with_default_exchange,
+            %%            partial_commit_with_exchange,
+            %%            commit_with_exchange,
             get_limit_ok,
             get_limit_notfound,
             hold_ok,
