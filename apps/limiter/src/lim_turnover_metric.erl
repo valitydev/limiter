@@ -7,12 +7,14 @@
 -type stage() :: hold | commit.
 -type t() :: number | {amount, currency()}.
 
+-type invalid_request_error() :: {invalid_request, list(binary())}.
+
 -export_type([t/0]).
 
 %%
 
 -spec compute(t(), stage(), lim_config_machine:config(), lim_context:t()) ->
-    {ok, amount()} | {error, lim_accounting:invalid_request_error()}.
+    {ok, amount()} | {error, invalid_request_error()}.
 compute(number, hold, Config, LimitContext) ->
     #{amount := Amount} = get_body(Config, LimitContext),
     {ok, sign(Amount)};
