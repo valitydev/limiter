@@ -12,7 +12,7 @@
 %%
 
 -spec compute(t(), stage(), lim_config_machine:config(), lim_context:t()) ->
-    {ok, amount()} | {error, lim_rates:conversion_error()}.
+    {ok, amount()} | {error, lim_accounting:invalid_request_error()}.
 compute(number, hold, Config, LimitContext) ->
     #{amount := Amount} = get_body(Config, LimitContext),
     {ok, sign(Amount)};
@@ -48,7 +48,12 @@ get_commit_body(Config, LimitContext) ->
 denominate(#{amount := Amount, currency := Currency}, Currency, _Config, _LimitContext) ->
     {ok, Amount};
 denominate(#{currency := Currency}, DestinationCurrency, _Config, _LimitContext) ->
-    {error, {invalid_request, io:format("Need currency conversion from ~p to ~p", [Currency, DestinationCurrency])}}.
+    {error,
+        {invalid_request,
+            io:format(
+                "Invalid operation currency: ~p, expected limit currency: ~p",
+                [Currency, DestinationCurrency]
+            )}}.
 %% NOTE conversion disabled temporarily
 %%denominate(Body = #{}, DestinationCurrency, Config, LimitContext) ->
 %%    case lim_rates:convert(Body, DestinationCurrency, Config, LimitContext) of
