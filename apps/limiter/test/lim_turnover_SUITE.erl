@@ -71,7 +71,7 @@ groups() ->
             % NOTE disabled to stop exchange
             %%            commit_with_default_exchange,
             %%            partial_commit_with_exchange,
-            %%            commit_with_exchange,
+            commit_with_exchange,
             get_limit_ok,
             get_limit_notfound,
             hold_ok,
@@ -207,8 +207,9 @@ commit_with_exchange(C) ->
     ID = configure_limit(?time_range_month(), ?global(), C),
     Cost = ?cash(10000, <<"USD">>),
     Context = ?payproc_ctx_invoice(Cost),
-    {ok, {vector, _}} = hold_and_commit(?LIMIT_CHANGE(ID), Context, ?config(client, C)),
-    {ok, #limiter_Limit{amount = 10500}} = lim_client:get(ID, Context, ?config(client, C)).
+    {exception, #base_InvalidRequest{}} = lim_client:hold(?LIMIT_CHANGE(ID), Context, ?config(client, C)).
+%%    {ok, {vector, _}} = hold_and_commit(?LIMIT_CHANGE(ID), Context, ?config(client, C)),
+%%    {ok, #limiter_Limit{amount = 10500}} = lim_client:get(ID, Context, ?config(client, C)).
 
 -spec get_limit_ok(config()) -> _.
 get_limit_ok(C) ->

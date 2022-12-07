@@ -7,12 +7,14 @@
 -type stage() :: hold | commit.
 -type t() :: number | {amount, currency()}.
 
+-type invalid_request_error() :: {invalid_request, list(binary())}.
+
 -export_type([t/0]).
 
 %%
 
 -spec compute(t(), stage(), lim_config_machine:config(), lim_context:t()) ->
-    {ok, amount()} | {error, lim_accounting:invalid_request_error()}.
+    {ok, amount()} | {error, invalid_request_error()}.
 compute(number, hold, Config, LimitContext) ->
     #{amount := Amount} = get_body(Config, LimitContext),
     {ok, sign(Amount)};
@@ -49,11 +51,12 @@ denominate(#{amount := Amount, currency := Currency}, Currency, _Config, _LimitC
     {ok, Amount};
 denominate(#{currency := Currency}, DestinationCurrency, _Config, _LimitContext) ->
     {error,
-        {invalid_request,
-            io_lib:format(
+        {invalid_request, [
+            genlib:format(
                 "Invalid operation currency: ~p, expected limit currency: ~p",
                 [Currency, DestinationCurrency]
-            )}}.
+            )
+        ]}}.
 %% NOTE conversion disabled temporarily
 %%denominate(Body = #{}, DestinationCurrency, Config, LimitContext) ->
 %%    case lim_rates:convert(Body, DestinationCurrency, Config, LimitContext) of
