@@ -14,7 +14,7 @@
 %%
 
 -spec compute(t(), stage(), lim_config_machine:config(), lim_context:t()) ->
-    {ok, amount()} | {error, invalid_request_error()}.
+    {ok, amount()} | {error, lim_rates:conversion_error()} | {error, invalid_request_error()}.
 compute(number, hold, Config, LimitContext) ->
     #{amount := Amount} = get_body(Config, LimitContext),
     {ok, sign(Amount)};
