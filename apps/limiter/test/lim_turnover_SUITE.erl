@@ -141,18 +141,20 @@ init_per_suite(Config) ->
                 <<"EUR">> => {12, 10}
             }}
         ]),
-    [{apps, Apps}, {currency_conversion, enabled}] ++ Config.
+    [{apps, Apps}] ++ Config.
 
 -spec end_per_suite(config()) -> _.
 end_per_suite(Config) ->
     genlib_app:test_application_stop(?config(apps, Config)).
 
 -spec init_per_testcase(test_case_name(), config()) -> config().
-init_per_testcase(commit_with_disabled_exchange, C) ->
-    C1 = lists:keyreplace(currency_conversion, 1, C, {currency_conversion, disabled}),
-    prepare_config_per_testcase(commit_with_disabled_exchange, C1, disabled);
 init_per_testcase(Name, C) ->
-    prepare_config_per_testcase(Name, C, enabled).
+    [
+        {id, gen_unique_id(Name)},
+        {client, lim_client:new()},
+        {test_sup, lim_mock:start_mocked_service_sup()}
+        | C
+    ].
 
 -spec end_per_testcase(test_case_name(), config()) -> ok.
 end_per_testcase(_Name, C) ->
@@ -180,6 +182,7 @@ commit_with_long_change_id(C) ->
 
 -spec commit_with_default_exchange(config()) -> _.
 commit_with_default_exchange(C) ->
+    ok = application:set_env(limiter, currency_conversion, enabled),
     Rational = #base_Rational{p = 1000000, q = 100},
     _ = mock_exchange(Rational, C),
     ID = configure_limit(?time_range_month(), ?global(), C),
@@ -190,6 +193,7 @@ commit_with_default_exchange(C) ->
 
 -spec partial_commit_with_exchange(config()) -> _.
 partial_commit_with_exchange(C) ->
+    ok = application:set_env(limiter, currency_conversion, enabled),
     Rational = #base_Rational{p = 800000, q = 100},
     _ = mock_exchange(Rational, C),
     ID = configure_limit(?time_range_month(), ?global(), C),
@@ -201,6 +205,7 @@ partial_commit_with_exchange(C) ->
 
 -spec commit_with_exchange(config()) -> _.
 commit_with_exchange(C) ->
+    ok = application:set_env(limiter, currency_conversion, enabled),
     Rational = #base_Rational{p = 1000000, q = 100},
     _ = mock_exchange(Rational, C),
     ID = configure_limit(?time_range_month(), ?global(), C),
@@ -211,6 +216,7 @@ commit_with_exchange(C) ->
 
 -spec commit_with_disabled_exchange(config()) -> _.
 commit_with_disabled_exchange(C) ->
+    ok = application:set_env(limiter, currency_conversion, disabled),
     Rational = #base_Rational{p = 1000000, q = 100},
     _ = mock_exchange(Rational, C),
     ID = configure_limit(?time_range_month(), ?global(), C),
@@ -579,15 +585,6 @@ commit_with_multi_scope_ok(C) ->
     ).
 
 %%
-
-prepare_config_per_testcase(Name, Config, CurrencyConversion) ->
-    application:set_env(limiter, currency_conversion, CurrencyConversion),
-    [
-        {id, gen_unique_id(Name)},
-        {client, lim_client:new()},
-        {test_sup, lim_mock:start_mocked_service_sup()}
-        | Config
-    ].
 
 gen_change_id(LimitID, ChangeID) ->
     genlib:format("~s/~p", [LimitID, ChangeID]).
