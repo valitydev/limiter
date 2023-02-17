@@ -17,6 +17,7 @@
 -export([commit_with_default_exchange/1]).
 -export([partial_commit_with_exchange/1]).
 -export([commit_with_exchange/1]).
+-export([commit_with_disabled_exchange/1]).
 -export([get_limit_ok/1]).
 -export([get_limit_notfound/1]).
 -export([hold_ok/1]).
@@ -71,6 +72,7 @@ groups() ->
             commit_with_default_exchange,
             partial_commit_with_exchange,
             commit_with_exchange,
+            commit_with_disabled_exchange,
             get_limit_ok,
             get_limit_notfound,
             hold_ok,
@@ -139,20 +141,18 @@ init_per_suite(Config) ->
                 <<"EUR">> => {12, 10}
             }}
         ]),
-    [{apps, Apps}] ++ Config.
+    [{apps, Apps}, {currency_conversion, enabled}] ++ Config.
 
 -spec end_per_suite(config()) -> _.
 end_per_suite(Config) ->
     genlib_app:test_application_stop(?config(apps, Config)).
 
 -spec init_per_testcase(test_case_name(), config()) -> config().
+init_per_testcase(commit_with_disabled_exchange, C) ->
+    C1 = lists:keyreplace(currency_conversion, 1, C, {currency_conversion, disabled}),
+    prepare_config_per_testcase(commit_with_disabled_exchange, C1, disabled);
 init_per_testcase(Name, C) ->
-    [
-        {id, gen_unique_id(Name)},
-        {client, lim_client:new()},
-        {test_sup, lim_mock:start_mocked_service_sup()}
-        | C
-    ].
+    prepare_config_per_testcase(Name, C, enabled).
 
 -spec end_per_testcase(test_case_name(), config()) -> ok.
 end_per_testcase(_Name, C) ->
@@ -208,6 +208,16 @@ commit_with_exchange(C) ->
     Context = ?payproc_ctx_invoice(Cost),
     {ok, {vector, _}} = hold_and_commit(?LIMIT_CHANGE(ID), Context, ?config(client, C)),
     {ok, #limiter_Limit{amount = 10500}} = lim_client:get(ID, Context, ?config(client, C)).
+
+-spec commit_with_disabled_exchange(config()) -> _.
+commit_with_disabled_exchange(C) ->
+    Rational = #base_Rational{p = 1000000, q = 100},
+    _ = mock_exchange(Rational, C),
+    ID = configure_limit(?time_range_month(), ?global(), C),
+    Cost = ?cash(10000, <<"USD">>),
+    Context = ?payproc_ctx_invoice(Cost),
+    {exception, #base_InvalidRequest{}} =
+        lim_client:hold(?LIMIT_CHANGE(ID), Context, ?config(client, C)).
 
 -spec get_limit_ok(config()) -> _.
 get_limit_ok(C) ->
@@ -569,6 +579,15 @@ commit_with_multi_scope_ok(C) ->
     ).
 
 %%
+
+prepare_config_per_testcase(Name, Config, CurrencyConversion) ->
+    application:set_env(limiter, currency_conversion, CurrencyConversion),
+    [
+        {id, gen_unique_id(Name)},
+        {client, lim_client:new()},
+        {test_sup, lim_mock:start_mocked_service_sup()}
+        | Config
+    ].
 
 gen_change_id(LimitID, ChangeID) ->
     genlib:format("~s/~p", [LimitID, ChangeID]).
