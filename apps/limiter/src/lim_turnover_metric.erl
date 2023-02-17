@@ -49,7 +49,13 @@ get_commit_body(Config, LimitContext) ->
 
 denominate(#{amount := Amount, currency := Currency}, Currency, _Config, _LimitContext) ->
     {ok, Amount};
-denominate(#{currency := Currency}, DestinationCurrency, _Config, _LimitContext) ->
+denominate(Body = #{currency := Currency}, DestinationCurrency, Config, LimitContext) ->
+    case genlib_app:env(limiter, currency_conversion, enabled) of
+        disabled -> invalid_request_currencies_mismatch(Currency, DestinationCurrency);
+        enabled -> convert_currency(Body, DestinationCurrency, Config, LimitContext)
+    end.
+
+invalid_request_currencies_mismatch(Currency, DestinationCurrency) ->
     {error,
         {invalid_request, [
             genlib:format(
@@ -57,14 +63,14 @@ denominate(#{currency := Currency}, DestinationCurrency, _Config, _LimitContext)
                 [Currency, DestinationCurrency]
             )
         ]}}.
-%% NOTE conversion disabled temporarily
-%%denominate(Body = #{}, DestinationCurrency, Config, LimitContext) ->
-%%    case lim_rates:convert(Body, DestinationCurrency, Config, LimitContext) of
-%%        {ok, #{amount := AmountConverted}} ->
-%%            {ok, AmountConverted};
-%%        {error, _} = Error ->
-%%            Error
-%%    end.
+
+convert_currency(Body, DestinationCurrency, Config, LimitContext) ->
+    case lim_rates:convert(Body, DestinationCurrency, Config, LimitContext) of
+        {ok, #{amount := AmountConverted}} ->
+            {ok, AmountConverted};
+        {error, _} = Error ->
+            Error
+    end.
 
 sign(Amount) when Amount > 0 ->
     +1;
