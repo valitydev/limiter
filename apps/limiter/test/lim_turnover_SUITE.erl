@@ -17,6 +17,7 @@
 -export([commit_with_default_exchange/1]).
 -export([partial_commit_with_exchange/1]).
 -export([commit_with_exchange/1]).
+-export([commit_with_disabled_exchange/1]).
 -export([get_limit_ok/1]).
 -export([get_limit_notfound/1]).
 -export([hold_ok/1]).
@@ -68,10 +69,10 @@ groups() ->
     [
         {default, [], [
             commit_with_long_change_id,
-            % NOTE disabled to stop exchange
-            %%            commit_with_default_exchange,
-            %%            partial_commit_with_exchange,
+            commit_with_default_exchange,
+            partial_commit_with_exchange,
             commit_with_exchange,
+            commit_with_disabled_exchange,
             get_limit_ok,
             get_limit_notfound,
             hold_ok,
@@ -181,6 +182,7 @@ commit_with_long_change_id(C) ->
 
 -spec commit_with_default_exchange(config()) -> _.
 commit_with_default_exchange(C) ->
+    ok = application:set_env(limiter, currency_conversion, enabled),
     Rational = #base_Rational{p = 1000000, q = 100},
     _ = mock_exchange(Rational, C),
     ID = configure_limit(?time_range_month(), ?global(), C),
@@ -191,6 +193,7 @@ commit_with_default_exchange(C) ->
 
 -spec partial_commit_with_exchange(config()) -> _.
 partial_commit_with_exchange(C) ->
+    ok = application:set_env(limiter, currency_conversion, enabled),
     Rational = #base_Rational{p = 800000, q = 100},
     _ = mock_exchange(Rational, C),
     ID = configure_limit(?time_range_month(), ?global(), C),
@@ -202,14 +205,25 @@ partial_commit_with_exchange(C) ->
 
 -spec commit_with_exchange(config()) -> _.
 commit_with_exchange(C) ->
+    ok = application:set_env(limiter, currency_conversion, enabled),
     Rational = #base_Rational{p = 1000000, q = 100},
     _ = mock_exchange(Rational, C),
     ID = configure_limit(?time_range_month(), ?global(), C),
     Cost = ?cash(10000, <<"USD">>),
     Context = ?payproc_ctx_invoice(Cost),
-    {exception, #base_InvalidRequest{}} = lim_client:hold(?LIMIT_CHANGE(ID), Context, ?config(client, C)).
-%%    {ok, {vector, _}} = hold_and_commit(?LIMIT_CHANGE(ID), Context, ?config(client, C)),
-%%    {ok, #limiter_Limit{amount = 10500}} = lim_client:get(ID, Context, ?config(client, C)).
+    {ok, {vector, _}} = hold_and_commit(?LIMIT_CHANGE(ID), Context, ?config(client, C)),
+    {ok, #limiter_Limit{amount = 10500}} = lim_client:get(ID, Context, ?config(client, C)).
+
+-spec commit_with_disabled_exchange(config()) -> _.
+commit_with_disabled_exchange(C) ->
+    ok = application:set_env(limiter, currency_conversion, disabled),
+    Rational = #base_Rational{p = 1000000, q = 100},
+    _ = mock_exchange(Rational, C),
+    ID = configure_limit(?time_range_month(), ?global(), C),
+    Cost = ?cash(10000, <<"USD">>),
+    Context = ?payproc_ctx_invoice(Cost),
+    {exception, #base_InvalidRequest{}} =
+        lim_client:hold(?LIMIT_CHANGE(ID), Context, ?config(client, C)).
 
 -spec get_limit_ok(config()) -> _.
 get_limit_ok(C) ->
