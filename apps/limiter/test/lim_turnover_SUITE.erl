@@ -3,6 +3,7 @@
 -include_lib("stdlib/include/assert.hrl").
 -include_lib("common_test/include/ct.hrl").
 -include_lib("damsel/include/dmsl_base_thrift.hrl").
+-include_lib("damsel/include/dmsl_limiter_config_thrift.hrl").
 -include("lim_ct_helper.hrl").
 
 -export([all/0]).
@@ -123,25 +124,59 @@ init_per_suite(Config) ->
     % dbg:tracer(), dbg:p(all, c),
     % dbg:tpl({lim_handler, '_', '_'}, x),
     Apps =
-        genlib_app:start_application_with(limiter, [
-            {service_clients, #{
-                accounter => #{
-                    url => <<"http://shumway:8022/accounter">>
-                },
-                automaton => #{
-                    url => <<"http://machinegun:8022/v1/automaton">>
-                },
-                xrates => #{
-                    url => <<"http://xrates:8022/xrates">>
-                }
+        genlib_app:start_application_with(dmt_client, [
+            % milliseconds
+            {cache_update_interval, 5000},
+            {max_cache_size, #{
+                elements => 20,
+                % 50Mb
+                memory => 52428800
             }},
-            {exchange_factors, #{
-                <<"DEFAULT">> => {1, 1},
-                <<"USD">> => {105, 100},
-                <<"EUR">> => {12, 10}
+            {woody_event_handlers, [
+                {scoper_woody_event_handler, #{
+                    event_handler_opts => #{
+                        formatter_opts => #{
+                            max_length => 1000
+                        }
+                    }
+                }}
+            ]},
+            {service_urls, #{
+                'Repository' => <<"http://dominant:8022/v1/domain/repository">>,
+                'RepositoryClient' => <<"http://dominant:8022/v1/domain/repository_client">>
             }}
-        ]),
-    [{apps, Apps}] ++ Config.
+        ]) ++
+            genlib_app:start_application_with(limiter, [
+                {service_clients, #{
+                    accounter => #{
+                        url => <<"http://shumway:8022/accounter">>
+                    },
+                    automaton => #{
+                        url => <<"http://machinegun:8022/v1/automaton">>
+                    },
+                    xrates => #{
+                        url => <<"http://xrates:8022/xrates">>
+                    }
+                }},
+                {exchange_factors, #{
+                    <<"DEFAULT">> => {1, 1},
+                    <<"USD">> => {105, 100},
+                    <<"EUR">> => {12, 10}
+                }}
+            ]),
+    Config1 = [{apps, Apps}] ++ Config,
+    dmt_client:upsert(
+        {limit_config,
+            make_limit_object(
+                ?config(id, Config1),
+                <<"Test limit config">>,
+                ?time_range_week(),
+                ?scope([?scope_provider(), ?scope_payment_tool()]),
+                ?turnover_metric_amount(<<"RUB">>),
+                Config1
+            )}
+    ),
+    Config1.
 
 -spec end_per_suite(config()) -> _.
 end_per_suite(Config) ->
@@ -604,12 +639,17 @@ configure_limit(TimeRange, Scope, C) ->
 
 configure_limit(TimeRange, Scope, Metric, C) ->
     ID = ?config(id, C),
+    Params = make_configure_limit_params(ID, TimeRange, Scope, Metric, C),
+    {ok, _LimitConfig} = lim_client:create_config(Params, ?config(client, C)),
+    ID.
+
+make_configure_limit_params(ID, TimeRange, Scope, Metric, C) ->
     ContextType =
         case get_group_name(C) of
             withdrawals -> ?ctx_type_wthdproc();
             _Default -> ?ctx_type_payproc()
         end,
-    Params = #config_LimitConfigParams{
+    #config_LimitConfigParams{
         id = ID,
         started_at = <<"2000-01-01T00:00:00Z">>,
         time_range_type = TimeRange,
@@ -618,9 +658,25 @@ configure_limit(TimeRange, Scope, Metric, C) ->
         scope = Scope,
         context_type = ContextType,
         op_behaviour = ?op_behaviour(?op_subtraction())
-    },
-    {ok, _LimitConfig} = lim_client:create_config(Params, ?config(client, C)),
-    ID.
+    }.
+
+make_limit_object(ID, Description, TimeRange, Scope, Metric, C) ->
+    Params = make_configure_limit_params(ID, TimeRange, Scope, Metric, C),
+    #domain_LimitConfigObject{
+        ref = #domain_LimitConfigRef{id = ID},
+        data = #limiter_config_LimitConfig{
+            processor_type = <<"TurnoverProcessor">>,
+            created_at = Params#config_LimitConfigParams.started_at,
+            started_at = Params#config_LimitConfigParams.started_at,
+            shard_size = Params#config_LimitConfigParams.shard_size,
+            time_range_type = Params#config_LimitConfigParams.time_range_type,
+            context_type = Params#config_LimitConfigParams.context_type,
+            type = Params#config_LimitConfigParams.type,
+            scopes = Params#config_LimitConfigParams.scope,
+            description = Description,
+            op_behaviour = Params#config_LimitConfigParams.op_behaviour
+        }
+    }.
 
 gen_unique_id(Prefix) ->
     genlib:format("~s/~B", [Prefix, lim_time:now()]).

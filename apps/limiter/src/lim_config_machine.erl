@@ -1,6 +1,9 @@
 -module(lim_config_machine).
 
 -include_lib("limiter_proto/include/limproto_limiter_thrift.hrl").
+-include_lib("damsel/include/dmsl_domain_thrift.hrl").
+-include_lib("damsel/include/dmsl_domain_conf_thrift.hrl").
+-include_lib("damsel/include/dmsl_limiter_config_thrift.hrl").
 
 %% Accessors
 
@@ -80,6 +83,7 @@
 -type operation_type() :: invoice_payment_refund.
 
 -type lim_id() :: limproto_limiter_thrift:'LimitID'().
+-type lim_version() :: dmsl_domain_thrift:'DataRevision'() | undefined.
 -type lim_change() :: limproto_limiter_thrift:'LimitChange'().
 -type limit() :: limproto_limiter_thrift:'Limit'().
 -type timestamp() :: dmsl_base_thrift:'Timestamp'().
@@ -235,37 +239,81 @@ get(ID, LimitContext) ->
 -spec get_limit(lim_id(), lim_context()) -> {ok, limit()} | {error, config_error() | {processor(), get_limit_error()}}.
 get_limit(ID, LimitContext) ->
     do(fun() ->
-        {Handler, Config} = unwrap(get_handler(ID, LimitContext)),
+        {Handler, Config} = unwrap(get_handler(ID, latest, LimitContext)),
         unwrap(Handler, Handler:get_limit(ID, Config, LimitContext))
     end).
 
 -spec hold(lim_change(), lim_context()) -> ok | {error, config_error() | {processor(), hold_error()}}.
-hold(LimitChange = #limiter_LimitChange{id = ID}, LimitContext) ->
+hold(LimitChange = #limiter_LimitChange{id = ID, domain_revision = Version}, LimitContext) ->
     do(fun() ->
-        {Handler, Config} = unwrap(get_handler(ID, LimitContext)),
+        {Handler, Config} = unwrap(get_handler(ID, Version, LimitContext)),
         unwrap(Handler, Handler:hold(LimitChange, Config, LimitContext))
     end).
 
 -spec commit(lim_change(), lim_context()) -> ok | {error, config_error() | {processor(), commit_error()}}.
-commit(LimitChange = #limiter_LimitChange{id = ID}, LimitContext) ->
+commit(LimitChange = #limiter_LimitChange{id = ID, domain_revision = Version}, LimitContext) ->
     do(fun() ->
-        {Handler, Config} = unwrap(get_handler(ID, LimitContext)),
+        {Handler, Config} = unwrap(get_handler(ID, Version, LimitContext)),
         unwrap(Handler, Handler:commit(LimitChange, Config, LimitContext))
     end).
 
 -spec rollback(lim_change(), lim_context()) -> ok | {error, config_error() | {processor(), rollback_error()}}.
-rollback(LimitChange = #limiter_LimitChange{id = ID}, LimitContext) ->
+rollback(LimitChange = #limiter_LimitChange{id = ID, domain_revision = Version}, LimitContext) ->
     do(fun() ->
-        {Handler, Config} = unwrap(get_handler(ID, LimitContext)),
+        {Handler, Config} = unwrap(get_handler(ID, Version, LimitContext)),
         unwrap(Handler, Handler:rollback(LimitChange, Config, LimitContext))
     end).
 
-get_handler(ID, LimitContext) ->
+get_handler(ID, Version, LimitContext) ->
     do(fun() ->
-        Config = #{processor_type := ProcessorType} = unwrap(config, get(ID, LimitContext)),
+        Config = #{processor_type := ProcessorType} = get_config(ID, Version, LimitContext),
         {ok, Handler} = lim_router:get_handler(ProcessorType),
         {Handler, Config}
     end).
+
+-spec get_config(lim_id(), lim_version(), lim_context()) -> config().
+get_config(ID, undefined, LimitContext) ->
+    unwrap(config, get(ID, LimitContext));
+get_config(ID, Version, LimitContext) ->
+    Opts = make_opts(LimitContext),
+    LimitConfig = make_ref(ID),
+    VersionedObject = dmt_client:checkout_versioned_object(Version, LimitConfig, Opts),
+    #domain_conf_VersionedObject{object = {limit_config, #domain_LimitConfigObject{data = Config}}} = VersionedObject,
+    normalize_config(ID, Config).
+
+make_ref(ID) ->
+    {limit_config, #domain_LimitConfigRef{id = ID}}.
+
+make_opts(#{woody_context := WoodyContext}) ->
+    #{woody_context => WoodyContext};
+make_opts(_) ->
+    #{}.
+
+normalize_config(ID, #limiter_config_LimitConfig{
+    processor_type = ProcessorType,
+    created_at = CreatedAt,
+    started_at = StartedAt,
+    shard_size = ShardSize,
+    time_range_type = TimeRangeType,
+    context_type = ContextType,
+    type = Type,
+    scopes = Scopes,
+    description = Description,
+    op_behaviour = OpBehaviour
+}) ->
+    #{
+        id => ID,
+        processor_type => ProcessorType,
+        created_at => CreatedAt,
+        started_at => StartedAt,
+        shard_size => ShardSize,
+        time_range_type => TimeRangeType,
+        context_type => ContextType,
+        type => Type,
+        scope => Scopes,
+        description => Description,
+        op_behaviour => OpBehaviour
+    }.
 
 -spec calculate_time_range(timestamp(), config()) -> time_range().
 calculate_time_range(Timestamp, Config) ->

@@ -15,10 +15,24 @@ services:
     working_dir: $PWD
     command: /sbin/init
     depends_on:
+      dominant:
+        condition: service_healthy
       machinegun:
         condition: service_healthy
       shumway:
         condition: service_healthy
+
+  dominant:
+    image: ghcr.io/valitydev/dominant:sha-0b47590
+    command: /opt/dominant/bin/dominant foreground
+    depends_on:
+      machinegun:
+        condition: service_healthy
+    healthcheck:
+      test: "/opt/dominant/bin/dominant ping"
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
   machinegun:
     image: ghcr.io/valitydev/machinegun:sha-7e785cd
