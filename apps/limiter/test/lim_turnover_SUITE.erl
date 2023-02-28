@@ -628,7 +628,10 @@ configure_limit(TimeRange, Scope, C) ->
 configure_limit(TimeRange, Scope, Metric, C) ->
     ID = ?config(id, C),
     Params = make_configure_limit_params(ID, TimeRange, Scope, Metric, C),
-    {ok, _LimitConfig} = lim_client:create_config(Params, ?config(client, C)),
+    {ok, LimitConfig} = lim_client:create_config(Params, ?config(client, C)),
+    %% "Remarshall" limit config and put into dominant repository
+    LimitConfigObject = lim_config_dmt_codec:marshal_config_object(lim_config_codec:unmarshal_config(LimitConfig)),
+    dmt_client:upsert({limit_config, LimitConfigObject}),
     ID.
 
 make_configure_limit_params(ID, TimeRange, Scope, Metric, C) ->

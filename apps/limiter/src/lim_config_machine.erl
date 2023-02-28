@@ -278,8 +278,8 @@ get_config(ID, Version, LimitContext) ->
     Opts = make_opts(LimitContext),
     LimitConfig = make_ref(ID),
     VersionedObject = dmt_client:checkout_versioned_object(Version, LimitConfig, Opts),
-    #domain_conf_VersionedObject{object = {limit_config, #domain_LimitConfigObject{data = Config}}} = VersionedObject,
-    normalize_config(ID, Config).
+    #domain_conf_VersionedObject{object = {limit_config, ConfigObject}} = VersionedObject,
+    lim_config_dmt_codec:unmarshal_config_object(ConfigObject).
 
 make_ref(ID) ->
     {limit_config, #domain_LimitConfigRef{id = ID}}.
@@ -288,32 +288,6 @@ make_opts(#{woody_context := WoodyContext}) ->
     #{woody_context => WoodyContext};
 make_opts(_) ->
     #{}.
-
-normalize_config(ID, #limiter_config_LimitConfig{
-    processor_type = ProcessorType,
-    created_at = CreatedAt,
-    started_at = StartedAt,
-    shard_size = ShardSize,
-    time_range_type = TimeRangeType,
-    context_type = ContextType,
-    type = Type,
-    scopes = Scopes,
-    description = Description,
-    op_behaviour = OpBehaviour
-}) ->
-    #{
-        id => ID,
-        processor_type => ProcessorType,
-        created_at => CreatedAt,
-        started_at => StartedAt,
-        shard_size => ShardSize,
-        time_range_type => TimeRangeType,
-        context_type => ContextType,
-        type => Type,
-        scope => Scopes,
-        description => Description,
-        op_behaviour => OpBehaviour
-    }.
 
 -spec calculate_time_range(timestamp(), config()) -> time_range().
 calculate_time_range(Timestamp, Config) ->

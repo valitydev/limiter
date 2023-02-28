@@ -5,10 +5,10 @@
 
 -export([marshal/2]).
 -export([unmarshal/2]).
--export([marshal_config/1]).
+-export([marshal_config/1, unmarshal_config/1]).
 -export([unmarshal_op_behaviour/1]).
 -export([unmarshal_params/1]).
--export([maybe_apply/2]).
+-export([maybe_apply/2, maybe_apply/3]).
 
 %% Types
 
@@ -183,6 +183,7 @@ unmarshal_params(#config_LimitConfigParams{
 unmarshal_change({created, #config_CreatedChange{limit_config = Config}}) ->
     {created, unmarshal_config(Config)}.
 
+-spec unmarshal_config(limproto_config_thrift:'LimitConfig'()) -> map().
 unmarshal_config(#config_LimitConfig{
     id = ID,
     processor_type = ProcessorType,
