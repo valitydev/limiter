@@ -164,19 +164,7 @@ init_per_suite(Config) ->
                     <<"EUR">> => {12, 10}
                 }}
             ]),
-    Config1 = [{apps, Apps}] ++ Config,
-    dmt_client:upsert(
-        {limit_config,
-            make_limit_object(
-                ?config(id, Config1),
-                <<"Test limit config">>,
-                ?time_range_week(),
-                ?scope([?scope_provider(), ?scope_payment_tool()]),
-                ?turnover_metric_amount(<<"RUB">>),
-                Config1
-            )}
-    ),
-    Config1.
+    [{apps, Apps}] ++ Config.
 
 -spec end_per_suite(config()) -> _.
 end_per_suite(Config) ->
@@ -658,24 +646,6 @@ make_configure_limit_params(ID, TimeRange, Scope, Metric, C) ->
         scope = Scope,
         context_type = ContextType,
         op_behaviour = ?op_behaviour(?op_subtraction())
-    }.
-
-make_limit_object(ID, Description, TimeRange, Scope, Metric, C) ->
-    Params = make_configure_limit_params(ID, TimeRange, Scope, Metric, C),
-    #domain_LimitConfigObject{
-        ref = #domain_LimitConfigRef{id = ID},
-        data = #limiter_config_LimitConfig{
-            processor_type = <<"TurnoverProcessor">>,
-            created_at = Params#config_LimitConfigParams.started_at,
-            started_at = Params#config_LimitConfigParams.started_at,
-            shard_size = Params#config_LimitConfigParams.shard_size,
-            time_range_type = Params#config_LimitConfigParams.time_range_type,
-            context_type = Params#config_LimitConfigParams.context_type,
-            type = Params#config_LimitConfigParams.type,
-            scopes = Params#config_LimitConfigParams.scope,
-            description = Description,
-            op_behaviour = Params#config_LimitConfigParams.op_behaviour
-        }
     }.
 
 gen_unique_id(Prefix) ->
