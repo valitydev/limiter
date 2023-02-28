@@ -48,6 +48,7 @@ groups() ->
 
 -spec init_per_suite(config()) -> config().
 init_per_suite(Config) ->
+    ok = application:set_env(limiter, limit_config_source, legacy),
     % dbg:tracer(), dbg:p(all, c),
     % dbg:tpl({machinery, '_', '_'}, x),
     Apps =

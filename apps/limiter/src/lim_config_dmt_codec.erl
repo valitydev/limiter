@@ -172,3 +172,28 @@ unmarshal_scope_type({terminal, _}) ->
     terminal;
 unmarshal_scope_type({payer_contact_email, _}) ->
     payer_contact_email.
+
+%%
+
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+
+-spec test() -> _.
+
+-spec marshal_unmarshal_config_object_test() -> _.
+marshal_unmarshal_config_object_test() ->
+    Config = #{
+        id => <<"id">>,
+        processor_type => <<"type">>,
+        created_at => lim_time:now(),
+        started_at => <<"2000-01-01T00:00:00Z">>,
+        shard_size => 7,
+        time_range_type => {calendar, day},
+        context_type => payment_processing,
+        type => {turnover, number},
+        scope => ordsets:from_list([party, shop]),
+        description => <<"description">>
+    },
+    ?assertEqual(Config, unmarshal_config_object(marshal_config_object(Config))).
+
+-endif.

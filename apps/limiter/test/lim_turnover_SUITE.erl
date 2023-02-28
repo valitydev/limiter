@@ -11,6 +11,8 @@
 -export([groups/0]).
 -export([init_per_suite/1]).
 -export([end_per_suite/1]).
+-export([init_per_group/2]).
+-export([end_per_group/2]).
 -export([init_per_testcase/2]).
 -export([end_per_testcase/2]).
 
@@ -60,6 +62,7 @@
 all() ->
     [
         {group, default},
+        {group, default_with_dominant},
         {group, withdrawals},
         {group, cashless},
         {group, idempotency}
@@ -85,6 +88,29 @@ groups() ->
             commit_inexistent_hold_fails,
             partial_commit_inexistent_hold_fails,
             commit_multirange_limit_ok,
+            commit_with_payment_tool_scope_ok,
+            commit_with_party_scope_ok,
+            commit_with_provider_scope_ok,
+            commit_with_terminal_scope_ok,
+            commit_with_email_scope_ok,
+            commit_with_multi_scope_ok
+        ]},
+        %% Repeats `default` group exept for `get_config_ok` and `commit_multirange_limit_ok`
+        {default_with_dominant, [], [
+            commit_with_long_change_id,
+            commit_with_default_exchange,
+            partial_commit_with_exchange,
+            commit_with_exchange,
+            commit_with_disabled_exchange,
+            get_limit_ok,
+            get_limit_notfound,
+            hold_ok,
+            commit_ok,
+            rollback_ok,
+            partial_zero_commit_rollbacks,
+            refund_ok,
+            commit_inexistent_hold_fails,
+            partial_commit_inexistent_hold_fails,
             commit_with_payment_tool_scope_ok,
             commit_with_party_scope_ok,
             commit_with_provider_scope_ok,
@@ -170,6 +196,20 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     genlib_app:test_application_stop(?config(apps, Config)).
 
+-spec init_per_group(test_case_name(), config()) -> config().
+init_per_group(default_with_dominant, C) ->
+    set_limit_config_source(repository, C);
+init_per_group(_Name, C) ->
+    set_limit_config_source(legacy, C).
+
+set_limit_config_source(ConfigSource, C) ->
+    ok = application:set_env(limiter, limit_config_source, ConfigSource),
+    [{limit_config_source, ConfigSource} | C].
+
+-spec end_per_group(test_case_name(), config()) -> ok.
+end_per_group(_Name, _C) ->
+    ok.
+
 -spec init_per_testcase(test_case_name(), config()) -> config().
 init_per_testcase(Name, C) ->
     [
@@ -187,12 +227,16 @@ end_per_testcase(_Name, C) ->
 %%
 
 -define(CHANGE_ID, 42).
--define(LIMIT_CHANGE(ID), ?LIMIT_CHANGE(ID, ?CHANGE_ID)).
--define(LIMIT_CHANGE(ID, ChangeID), #limiter_LimitChange{id = ID, change_id = gen_change_id(ID, ChangeID)}).
+-define(LIMIT_CHANGE(ID, ChangeID), ?LIMIT_CHANGE(ID, ChangeID, undefined)).
+-define(LIMIT_CHANGE(ID, ChangeID, Version), #limiter_LimitChange{
+    id = ID,
+    change_id = gen_change_id(ID, ChangeID),
+    domain_revision = Version
+}).
 
 -spec commit_with_long_change_id(config()) -> _.
 commit_with_long_change_id(C) ->
-    ID = configure_limit(?time_range_month(), ?global(), C),
+    {ID, Version} = configure_limit(?time_range_month(), ?global(), C),
     Context = ?payproc_ctx_invoice(?cash(10, <<"RUB">>)),
     LongBinary =
         <<
@@ -200,7 +244,7 @@ commit_with_long_change_id(C) ->
             "    BinaryLongBinaryLongBinaryLongBinaryLongBinaryLongBinary"
         >>,
     ChangeID = <<LongBinary/binary, LongBinary/binary, LongBinary/binary, LongBinary/binary, LongBinary/binary>>,
-    {ok, {vector, _}} = hold_and_commit(?LIMIT_CHANGE(ID, ChangeID), Context, ?config(client, C)),
+    {ok, {vector, _}} = hold_and_commit(?LIMIT_CHANGE(ID, ChangeID, Version), Context, ?config(client, C)),
     {ok, #limiter_Limit{amount = 10}} = lim_client:get(ID, Context, ?config(client, C)).
 
 -spec commit_with_default_exchange(config()) -> _.
@@ -208,10 +252,10 @@ commit_with_default_exchange(C) ->
     ok = application:set_env(limiter, currency_conversion, enabled),
     Rational = #base_Rational{p = 1000000, q = 100},
     _ = mock_exchange(Rational, C),
-    ID = configure_limit(?time_range_month(), ?global(), C),
+    {ID, Version} = configure_limit(?time_range_month(), ?global(), C),
     Cost = ?cash(10000, <<"SOME_CURRENCY">>),
     Context = ?payproc_ctx_invoice(Cost),
-    {ok, {vector, _}} = hold_and_commit(?LIMIT_CHANGE(ID), Context, ?config(client, C)),
+    {ok, {vector, _}} = hold_and_commit(?LIMIT_CHANGE(ID, ?CHANGE_ID, Version), Context, ?config(client, C)),
     {ok, #limiter_Limit{amount = 10000}} = lim_client:get(ID, Context, ?config(client, C)).
 
 -spec partial_commit_with_exchange(config()) -> _.
@@ -219,11 +263,11 @@ partial_commit_with_exchange(C) ->
     ok = application:set_env(limiter, currency_conversion, enabled),
     Rational = #base_Rational{p = 800000, q = 100},
     _ = mock_exchange(Rational, C),
-    ID = configure_limit(?time_range_month(), ?global(), C),
+    {ID, Version} = configure_limit(?time_range_month(), ?global(), C),
     Cost = ?cash(1000, <<"USD">>),
     CaptureCost = ?cash(800, <<"USD">>),
     Context = ?payproc_ctx_payment(Cost, CaptureCost),
-    {ok, {vector, _}} = hold_and_commit(?LIMIT_CHANGE(ID), Context, ?config(client, C)),
+    {ok, {vector, _}} = hold_and_commit(?LIMIT_CHANGE(ID, ?CHANGE_ID, Version), Context, ?config(client, C)),
     {ok, #limiter_Limit{amount = 8400}} = lim_client:get(ID, Context, ?config(client, C)).
 
 -spec commit_with_exchange(config()) -> _.
@@ -231,10 +275,10 @@ commit_with_exchange(C) ->
     ok = application:set_env(limiter, currency_conversion, enabled),
     Rational = #base_Rational{p = 1000000, q = 100},
     _ = mock_exchange(Rational, C),
-    ID = configure_limit(?time_range_month(), ?global(), C),
+    {ID, Version} = configure_limit(?time_range_month(), ?global(), C),
     Cost = ?cash(10000, <<"USD">>),
     Context = ?payproc_ctx_invoice(Cost),
-    {ok, {vector, _}} = hold_and_commit(?LIMIT_CHANGE(ID), Context, ?config(client, C)),
+    {ok, {vector, _}} = hold_and_commit(?LIMIT_CHANGE(ID, ?CHANGE_ID, Version), Context, ?config(client, C)),
     {ok, #limiter_Limit{amount = 10500}} = lim_client:get(ID, Context, ?config(client, C)).
 
 -spec commit_with_disabled_exchange(config()) -> _.
@@ -242,19 +286,19 @@ commit_with_disabled_exchange(C) ->
     ok = application:set_env(limiter, currency_conversion, disabled),
     Rational = #base_Rational{p = 1000000, q = 100},
     _ = mock_exchange(Rational, C),
-    ID = configure_limit(?time_range_month(), ?global(), C),
+    {ID, Version} = configure_limit(?time_range_month(), ?global(), C),
     Cost = ?cash(10000, <<"USD">>),
     Context = ?payproc_ctx_invoice(Cost),
     {exception, #base_InvalidRequest{}} =
-        lim_client:hold(?LIMIT_CHANGE(ID), Context, ?config(client, C)).
+        lim_client:hold(?LIMIT_CHANGE(ID, ?CHANGE_ID, Version), Context, ?config(client, C)).
 
 -spec get_limit_ok(config()) -> _.
 get_limit_ok(C) ->
-    ID = configure_limit(?time_range_month(), ?global(), C),
+    {ID, _Version} = configure_limit(?time_range_month(), ?global(), C),
     Context =
         case get_group_name(C) of
-            default -> ?payproc_ctx_invoice(?cash(0));
-            withdrawals -> ?wthdproc_ctx_withdrawal(?cash(0))
+            withdrawals -> ?wthdproc_ctx_withdrawal(?cash(0));
+            _Default -> ?payproc_ctx_invoice(?cash(0))
         end,
     ?assertMatch(
         {ok, #limiter_Limit{amount = 0}},
@@ -271,44 +315,46 @@ get_limit_notfound(C) ->
 
 -spec hold_ok(config()) -> _.
 hold_ok(C) ->
-    ID = configure_limit(?time_range_month(), ?global(), C),
+    {ID, Version} = configure_limit(?time_range_month(), ?global(), C),
     Context =
         case get_group_name(C) of
-            default -> ?payproc_ctx_invoice(?cash(10));
-            withdrawals -> ?wthdproc_ctx_withdrawal(?cash(10))
+            withdrawals -> ?wthdproc_ctx_withdrawal(?cash(10));
+            _Default -> ?payproc_ctx_invoice(?cash(10))
         end,
-    {ok, {vector, #limiter_VectorClock{}}} = lim_client:hold(?LIMIT_CHANGE(ID), Context, ?config(client, C)),
+    {ok, {vector, #limiter_VectorClock{}}} = lim_client:hold(
+        ?LIMIT_CHANGE(ID, ?CHANGE_ID, Version), Context, ?config(client, C)
+    ),
     {ok, #limiter_Limit{}} = lim_client:get(ID, Context, ?config(client, C)).
 
 -spec commit_ok(config()) -> _.
 commit_ok(C) ->
-    ID = configure_limit(?time_range_month(), ?global(), C),
+    {ID, Version} = configure_limit(?time_range_month(), ?global(), C),
     Context =
         case get_group_name(C) of
-            default -> ?payproc_ctx_invoice(?cash(10, <<"RUB">>));
-            withdrawals -> ?wthdproc_ctx_withdrawal(?cash(10, <<"RUB">>))
+            withdrawals -> ?wthdproc_ctx_withdrawal(?cash(10, <<"RUB">>));
+            _Default -> ?payproc_ctx_invoice(?cash(10, <<"RUB">>))
         end,
-    {ok, {vector, _}} = hold_and_commit(?LIMIT_CHANGE(ID), Context, ?config(client, C)),
+    {ok, {vector, _}} = hold_and_commit(?LIMIT_CHANGE(ID, ?CHANGE_ID, Version), Context, ?config(client, C)),
     {ok, #limiter_Limit{}} = lim_client:get(ID, Context, ?config(client, C)).
 
 -spec rollback_ok(config()) -> _.
 rollback_ok(C) ->
-    ID = configure_limit(?time_range_week(), ?global(), C),
+    {ID, Version} = configure_limit(?time_range_week(), ?global(), C),
     Context =
         case get_group_name(C) of
-            default -> ?payproc_ctx_invoice(?cash(10, <<"RUB">>));
-            withdrawals -> ?wthdproc_ctx_withdrawal(?cash(10, <<"RUB">>))
+            withdrawals -> ?wthdproc_ctx_withdrawal(?cash(10, <<"RUB">>));
+            _Default -> ?payproc_ctx_invoice(?cash(10, <<"RUB">>))
         end,
-    Change = ?LIMIT_CHANGE(ID),
+    Change = ?LIMIT_CHANGE(ID, ?CHANGE_ID, Version),
     {ok, {vector, _}} = lim_client:hold(Change, Context, ?config(client, C)),
     {ok, {vector, _}} = lim_client:rollback(Change, Context, ?config(client, C)).
 
 -spec partial_zero_commit_rollbacks(config()) -> _.
 partial_zero_commit_rollbacks(C) ->
-    ID = configure_limit(?time_range_week(), ?global(), C),
+    {ID, Version} = configure_limit(?time_range_week(), ?global(), C),
     Context0 = ?payproc_ctx_payment(?cash(10), ?cash(10)),
     Context1 = ?payproc_ctx_payment(?cash(10), ?cash(0)),
-    Change = ?LIMIT_CHANGE(ID),
+    Change = ?LIMIT_CHANGE(ID, ?CHANGE_ID, Version),
     {ok, {vector, _}} = lim_client:hold(Change, Context0, ?config(client, C)),
     {ok, {vector, _}} = lim_client:commit(Change, Context1, ?config(client, C)),
     % NOTE
@@ -322,38 +368,38 @@ refund_ok(C) ->
     Client = ?config(client, C),
     OwnerID = <<"WWWcool Ltd">>,
     ShopID = <<"shop">>,
-    ID = configure_limit(?time_range_day(), ?scope([?scope_party(), ?scope_shop()]), C),
+    {ID, Version} = configure_limit(?time_range_day(), ?scope([?scope_party(), ?scope_shop()]), C),
     Context0 = ?payproc_ctx_payment(OwnerID, ShopID, ?cash(15), ?cash(15)),
     RefundContext1 = ?payproc_ctx_refund(OwnerID, ShopID, ?cash(10), ?cash(10), ?cash(10)),
-    {ok, {vector, _}} = hold_and_commit(?LIMIT_CHANGE(ID, <<"Payment">>), Context0, Client),
-    {ok, {vector, _}} = hold_and_commit(?LIMIT_CHANGE(ID, <<"Refund">>), RefundContext1, Client),
+    {ok, {vector, _}} = hold_and_commit(?LIMIT_CHANGE(ID, <<"Payment">>, Version), Context0, Client),
+    {ok, {vector, _}} = hold_and_commit(?LIMIT_CHANGE(ID, <<"Refund">>, Version), RefundContext1, Client),
     {ok, #limiter_Limit{} = Limit2} = lim_client:get(ID, RefundContext1, Client),
     ?assertEqual(Limit2#limiter_Limit.amount, 5).
 
 -spec get_config_ok(config()) -> _.
 get_config_ok(C) ->
-    ID = configure_limit(?time_range_week(), ?global(), C),
+    {ID, _Version} = configure_limit(?time_range_week(), ?global(), C),
     {ok, #config_LimitConfig{}} = lim_client:get_config(ID, ?config(client, C)).
 
 -spec commit_inexistent_hold_fails(config()) -> _.
 commit_inexistent_hold_fails(C) ->
-    ID = configure_limit(?time_range_week(), ?global(), C),
+    {ID, Version} = configure_limit(?time_range_week(), ?global(), C),
     Context = ?payproc_ctx_payment(?cash(42), undefined),
     % NOTE
     % We do not expect `LimitChangeNotFound` here because we no longer reconcile with accounter
     % before requesting him to hold / commit.
     {exception, #base_InvalidRequest{}} =
-        lim_client:commit(?LIMIT_CHANGE(ID), Context, ?config(client, C)).
+        lim_client:commit(?LIMIT_CHANGE(ID, ?CHANGE_ID, Version), Context, ?config(client, C)).
 
 -spec partial_commit_inexistent_hold_fails(config()) -> _.
 partial_commit_inexistent_hold_fails(C) ->
-    ID = configure_limit(?time_range_week(), ?global(), C),
+    {ID, Version} = configure_limit(?time_range_week(), ?global(), C),
     Context = ?payproc_ctx_payment(?cash(42), ?cash(21)),
     % NOTE
     % We do not expect `LimitChangeNotFound` here because we no longer reconcile with accounter
     % before requesting him to hold / commit.
     {exception, #base_InvalidRequest{}} =
-        lim_client:commit(?LIMIT_CHANGE(ID), Context, ?config(client, C)).
+        lim_client:commit(?LIMIT_CHANGE(ID, ?CHANGE_ID, Version), Context, ?config(client, C)).
 
 -spec commit_multirange_limit_ok(config()) -> _.
 commit_multirange_limit_ok(C) ->
@@ -386,7 +432,7 @@ commit_multirange_limit_ok(C) ->
 -spec commit_with_payment_tool_scope_ok(config()) -> _.
 commit_with_payment_tool_scope_ok(C) ->
     Client = ?config(client, C),
-    ID = configure_limit(?time_range_week(), ?scope([?scope_payment_tool()]), ?turnover_metric_number(), C),
+    {ID, Version} = configure_limit(?time_range_week(), ?scope([?scope_payment_tool()]), ?turnover_metric_number(), C),
     Context1 = ?payproc_ctx_payment(
         ?invoice_payment(?cash(10), ?cash(10), ?bank_card(<<"Token">>, 2, 2022))
     ),
@@ -403,11 +449,11 @@ commit_with_payment_tool_scope_ok(C) ->
         ?invoice_payment(?cash(10), ?cash(10), ?digital_wallet(<<"ID42">>, <<"Pepal">>))
     ),
     {ok, LimitState0} = lim_client:get(ID, Context1, Client),
-    _ = hold_and_commit(?LIMIT_CHANGE(ID, 1), Context1, Client),
-    _ = hold_and_commit(?LIMIT_CHANGE(ID, 2), Context2, Client),
-    _ = hold_and_commit(?LIMIT_CHANGE(ID, 3), Context3, Client),
-    _ = hold_and_commit(?LIMIT_CHANGE(ID, 4), Context4, Client),
-    _ = hold_and_commit(?LIMIT_CHANGE(ID, 5), Context5, Client),
+    _ = hold_and_commit(?LIMIT_CHANGE(ID, 1, Version), Context1, Client),
+    _ = hold_and_commit(?LIMIT_CHANGE(ID, 2, Version), Context2, Client),
+    _ = hold_and_commit(?LIMIT_CHANGE(ID, 3, Version), Context3, Client),
+    _ = hold_and_commit(?LIMIT_CHANGE(ID, 4, Version), Context4, Client),
+    _ = hold_and_commit(?LIMIT_CHANGE(ID, 5, Version), Context5, Client),
     {ok, LimitState1} = lim_client:get(ID, Context1, Client),
     ?assertEqual(
         LimitState1#limiter_Limit.amount,
@@ -419,9 +465,9 @@ commit_with_payment_tool_scope_ok(C) ->
 -spec commit_processes_idempotently(config()) -> _.
 commit_processes_idempotently(C) ->
     Client = ?config(client, C),
-    ID = configure_limit(?time_range_week(), ?global(), C),
+    {ID, Version} = configure_limit(?time_range_week(), ?global(), C),
     Context = ?payproc_ctx_payment(?cash(42), undefined),
-    Change = ?LIMIT_CHANGE(ID),
+    Change = ?LIMIT_CHANGE(ID, ?CHANGE_ID, Version),
     {ok, _} = lim_client:hold(Change, Context, Client),
     {ok, _} = lim_client:hold(Change, Context, Client),
     {ok, _} = lim_client:commit(Change, Context, Client),
@@ -432,10 +478,10 @@ commit_processes_idempotently(C) ->
 -spec full_commit_processes_idempotently(config()) -> _.
 full_commit_processes_idempotently(C) ->
     Client = ?config(client, C),
-    ID = configure_limit(?time_range_week(), ?global(), C),
+    {ID, Version} = configure_limit(?time_range_week(), ?global(), C),
     Cost = ?cash(42),
     Context = ?payproc_ctx_payment(Cost, Cost),
-    Change = ?LIMIT_CHANGE(ID),
+    Change = ?LIMIT_CHANGE(ID, ?CHANGE_ID, Version),
     {ok, _} = lim_client:hold(Change, Context, Client),
     {ok, _} = lim_client:hold(Change, Context, Client),
     {ok, _} = lim_client:commit(Change, Context, Client),
@@ -446,9 +492,9 @@ full_commit_processes_idempotently(C) ->
 -spec partial_commit_processes_idempotently(config()) -> _.
 partial_commit_processes_idempotently(C) ->
     Client = ?config(client, C),
-    ID = configure_limit(?time_range_week(), ?global(), C),
+    {ID, Version} = configure_limit(?time_range_week(), ?global(), C),
     Context = ?payproc_ctx_payment(?cash(42), ?cash(40)),
-    Change = ?LIMIT_CHANGE(ID),
+    Change = ?LIMIT_CHANGE(ID, ?CHANGE_ID, Version),
     {ok, _} = lim_client:hold(Change, Context, Client),
     {ok, _} = lim_client:hold(Change, Context, Client),
     {ok, _} = lim_client:commit(Change, Context, Client),
@@ -459,9 +505,9 @@ partial_commit_processes_idempotently(C) ->
 -spec rollback_processes_idempotently(config()) -> _.
 rollback_processes_idempotently(C) ->
     Client = ?config(client, C),
-    ID = configure_limit(?time_range_week(), ?global(), C),
+    {ID, Version} = configure_limit(?time_range_week(), ?global(), C),
     Context = ?payproc_ctx_payment(?cash(42), ?cash(0)),
-    Change = ?LIMIT_CHANGE(ID),
+    Change = ?LIMIT_CHANGE(ID, ?CHANGE_ID, Version),
     {ok, _} = lim_client:hold(Change, Context, Client),
     {ok, _} = lim_client:hold(Change, Context, Client),
     {ok, _} = lim_client:commit(Change, Context, Client),
@@ -474,10 +520,10 @@ rollback_processes_idempotently(C) ->
 -spec commit_number_ok(config()) -> _.
 commit_number_ok(C) ->
     Client = ?config(client, C),
-    ID = configure_limit(?time_range_week(), ?global(), ?turnover_metric_number(), C),
+    {ID, Version} = configure_limit(?time_range_week(), ?global(), ?turnover_metric_number(), C),
     Context = ?payproc_ctx_payment(?cash(10), ?cash(10)),
     {ok, LimitState0} = lim_client:get(ID, Context, Client),
-    _ = hold_and_commit(?LIMIT_CHANGE(ID), Context, Client),
+    _ = hold_and_commit(?LIMIT_CHANGE(ID, ?CHANGE_ID, Version), Context, Client),
     {ok, LimitState1} = lim_client:get(ID, Context, Client),
     ?assertEqual(
         LimitState1#limiter_Limit.amount,
@@ -487,11 +533,11 @@ commit_number_ok(C) ->
 -spec rollback_number_ok(config()) -> _.
 rollback_number_ok(C) ->
     Client = ?config(client, C),
-    ID = configure_limit(?time_range_week(), ?global(), ?turnover_metric_number(), C),
+    {ID, Version} = configure_limit(?time_range_week(), ?global(), ?turnover_metric_number(), C),
     Context = ?payproc_ctx_payment(?cash(10), ?cash(10)),
     ContextRollback = ?payproc_ctx_payment(?cash(10), ?cash(0)),
     {ok, LimitState0} = lim_client:get(ID, Context, Client),
-    _ = hold_and_commit(?LIMIT_CHANGE(ID), Context, ContextRollback, Client),
+    _ = hold_and_commit(?LIMIT_CHANGE(ID, ?CHANGE_ID, Version), Context, ContextRollback, Client),
     {ok, LimitState1} = lim_client:get(ID, Context, Client),
     ?assertEqual(
         LimitState1#limiter_Limit.amount,
@@ -501,15 +547,15 @@ rollback_number_ok(C) ->
 -spec commit_refund_keep_number_unchanged(config()) -> _.
 commit_refund_keep_number_unchanged(C) ->
     Client = ?config(client, C),
-    ID = configure_limit(?time_range_week(), ?global(), ?turnover_metric_number(), C),
+    {ID, Version} = configure_limit(?time_range_week(), ?global(), ?turnover_metric_number(), C),
     Cost = ?cash(10),
     CaptureCost = ?cash(8),
     RefundCost = ?cash(5),
     PaymentContext = ?payproc_ctx_payment(<<"OWNER">>, <<"SHOP">>, Cost, CaptureCost),
     RefundContext = ?payproc_ctx_refund(<<"OWNER">>, <<"SHOP">>, Cost, CaptureCost, RefundCost),
     {ok, LimitState0} = lim_client:get(ID, PaymentContext, Client),
-    _ = hold_and_commit(?LIMIT_CHANGE(ID, 1), PaymentContext, Client),
-    _ = hold_and_commit(?LIMIT_CHANGE(ID, 2), RefundContext, Client),
+    _ = hold_and_commit(?LIMIT_CHANGE(ID, 1, Version), PaymentContext, Client),
+    _ = hold_and_commit(?LIMIT_CHANGE(ID, 2, Version), RefundContext, Client),
     {ok, LimitState1} = lim_client:get(ID, PaymentContext, Client),
     ?assertEqual(
         % Expected to be the same because refund decreases counter given limit config
@@ -520,11 +566,11 @@ commit_refund_keep_number_unchanged(C) ->
 -spec partial_commit_number_counts_as_single_op(config()) -> _.
 partial_commit_number_counts_as_single_op(C) ->
     Client = ?config(client, C),
-    ID = configure_limit(?time_range_week(), ?global(), ?turnover_metric_number(), C),
+    {ID, Version} = configure_limit(?time_range_week(), ?global(), ?turnover_metric_number(), C),
     Context = ?payproc_ctx_payment(?cash(10), ?cash(10)),
     ContextPartial = ?payproc_ctx_payment(?cash(10), ?cash(5)),
     {ok, LimitState0} = lim_client:get(ID, Context, Client),
-    _ = hold_and_commit(?LIMIT_CHANGE(ID), Context, ContextPartial, Client),
+    _ = hold_and_commit(?LIMIT_CHANGE(ID, ?CHANGE_ID, Version), Context, ContextPartial, Client),
     {ok, LimitState1} = lim_client:get(ID, Context, Client),
     ?assertEqual(
         LimitState1#limiter_Limit.amount,
@@ -546,40 +592,40 @@ commit_with_terminal_scope_ok(C) ->
     _ = commit_with_some_scope(?scope([?scope_terminal()]), C).
 
 commit_with_some_scope(Scope, C) ->
-    ID = configure_limit(?time_range_month(), Scope, C),
+    {ID, Version} = configure_limit(?time_range_month(), Scope, C),
     Context =
         case get_group_name(C) of
-            default -> ?payproc_ctx_payment(?cash(10, <<"RUB">>), ?cash(10, <<"RUB">>));
-            withdrawals -> ?wthdproc_ctx_withdrawal(?cash(10, <<"RUB">>))
+            withdrawals -> ?wthdproc_ctx_withdrawal(?cash(10, <<"RUB">>));
+            _Default -> ?payproc_ctx_payment(?cash(10, <<"RUB">>), ?cash(10, <<"RUB">>))
         end,
-    {ok, {vector, _}} = hold_and_commit(?LIMIT_CHANGE(ID), Context, ?config(client, C)),
+    {ok, {vector, _}} = hold_and_commit(?LIMIT_CHANGE(ID, ?CHANGE_ID, Version), Context, ?config(client, C)),
     {ok, #limiter_Limit{}} = lim_client:get(ID, Context, ?config(client, C)).
 
 -spec commit_with_email_scope_ok(config()) -> _.
 commit_with_email_scope_ok(C) ->
-    ID = configure_limit(?time_range_month(), ?scope([?scope_payer_contact_email()]), C),
+    {ID, Version} = configure_limit(?time_range_month(), ?scope([?scope_payer_contact_email()]), C),
     Context = ?payproc_ctx_payment(?cash(10, <<"RUB">>), ?cash(10, <<"RUB">>)),
-    {ok, {vector, _}} = hold_and_commit(?LIMIT_CHANGE(ID), Context, ?config(client, C)),
+    {ok, {vector, _}} = hold_and_commit(?LIMIT_CHANGE(ID, ?CHANGE_ID, Version), Context, ?config(client, C)),
     {ok, #limiter_Limit{}} = lim_client:get(ID, Context, ?config(client, C)).
 
 -spec commit_with_identity_scope_ok(config()) -> _.
 commit_with_identity_scope_ok(C) ->
-    ID = configure_limit(?time_range_month(), ?scope([?scope_identity()]), C),
+    {ID, Version} = configure_limit(?time_range_month(), ?scope([?scope_identity()]), C),
     Context = ?wthdproc_ctx_withdrawal(?cash(10, <<"RUB">>)),
-    {ok, {vector, _}} = hold_and_commit(?LIMIT_CHANGE(ID), Context, ?config(client, C)),
+    {ok, {vector, _}} = hold_and_commit(?LIMIT_CHANGE(ID, ?CHANGE_ID, Version), Context, ?config(client, C)),
     {ok, #limiter_Limit{}} = lim_client:get(ID, Context, ?config(client, C)).
 
 -spec commit_with_wallet_scope_ok(config()) -> _.
 commit_with_wallet_scope_ok(C) ->
-    ID = configure_limit(?time_range_month(), ?scope([?scope_wallet()]), C),
+    {ID, Version} = configure_limit(?time_range_month(), ?scope([?scope_wallet()]), C),
     Context = ?wthdproc_ctx_withdrawal(?cash(10, <<"RUB">>)),
-    {ok, {vector, _}} = hold_and_commit(?LIMIT_CHANGE(ID), Context, ?config(client, C)),
+    {ok, {vector, _}} = hold_and_commit(?LIMIT_CHANGE(ID, ?CHANGE_ID, Version), Context, ?config(client, C)),
     {ok, #limiter_Limit{}} = lim_client:get(ID, Context, ?config(client, C)).
 
 -spec commit_with_multi_scope_ok(config()) -> _.
 commit_with_multi_scope_ok(C) ->
     Client = ?config(client, C),
-    ID = configure_limit(?time_range_week(), ?scope([?scope_provider(), ?scope_payment_tool()]), C),
+    {ID, Version} = configure_limit(?time_range_week(), ?scope([?scope_provider(), ?scope_payment_tool()]), C),
     Context1 = ?payproc_ctx_payment(
         ?invoice_payment(?cash(10), ?cash(10), ?bank_card(<<"Token">>, 2, 2022))
     ),
@@ -596,11 +642,11 @@ commit_with_multi_scope_ok(C) ->
         ?invoice_payment(?cash(10), ?cash(10), ?digital_wallet(<<"ID42">>, <<"Pepal">>))
     ),
     {ok, LimitState0} = lim_client:get(ID, Context1, Client),
-    _ = hold_and_commit(?LIMIT_CHANGE(ID, 1), Context1, Client),
-    _ = hold_and_commit(?LIMIT_CHANGE(ID, 2), Context2, Client),
-    _ = hold_and_commit(?LIMIT_CHANGE(ID, 3), Context3, Client),
-    _ = hold_and_commit(?LIMIT_CHANGE(ID, 4), Context4, Client),
-    _ = hold_and_commit(?LIMIT_CHANGE(ID, 5), Context5, Client),
+    _ = hold_and_commit(?LIMIT_CHANGE(ID, 1, Version), Context1, Client),
+    _ = hold_and_commit(?LIMIT_CHANGE(ID, 2, Version), Context2, Client),
+    _ = hold_and_commit(?LIMIT_CHANGE(ID, 3, Version), Context3, Client),
+    _ = hold_and_commit(?LIMIT_CHANGE(ID, 4, Version), Context4, Client),
+    _ = hold_and_commit(?LIMIT_CHANGE(ID, 5, Version), Context5, Client),
     {ok, LimitState1} = lim_client:get(ID, Context1, Client),
     ?assertEqual(
         LimitState1#limiter_Limit.amount,
@@ -627,20 +673,12 @@ configure_limit(TimeRange, Scope, C) ->
 
 configure_limit(TimeRange, Scope, Metric, C) ->
     ID = ?config(id, C),
-    Params = make_configure_limit_params(ID, TimeRange, Scope, Metric, C),
-    {ok, LimitConfig} = lim_client:create_config(Params, ?config(client, C)),
-    %% "Remarshall" limit config and put into dominant repository
-    LimitConfigObject = lim_config_dmt_codec:marshal_config_object(lim_config_codec:unmarshal_config(LimitConfig)),
-    dmt_client:upsert({limit_config, LimitConfigObject}),
-    ID.
-
-make_configure_limit_params(ID, TimeRange, Scope, Metric, C) ->
     ContextType =
         case get_group_name(C) of
             withdrawals -> ?ctx_type_wthdproc();
             _Default -> ?ctx_type_payproc()
         end,
-    #config_LimitConfigParams{
+    CreateParams = #config_LimitConfigParams{
         id = ID,
         started_at = <<"2000-01-01T00:00:00Z">>,
         time_range_type = TimeRange,
@@ -649,7 +687,24 @@ make_configure_limit_params(ID, TimeRange, Scope, Metric, C) ->
         scope = Scope,
         context_type = ContextType,
         op_behaviour = ?op_behaviour(?op_subtraction())
-    }.
+    },
+    ConfigSource = proplists:get_value(limit_config_source, C, legacy),
+    put_config_into_repository(CreateParams, ConfigSource, ?config(client, C)).
+
+put_config_into_repository(CreateParams = #config_LimitConfigParams{id = ID}, legacy, Client) ->
+    {ok, _LimitConfig} = lim_client:create_config(CreateParams, Client),
+    {ID, undefined};
+put_config_into_repository(CreateParams = #config_LimitConfigParams{id = ID}, repository, Client) ->
+    %% Use existing config creation method but hijack id to ensure that it won't be referenced in actual test
+    Salt = <<"/crutch">>,
+    HijackedCreateParams = CreateParams#config_LimitConfigParams{id = <<ID/binary, Salt/binary>>},
+    {ok, LimitConfig} = lim_client:create_config(HijackedCreateParams, Client),
+    %% "Remarshal" limit config and put into dominant repository
+    LimitConfigObject = lim_config_dmt_codec:marshal_config_object(lim_config_codec:unmarshal_config(LimitConfig)),
+    Version = dmt_client:insert(
+        {limit_config, LimitConfigObject#domain_LimitConfigObject{ref = #domain_LimitConfigRef{id = ID}}}
+    ),
+    {ID, Version}.
 
 gen_unique_id(Prefix) ->
     genlib:format("~s/~B", [Prefix, lim_time:now()]).
