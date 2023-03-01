@@ -2,6 +2,8 @@
 
 -include_lib("limiter_proto/include/limproto_config_thrift.hrl").
 -include_lib("limiter_proto/include/limproto_timerange_thrift.hrl").
+-include_lib("damsel/include/dmsl_domain_thrift.hrl").
+-include_lib("damsel/include/dmsl_limiter_config_thrift.hrl").
 
 -export([marshal/2]).
 -export([unmarshal/2]).
@@ -138,7 +140,35 @@ marshal_scope_type(payer_contact_email) ->
 unmarshal(timestamped_change, TimestampedChange) ->
     Timestamp = unmarshal_timestamp(TimestampedChange#config_TimestampedChange.occured_at),
     Change = unmarshal_change(TimestampedChange#config_TimestampedChange.change),
-    {ev, Timestamp, Change}.
+    {ev, Timestamp, Change};
+unmarshal('LimitConfigObject', #domain_LimitConfigObject{
+    ref = #domain_LimitConfigRef{id = ID},
+    data = #limiter_config_LimitConfig{
+        processor_type = ProcessorType,
+        created_at = CreatedAt,
+        started_at = StartedAt,
+        shard_size = ShardSize,
+        time_range_type = TimeRangeType,
+        context_type = ContextType,
+        type = Type,
+        scopes = Scopes,
+        description = Description,
+        op_behaviour = OpBehaviour
+    }
+}) ->
+    genlib_map:compact(#{
+        id => ID,
+        processor_type => ProcessorType,
+        created_at => lim_time:from_rfc3339(CreatedAt),
+        started_at => StartedAt,
+        shard_size => ShardSize,
+        time_range_type => unmarshal_time_range_type(TimeRangeType),
+        context_type => unmarshal_context_type(ContextType),
+        type => maybe_apply(Type, fun unmarshal_type/1),
+        scope => maybe_apply(Scopes, fun unmarshal_scope/1),
+        description => Description,
+        op_behaviour => maybe_apply(OpBehaviour, fun unmarshal_op_behaviour/1)
+    }).
 
 unmarshal_timestamp(Timestamp) when is_binary(Timestamp) ->
     try
@@ -225,16 +255,22 @@ derive_type(undefined, {cash, Currency}) ->
     {turnover, {amount, Currency}}.
 
 -spec unmarshal_op_behaviour(encoded_value()) -> decoded_value().
-unmarshal_op_behaviour(OpBehaviour) ->
-    #config_OperationLimitBehaviour{
-        invoice_payment_refund = Refund
-    } = OpBehaviour,
+unmarshal_op_behaviour(#limiter_config_OperationLimitBehaviour{invoice_payment_refund = Refund}) ->
+    do_unmarshal_op_behaviour_refund(Refund);
+unmarshal_op_behaviour(#config_OperationLimitBehaviour{invoice_payment_refund = Refund}) ->
+    do_unmarshal_op_behaviour_refund(Refund).
+
+do_unmarshal_op_behaviour_refund(Refund) ->
     genlib_map:compact(#{
         invoice_payment_refund => maybe_apply(Refund, fun unmarshal_behaviour/1)
     }).
 
+unmarshal_behaviour({subtraction, #limiter_config_Subtraction{}}) ->
+    subtraction;
 unmarshal_behaviour({subtraction, #config_Subtraction{}}) ->
     subtraction;
+unmarshal_behaviour({addition, #limiter_config_Addition{}}) ->
+    addition;
 unmarshal_behaviour({addition, #config_Addition{}}) ->
     addition.
 
@@ -244,6 +280,8 @@ unmarshal_body_type_deprecated({cash, #config_LimitBodyTypeCash{currency = Curre
 
 unmarshal_time_range_type({calendar, CalendarType}) ->
     {calendar, unmarshal_calendar_time_range_type(CalendarType)};
+unmarshal_time_range_type({interval, #limiter_config_TimeRangeTypeInterval{amount = Amount}}) ->
+    {interval, Amount};
 unmarshal_time_range_type({interval, #timerange_TimeRangeTypeInterval{amount = Amount}}) ->
     {interval, Amount}.
 
@@ -256,22 +294,32 @@ unmarshal_calendar_time_range_type({month, _}) ->
 unmarshal_calendar_time_range_type({year, _}) ->
     year.
 
+unmarshal_context_type({payment_processing, #limiter_config_LimitContextTypePaymentProcessing{}}) ->
+    payment_processing;
 unmarshal_context_type({payment_processing, #config_LimitContextTypePaymentProcessing{}}) ->
     payment_processing;
+unmarshal_context_type({withdrawal_processing, #limiter_config_LimitContextTypeWithdrawalProcessing{}}) ->
+    withdrawal_processing;
 unmarshal_context_type({withdrawal_processing, #config_LimitContextTypeWithdrawalProcessing{}}) ->
     withdrawal_processing.
 
+unmarshal_type({turnover, #limiter_config_LimitTypeTurnover{metric = Metric}}) ->
+    {turnover, maybe_apply(Metric, fun unmarshal_turnover_metric/1, number)};
 unmarshal_type({turnover, #config_LimitTypeTurnover{metric = Metric}}) ->
     {turnover, maybe_apply(Metric, fun unmarshal_turnover_metric/1, number)}.
 
 unmarshal_turnover_metric({number, _}) ->
     number;
+unmarshal_turnover_metric({amount, #limiter_config_LimitTurnoverAmount{currency = Currency}}) ->
+    {amount, Currency};
 unmarshal_turnover_metric({amount, #config_LimitTurnoverAmount{currency = Currency}}) ->
     {amount, Currency}.
 
 unmarshal_scope({single, Type}) ->
     ordsets:from_list([unmarshal_scope_type(Type)]);
 unmarshal_scope({multi, Types}) ->
+    ordsets:from_list(lists:map(fun unmarshal_scope_type/1, ordsets:to_list(Types)));
+unmarshal_scope(Types) when is_list(Types) ->
     ordsets:from_list(lists:map(fun unmarshal_scope_type/1, ordsets:to_list(Types))).
 
 unmarshal_scope_type({party, _}) ->
@@ -359,5 +407,39 @@ unmarshal_created_w_deprecated_body_type_test_() ->
             )
         )
     ].
+
+-spec unmarshal_config_object_test() -> _.
+unmarshal_config_object_test() ->
+    CreatedAt = lim_time:now(),
+    Config = #{
+        id => <<"id">>,
+        processor_type => <<"type">>,
+        created_at => CreatedAt,
+        started_at => <<"2000-01-01T00:00:00Z">>,
+        shard_size => 7,
+        time_range_type => {calendar, day},
+        context_type => payment_processing,
+        type => {turnover, number},
+        scope => ordsets:from_list([party, shop]),
+        description => <<"description">>
+    },
+    Object = #domain_LimitConfigObject{
+        ref = #domain_LimitConfigRef{id = <<"id">>},
+        data = #limiter_config_LimitConfig{
+            processor_type = <<"type">>,
+            created_at = lim_time:to_rfc3339(CreatedAt),
+            started_at = <<"2000-01-01T00:00:00Z">>,
+            shard_size = 7,
+            time_range_type = {calendar, {day, #limiter_config_TimeRangeTypeCalendarDay{}}},
+            context_type = {payment_processing, #limiter_config_LimitContextTypePaymentProcessing{}},
+            type =
+                {turnover, #limiter_config_LimitTypeTurnover{metric = {number, #limiter_config_LimitTurnoverNumber{}}}},
+            scopes = ordsets:from_list([
+                {'party', #limiter_config_LimitScopeEmptyDetails{}}, {'shop', #limiter_config_LimitScopeEmptyDetails{}}
+            ]),
+            description = <<"description">>
+        }
+    },
+    ?assertEqual(Config, unmarshal('LimitConfigObject', Object)).
 
 -endif.

@@ -1,6 +1,8 @@
 -module(lim_config_machine).
 
 -include_lib("limiter_proto/include/limproto_limiter_thrift.hrl").
+-include_lib("damsel/include/dmsl_domain_thrift.hrl").
+-include_lib("damsel/include/dmsl_domain_conf_thrift.hrl").
 
 %% Accessors
 
@@ -21,7 +23,7 @@
 -export([start/3]).
 -export([get/2]).
 
--export([get_limit/2]).
+-export([get_limit/3]).
 -export([hold/2]).
 -export([commit/2]).
 -export([rollback/2]).
@@ -80,6 +82,7 @@
 -type operation_type() :: invoice_payment_refund.
 
 -type lim_id() :: limproto_limiter_thrift:'LimitID'().
+-type lim_version() :: dmsl_domain_thrift:'DataRevision'() | undefined.
 -type lim_change() :: limproto_limiter_thrift:'LimitChange'().
 -type limit() :: limproto_limiter_thrift:'Limit'().
 -type timestamp() :: dmsl_base_thrift:'Timestamp'().
@@ -232,40 +235,55 @@ get(ID, LimitContext) ->
         collapse(Machine)
     end).
 
--spec get_limit(lim_id(), lim_context()) -> {ok, limit()} | {error, config_error() | {processor(), get_limit_error()}}.
-get_limit(ID, LimitContext) ->
+-spec get_limit(lim_id(), lim_version(), lim_context()) ->
+    {ok, limit()} | {error, config_error() | {processor(), get_limit_error()}}.
+get_limit(ID, Version, LimitContext) ->
     do(fun() ->
-        {Handler, Config} = unwrap(get_handler(ID, LimitContext)),
+        {Handler, Config} = unwrap(get_handler(ID, Version, LimitContext)),
         unwrap(Handler, Handler:get_limit(ID, Config, LimitContext))
     end).
 
 -spec hold(lim_change(), lim_context()) -> ok | {error, config_error() | {processor(), hold_error()}}.
-hold(LimitChange = #limiter_LimitChange{id = ID}, LimitContext) ->
+hold(LimitChange = #limiter_LimitChange{id = ID, version = Version}, LimitContext) ->
     do(fun() ->
-        {Handler, Config} = unwrap(get_handler(ID, LimitContext)),
+        {Handler, Config} = unwrap(get_handler(ID, Version, LimitContext)),
         unwrap(Handler, Handler:hold(LimitChange, Config, LimitContext))
     end).
 
 -spec commit(lim_change(), lim_context()) -> ok | {error, config_error() | {processor(), commit_error()}}.
-commit(LimitChange = #limiter_LimitChange{id = ID}, LimitContext) ->
+commit(LimitChange = #limiter_LimitChange{id = ID, version = Version}, LimitContext) ->
     do(fun() ->
-        {Handler, Config} = unwrap(get_handler(ID, LimitContext)),
+        {Handler, Config} = unwrap(get_handler(ID, Version, LimitContext)),
         unwrap(Handler, Handler:commit(LimitChange, Config, LimitContext))
     end).
 
 -spec rollback(lim_change(), lim_context()) -> ok | {error, config_error() | {processor(), rollback_error()}}.
-rollback(LimitChange = #limiter_LimitChange{id = ID}, LimitContext) ->
+rollback(LimitChange = #limiter_LimitChange{id = ID, version = Version}, LimitContext) ->
     do(fun() ->
-        {Handler, Config} = unwrap(get_handler(ID, LimitContext)),
+        {Handler, Config} = unwrap(get_handler(ID, Version, LimitContext)),
         unwrap(Handler, Handler:rollback(LimitChange, Config, LimitContext))
     end).
 
-get_handler(ID, LimitContext) ->
+get_handler(ID, Version, LimitContext) ->
     do(fun() ->
-        Config = #{processor_type := ProcessorType} = unwrap(config, get(ID, LimitContext)),
+        Config = #{processor_type := ProcessorType} = unwrap(config, get_config(ID, Version, LimitContext)),
         {ok, Handler} = lim_router:get_handler(ProcessorType),
         {Handler, Config}
     end).
+
+-spec get_config(lim_id(), lim_version(), lim_context()) -> {ok, config()} | {error, notfound}.
+get_config(ID, undefined, LimitContext) ->
+    get(ID, LimitContext);
+get_config(ID, Version, #{woody_context := WoodyContext}) ->
+    LimitConfigRef = {limit_config, #domain_LimitConfigRef{id = ID}},
+    try
+        Object = dmt_client:checkout_versioned_object(Version, LimitConfigRef, #{woody_context => WoodyContext}),
+        #domain_conf_VersionedObject{object = {limit_config, ConfigObject}} = Object,
+        {ok, lim_config_codec:unmarshal('LimitConfigObject', ConfigObject)}
+    catch
+        throw:#domain_conf_ObjectNotFound{} ->
+            {error, notfound}
+    end.
 
 -spec calculate_time_range(timestamp(), config()) -> time_range().
 calculate_time_range(Timestamp, Config) ->

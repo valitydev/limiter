@@ -10,7 +10,8 @@
         machinery,
         woody,
         scoper,  % should be before any scoper event handler usage
-        erl_health
+        erl_health,
+        dmt_client
     ]},
     {mod, {limiter, []}},
     {env, []}

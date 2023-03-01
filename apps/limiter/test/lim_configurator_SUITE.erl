@@ -51,16 +51,38 @@ init_per_suite(Config) ->
     % dbg:tracer(), dbg:p(all, c),
     % dbg:tpl({machinery, '_', '_'}, x),
     Apps =
-        genlib_app:start_application_with(limiter, [
-            {service_clients, #{
-                accounter => #{
-                    url => <<"http://shumway:8022/accounter">>
-                },
-                automaton => #{
-                    url => <<"http://machinegun:8022/v1/automaton">>
-                }
+        genlib_app:start_application_with(dmt_client, [
+            % milliseconds
+            {cache_update_interval, 5000},
+            {max_cache_size, #{
+                elements => 20,
+                % 50Mb
+                memory => 52428800
+            }},
+            {woody_event_handlers, [
+                {scoper_woody_event_handler, #{
+                    event_handler_opts => #{
+                        formatter_opts => #{
+                            max_length => 1000
+                        }
+                    }
+                }}
+            ]},
+            {service_urls, #{
+                'Repository' => <<"http://dominant:8022/v1/domain/repository">>,
+                'RepositoryClient' => <<"http://dominant:8022/v1/domain/repository_client">>
             }}
-        ]),
+        ]) ++
+            genlib_app:start_application_with(limiter, [
+                {service_clients, #{
+                    accounter => #{
+                        url => <<"http://shumway:8022/accounter">>
+                    },
+                    automaton => #{
+                        url => <<"http://machinegun:8022/v1/automaton">>
+                    }
+                }}
+            ]),
     [{apps, Apps}] ++ Config.
 
 -spec end_per_suite(config()) -> _.
