@@ -183,7 +183,6 @@ unmarshal_params(#config_LimitConfigParams{
 unmarshal_change({created, #config_CreatedChange{limit_config = Config}}) ->
     {created, unmarshal_config(Config)}.
 
--spec unmarshal_config(limproto_config_thrift:'LimitConfig'()) -> map().
 unmarshal_config(#config_LimitConfig{
     id = ID,
     processor_type = ProcessorType,

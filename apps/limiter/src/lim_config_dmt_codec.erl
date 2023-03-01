@@ -91,6 +91,16 @@ unmarshal_scope_type({terminal, _}) ->
 unmarshal_scope_type({payer_contact_email, _}) ->
     payer_contact_email.
 
+maybe_apply(undefined, _) ->
+    undefined;
+maybe_apply(Value, Fun) ->
+    Fun(Value).
+
+maybe_apply(undefined, _, Default) ->
+    Default;
+maybe_apply(Value, Fun, _Default) ->
+    Fun(Value).
+
 %%
 
 -ifdef(TEST).
@@ -133,13 +143,3 @@ marshal_unmarshal_config_object_test() ->
     ?assertEqual(Config, unmarshal_config_object(Object)).
 
 -endif.
-
-maybe_apply(undefined, _) ->
-    undefined;
-maybe_apply(Value, Fun) ->
-    Fun(Value).
-
-maybe_apply(undefined, _, Default) ->
-    Default;
-maybe_apply(Value, Fun, _Default) ->
-    Fun(Value).
