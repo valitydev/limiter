@@ -279,7 +279,7 @@ get_config(ID, Version, #{woody_context := WoodyContext}) ->
     try
         Object = dmt_client:checkout_versioned_object(Version, LimitConfigRef, #{woody_context => WoodyContext}),
         #domain_conf_VersionedObject{object = {limit_config, ConfigObject}} = Object,
-        {ok, lim_config_dmt_codec:unmarshal_config_object(ConfigObject)}
+        {ok, lim_config_codec:unmarshal('LimitConfigObject', ConfigObject)}
     catch
         throw:#domain_conf_ObjectNotFound{} ->
             {error, notfound}

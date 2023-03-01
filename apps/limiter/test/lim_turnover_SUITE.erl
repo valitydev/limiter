@@ -727,74 +727,49 @@ mk_limit_config_object(#config_LimitConfigParams{
             created_at = StartedAt,
             started_at = StartedAt,
             shard_size = ShardSize,
-            time_range_type = mk_time_range_type(TimeRange),
-            context_type = mk_context_type(ContextType),
-            type = maybe_apply(Type, fun mk_type/1),
-            scopes = maybe_apply(Scope, fun mk_scope/1),
+            time_range_type = translate_time_range_type(TimeRange),
+            context_type = translate_tuple_record(ContextType, "config", "limiter_config"),
+            type = maybe_apply(Type, fun translate_type/1),
+            scopes = maybe_apply(Scope, fun translate_scope/1),
             description = <<"Description">>,
             op_behaviour = maybe_apply(OpBehaviour, fun mk_op_behaviour/1)
         }
     }.
 
 mk_op_behaviour(#config_OperationLimitBehaviour{invoice_payment_refund = PaymentRefund}) ->
-    #limiter_config_OperationLimitBehaviour{invoice_payment_refund = maybe_apply(PaymentRefund, fun mk_behaviour/1)}.
-
-mk_behaviour({subtraction, #config_Subtraction{}}) ->
-    {subtraction, #limiter_config_Subtraction{}};
-mk_behaviour({addition, #config_Addition{}}) ->
-    {addition, #limiter_config_Addition{}}.
+    #limiter_config_OperationLimitBehaviour{
+        invoice_payment_refund = maybe_apply(PaymentRefund, fun(Item) ->
+            translate_tuple_record(Item, "config", "limiter_config")
+        end)
+    }.
 
 %% Interval type is never used in this test suite. To appease dialyzer this clause is commented out.
-% mk_time_range_type({interval, #timerange_TimeRangeTypeInterval{amount = Amount}}) ->
+% translate_time_range_type({interval, #timerange_TimeRangeTypeInterval{amount = Amount}}) ->
 %     {interval, #limiter_config_TimeRangeTypeInterval{amount = Amount}};
-mk_time_range_type({calendar, CalendarType}) ->
-    {calendar, mk_calendar_time_range_type(CalendarType)}.
+translate_time_range_type({calendar, CalendarType}) ->
+    {calendar, translate_tuple_record(CalendarType, "timerange", "limiter_config")}.
 
-mk_calendar_time_range_type({year, #timerange_TimeRangeTypeCalendarYear{}}) ->
-    {year, #limiter_config_TimeRangeTypeCalendarYear{}};
-mk_calendar_time_range_type({month, #timerange_TimeRangeTypeCalendarMonth{}}) ->
-    {month, #limiter_config_TimeRangeTypeCalendarMonth{}};
-mk_calendar_time_range_type({week, #timerange_TimeRangeTypeCalendarWeek{}}) ->
-    {week, #limiter_config_TimeRangeTypeCalendarWeek{}};
-mk_calendar_time_range_type({day, #timerange_TimeRangeTypeCalendarDay{}}) ->
-    {day, #limiter_config_TimeRangeTypeCalendarDay{}}.
+translate_type({turnover, #config_LimitTypeTurnover{metric = Metric}}) ->
+    {turnover, #limiter_config_LimitTypeTurnover{metric = translate_tuple_record(Metric, "config", "limiter_config")}}.
 
-mk_context_type({payment_processing, #config_LimitContextTypePaymentProcessing{}}) ->
-    {payment_processing, #limiter_config_LimitContextTypePaymentProcessing{}};
-mk_context_type({withdrawal_processing, #config_LimitContextTypeWithdrawalProcessing{}}) ->
-    {withdrawal_processing, #limiter_config_LimitContextTypeWithdrawalProcessing{}}.
+translate_scope({single, ScopeType}) ->
+    ordsets:from_list([translate_scope_type(ScopeType)]);
+translate_scope({multi, ScopeTypes}) ->
+    ordsets:from_list(lists:map(fun translate_scope_type/1, ordsets:to_list(ScopeTypes))).
 
-mk_type({turnover, #config_LimitTypeTurnover{metric = Metric}}) ->
-    {turnover, #limiter_config_LimitTypeTurnover{metric = mk_turnover_metric(Metric)}}.
-
-mk_turnover_metric({number, #config_LimitTurnoverNumber{}}) ->
-    {number, #limiter_config_LimitTurnoverNumber{}};
-mk_turnover_metric({amount, #config_LimitTurnoverAmount{currency = Currency}}) ->
-    {amount, #limiter_config_LimitTurnoverAmount{currency = Currency}}.
-
-mk_scope({single, ScopeType}) ->
-    ordsets:from_list([mk_scope_type(ScopeType)]);
-mk_scope({multi, ScopeTypes}) ->
-    ordsets:from_list(lists:map(fun mk_scope_type/1, ordsets:to_list(ScopeTypes))).
-
-mk_scope_type({party, #config_LimitScopeEmptyDetails{}}) ->
-    {party, #limiter_config_LimitScopeEmptyDetails{}};
-mk_scope_type({shop, #config_LimitScopeEmptyDetails{}}) ->
-    {shop, #limiter_config_LimitScopeEmptyDetails{}};
-mk_scope_type({wallet, #config_LimitScopeEmptyDetails{}}) ->
-    {wallet, #limiter_config_LimitScopeEmptyDetails{}};
-mk_scope_type({identity, #config_LimitScopeEmptyDetails{}}) ->
-    {identity, #limiter_config_LimitScopeEmptyDetails{}};
-mk_scope_type({payment_tool, #config_LimitScopeEmptyDetails{}}) ->
-    {payment_tool, #limiter_config_LimitScopeEmptyDetails{}};
-mk_scope_type({provider, #config_LimitScopeEmptyDetails{}}) ->
-    {provider, #limiter_config_LimitScopeEmptyDetails{}};
-mk_scope_type({terminal, #config_LimitScopeEmptyDetails{}}) ->
-    {terminal, #limiter_config_LimitScopeEmptyDetails{}};
-mk_scope_type({payer_contact_email, #config_LimitScopeEmptyDetails{}}) ->
-    {payer_contact_email, #limiter_config_LimitScopeEmptyDetails{}}.
+translate_scope_type({Scope, #config_LimitScopeEmptyDetails{}}) ->
+    {Scope, #limiter_config_LimitScopeEmptyDetails{}}.
 
 maybe_apply(undefined, _) ->
     undefined;
 maybe_apply(Value, Fun) ->
     Fun(Value).
+
+translate_tuple_record({Type, Record}, OldRecordPrefix, NewRecordPrefix) ->
+    {Type, change_record_name_prefix(Record, OldRecordPrefix, NewRecordPrefix)}.
+
+change_record_name_prefix(Record, OldPrefix, NewPrefix) ->
+    RecordName = atom_to_list(element(1, Record)),
+    [OldPrefix, TypeName] = string:split(RecordName, "_", trailing),
+    NewRecordName = list_to_existing_atom(NewPrefix ++ "_" ++ TypeName),
+    setelement(1, Record, NewRecordName).
