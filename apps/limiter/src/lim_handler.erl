@@ -27,11 +27,14 @@ handle_function(Fn, Args, WoodyCtx, Opts) ->
     ).
 
 -spec handle_function_(woody:func(), woody:args(), lim_context(), woody:options()) -> {ok, woody:result()}.
-handle_function_('Get', {LimitID, Clock, Context}, LimitContext, _Opts) ->
+handle_function_('Get', {LimitID, Clock, Context}, LimitContext, Opts) ->
+    handle_function_('GetVersioned', {LimitID, undefined, Clock, Context}, LimitContext, Opts);
+handle_function_('GetVersioned', {LimitID, Version, Clock, Context}, LimitContext, _Opts) ->
     scoper:add_meta(#{limit_id => LimitID}),
     case
         lim_config_machine:get_limit(
             LimitID,
+            Version,
             lim_context:set_context(Context, lim_context:set_clock(Clock, LimitContext))
         )
     of

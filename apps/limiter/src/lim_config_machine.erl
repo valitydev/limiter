@@ -23,7 +23,7 @@
 -export([start/3]).
 -export([get/2]).
 
--export([get_limit/2]).
+-export([get_limit/3]).
 -export([hold/2]).
 -export([commit/2]).
 -export([rollback/2]).
@@ -81,7 +81,6 @@
 -type op_behaviour() :: #{operation_type() := addition | subtraction}.
 -type operation_type() :: invoice_payment_refund.
 
--type config_source() :: legacy | repository.
 -type lim_id() :: limproto_limiter_thrift:'LimitID'().
 -type lim_version() :: dmsl_domain_thrift:'DataRevision'() | undefined.
 -type lim_change() :: limproto_limiter_thrift:'LimitChange'().
@@ -236,68 +235,55 @@ get(ID, LimitContext) ->
         collapse(Machine)
     end).
 
--spec get_limit(lim_id(), lim_context()) -> {ok, limit()} | {error, config_error() | {processor(), get_limit_error()}}.
-get_limit(ID, LimitContext) ->
+-spec get_limit(lim_id(), lim_version(), lim_context()) ->
+    {ok, limit()} | {error, config_error() | {processor(), get_limit_error()}}.
+get_limit(ID, Version, LimitContext) ->
     do(fun() ->
-        {Handler, Config} = unwrap(get_handler(ID, latest, LimitContext)),
+        {Handler, Config} = unwrap(get_handler(ID, Version, LimitContext)),
         unwrap(Handler, Handler:get_limit(ID, Config, LimitContext))
     end).
 
 -spec hold(lim_change(), lim_context()) -> ok | {error, config_error() | {processor(), hold_error()}}.
-hold(LimitChange = #limiter_LimitChange{id = ID, domain_revision = Version}, LimitContext) ->
+hold(LimitChange = #limiter_LimitChange{id = ID, version = Version}, LimitContext) ->
     do(fun() ->
         {Handler, Config} = unwrap(get_handler(ID, Version, LimitContext)),
         unwrap(Handler, Handler:hold(LimitChange, Config, LimitContext))
     end).
 
 -spec commit(lim_change(), lim_context()) -> ok | {error, config_error() | {processor(), commit_error()}}.
-commit(LimitChange = #limiter_LimitChange{id = ID, domain_revision = Version}, LimitContext) ->
+commit(LimitChange = #limiter_LimitChange{id = ID, version = Version}, LimitContext) ->
     do(fun() ->
         {Handler, Config} = unwrap(get_handler(ID, Version, LimitContext)),
         unwrap(Handler, Handler:commit(LimitChange, Config, LimitContext))
     end).
 
 -spec rollback(lim_change(), lim_context()) -> ok | {error, config_error() | {processor(), rollback_error()}}.
-rollback(LimitChange = #limiter_LimitChange{id = ID, domain_revision = Version}, LimitContext) ->
+rollback(LimitChange = #limiter_LimitChange{id = ID, version = Version}, LimitContext) ->
     do(fun() ->
         {Handler, Config} = unwrap(get_handler(ID, Version, LimitContext)),
         unwrap(Handler, Handler:rollback(LimitChange, Config, LimitContext))
     end).
 
 get_handler(ID, Version, LimitContext) ->
-    ConfigSource = genlib_app:env(limiter, limit_config_source, legacy),
     do(fun() ->
-        Config = #{processor_type := ProcessorType} = get_config(ConfigSource, ID, Version, LimitContext),
+        Config = #{processor_type := ProcessorType} = unwrap(config, get_config(ID, Version, LimitContext)),
         {ok, Handler} = lim_router:get_handler(ProcessorType),
         {Handler, Config}
     end).
 
--spec get_config(config_source(), lim_id(), lim_version(), lim_context()) -> config() | no_return().
-get_config(legacy, ID, _Version, LimitContext) ->
-    unwrap(config, get(ID, LimitContext));
-get_config(repository, ID, undefined, LimitContext) ->
-    %% Fallback to legacy
-    get_config(legacy, ID, undefined, LimitContext);
-get_config(repository, ID, Version, LimitContext) ->
-    Opts = make_opts(LimitContext),
-    LimitConfig = make_ref(ID),
-    VersionedObject =
-        try
-            dmt_client:checkout_versioned_object(Version, LimitConfig, Opts)
-        catch
-            throw:#domain_conf_ObjectNotFound{} ->
-                throw({config, notfound})
-        end,
-    #domain_conf_VersionedObject{object = {limit_config, ConfigObject}} = VersionedObject,
-    lim_config_dmt_codec:unmarshal_config_object(ConfigObject).
-
-make_ref(ID) ->
-    {limit_config, #domain_LimitConfigRef{id = ID}}.
-
-make_opts(#{woody_context := WoodyContext}) ->
-    #{woody_context => WoodyContext};
-make_opts(_) ->
-    #{}.
+-spec get_config(lim_id(), lim_version(), lim_context()) -> {ok, config()} | {error, notfound}.
+get_config(ID, undefined, LimitContext) ->
+    get(ID, LimitContext);
+get_config(ID, Version, #{woody_context := WoodyContext}) ->
+    LimitConfigRef = {limit_config, #domain_LimitConfigRef{id = ID}},
+    try
+        Object = dmt_client:checkout_versioned_object(Version, LimitConfigRef, #{woody_context => WoodyContext}),
+        #domain_conf_VersionedObject{object = {limit_config, ConfigObject}} = Object,
+        {ok, lim_config_dmt_codec:unmarshal_config_object(ConfigObject)}
+    catch
+        throw:#domain_conf_ObjectNotFound{} ->
+            {error, notfound}
+    end.
 
 -spec calculate_time_range(timestamp(), config()) -> time_range().
 calculate_time_range(Timestamp, Config) ->

@@ -3,89 +3,7 @@
 -include_lib("damsel/include/dmsl_domain_thrift.hrl").
 -include_lib("damsel/include/dmsl_limiter_config_thrift.hrl").
 
--import(lim_config_codec, [maybe_apply/2, maybe_apply/3]).
-
--export([marshal_config_object/1, unmarshal_config_object/1]).
-
--spec marshal_config_object(map()) -> dmsl_domain_thrift:'LimitConfigObject'().
-marshal_config_object(Config) ->
-    #domain_LimitConfigObject{
-        ref = #domain_LimitConfigRef{id = lim_config_machine:id(Config)},
-        data = #limiter_config_LimitConfig{
-            processor_type = lim_config_machine:processor_type(Config),
-            created_at = lim_config_machine:created_at(Config),
-            started_at = lim_config_machine:started_at(Config),
-            shard_size = lim_config_machine:shard_size(Config),
-            time_range_type = marshal_time_range_type(lim_config_machine:time_range_type(Config)),
-            context_type = marshal_context_type(lim_config_machine:context_type(Config)),
-            type = maybe_apply(lim_config_machine:type(Config), fun marshal_type/1),
-            scopes = maybe_apply(lim_config_machine:scope(Config), fun marshal_scope/1),
-            description = lim_config_machine:description(Config),
-            op_behaviour = maybe_apply(lim_config_machine:op_behaviour(Config), fun marshal_op_behaviour/1)
-        }
-    }.
-
-%%
-
-marshal_op_behaviour(OpBehaviour) ->
-    PaymentRefund = maps:get(invoice_payment_refund, OpBehaviour, undefined),
-    #limiter_config_OperationLimitBehaviour{
-        invoice_payment_refund = maybe_apply(PaymentRefund, fun marshal_behaviour/1)
-    }.
-
-marshal_behaviour(subtraction) ->
-    {subtraction, #limiter_config_Subtraction{}};
-marshal_behaviour(addition) ->
-    {addition, #limiter_config_Addition{}}.
-
-marshal_time_range_type({calendar, CalendarType}) ->
-    {calendar, marshal_calendar_time_range_type(CalendarType)};
-marshal_time_range_type({interval, Amount}) ->
-    {interval, #limiter_config_TimeRangeTypeInterval{amount = Amount}}.
-
-marshal_calendar_time_range_type(day) ->
-    {day, #limiter_config_TimeRangeTypeCalendarDay{}};
-marshal_calendar_time_range_type(week) ->
-    {week, #limiter_config_TimeRangeTypeCalendarWeek{}};
-marshal_calendar_time_range_type(month) ->
-    {month, #limiter_config_TimeRangeTypeCalendarMonth{}};
-marshal_calendar_time_range_type(year) ->
-    {year, #limiter_config_TimeRangeTypeCalendarYear{}}.
-
-marshal_context_type(payment_processing) ->
-    {payment_processing, #limiter_config_LimitContextTypePaymentProcessing{}};
-marshal_context_type(withdrawal_processing) ->
-    {withdrawal_processing, #limiter_config_LimitContextTypeWithdrawalProcessing{}}.
-
-marshal_type({turnover, Metric}) ->
-    {turnover, #limiter_config_LimitTypeTurnover{metric = marshal_turnover_metric(Metric)}}.
-
-marshal_turnover_metric(number) ->
-    {number, #limiter_config_LimitTurnoverNumber{}};
-marshal_turnover_metric({amount, Currency}) ->
-    {amount, #limiter_config_LimitTurnoverAmount{currency = Currency}}.
-
-marshal_scope(Types) ->
-    ordsets:from_list(lists:map(fun marshal_scope_type/1, ordsets:to_list(Types))).
-
-marshal_scope_type(party) ->
-    {party, #limiter_config_LimitScopeEmptyDetails{}};
-marshal_scope_type(shop) ->
-    {shop, #limiter_config_LimitScopeEmptyDetails{}};
-marshal_scope_type(wallet) ->
-    {wallet, #limiter_config_LimitScopeEmptyDetails{}};
-marshal_scope_type(identity) ->
-    {identity, #limiter_config_LimitScopeEmptyDetails{}};
-marshal_scope_type(payment_tool) ->
-    {payment_tool, #limiter_config_LimitScopeEmptyDetails{}};
-marshal_scope_type(provider) ->
-    {provider, #limiter_config_LimitScopeEmptyDetails{}};
-marshal_scope_type(terminal) ->
-    {terminal, #limiter_config_LimitScopeEmptyDetails{}};
-marshal_scope_type(payer_contact_email) ->
-    {payer_contact_email, #limiter_config_LimitScopeEmptyDetails{}}.
-
-%%
+-export([unmarshal_config_object/1]).
 
 -spec unmarshal_config_object(dmsl_domain_thrift:'LimitConfigObject'()) -> map().
 unmarshal_config_object(#domain_LimitConfigObject{
@@ -182,10 +100,11 @@ unmarshal_scope_type({payer_contact_email, _}) ->
 
 -spec marshal_unmarshal_config_object_test() -> _.
 marshal_unmarshal_config_object_test() ->
+    CreatedAt = lim_time:now(),
     Config = #{
         id => <<"id">>,
         processor_type => <<"type">>,
-        created_at => lim_time:now(),
+        created_at => CreatedAt,
         started_at => <<"2000-01-01T00:00:00Z">>,
         shard_size => 7,
         time_range_type => {calendar, day},
@@ -194,6 +113,33 @@ marshal_unmarshal_config_object_test() ->
         scope => ordsets:from_list([party, shop]),
         description => <<"description">>
     },
-    ?assertEqual(Config, unmarshal_config_object(marshal_config_object(Config))).
+    Object = #domain_LimitConfigObject{
+        ref = #domain_LimitConfigRef{id = <<"id">>},
+        data = #limiter_config_LimitConfig{
+            processor_type = <<"type">>,
+            created_at = lim_time:to_rfc3339(CreatedAt),
+            started_at = <<"2000-01-01T00:00:00Z">>,
+            shard_size = 7,
+            time_range_type = {calendar, {day, #limiter_config_TimeRangeTypeCalendarDay{}}},
+            context_type = {payment_processing, #limiter_config_LimitContextTypePaymentProcessing{}},
+            type =
+                {turnover, #limiter_config_LimitTypeTurnover{metric = {number, #limiter_config_LimitTurnoverNumber{}}}},
+            scopes = ordsets:from_list([
+                {'party', #limiter_config_LimitScopeEmptyDetails{}}, {'shop', #limiter_config_LimitScopeEmptyDetails{}}
+            ]),
+            description = <<"description">>
+        }
+    },
+    ?assertEqual(Config, unmarshal_config_object(Object)).
 
 -endif.
+
+maybe_apply(undefined, _) ->
+    undefined;
+maybe_apply(Value, Fun) ->
+    Fun(Value).
+
+maybe_apply(undefined, _, Default) ->
+    Default;
+maybe_apply(Value, Fun, _Default) ->
+    Fun(Value).

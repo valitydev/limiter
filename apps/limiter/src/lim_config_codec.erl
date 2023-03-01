@@ -5,10 +5,10 @@
 
 -export([marshal/2]).
 -export([unmarshal/2]).
--export([marshal_config/1, unmarshal_config/1]).
+-export([marshal_config/1]).
 -export([unmarshal_op_behaviour/1]).
 -export([unmarshal_params/1]).
--export([maybe_apply/2, maybe_apply/3]).
+-export([maybe_apply/2]).
 
 %% Types
 
