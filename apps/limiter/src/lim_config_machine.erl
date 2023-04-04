@@ -610,7 +610,7 @@ get_context_bits(payer_contact_email) ->
 extract_context_bit({prefix, Prefix}, _ContextType, _LimitContext) ->
     {ok, Prefix};
 extract_context_bit({from, payment_tool}, ContextType, LimitContext) ->
-    {ok, PaymentTool} = lim_context:get_value(ContextType, payment_tool, LimitContext),
+    PaymentTool = unwrap(lim_context:get_value(ContextType, payment_tool, LimitContext)),
     case PaymentTool of
         {bank_card, #{token := Token, exp_date := {Month, Year}}} ->
             {ok, mk_scope_component([Token, Month, Year])};

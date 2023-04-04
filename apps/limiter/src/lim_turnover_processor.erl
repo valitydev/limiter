@@ -26,7 +26,10 @@
 
 -type hold_error() ::
     lim_rates:conversion_error()
-    | lim_accounting:invalid_request_error().
+    | lim_accounting:invalid_request_error()
+    | lim_turnover_metric:invalid_operation_currency_error()
+    | lim_context:operation_context_not_supported_error()
+    | lim_context:unsupported_error({payment_tool, atom()}).
 
 -type commit_error() ::
     {forbidden_operation_amount, forbidden_operation_amount_error()}

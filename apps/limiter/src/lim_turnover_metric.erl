@@ -7,14 +7,15 @@
 -type stage() :: hold | commit.
 -type t() :: number | {amount, currency()}.
 
--type invalid_request_error() :: {invalid_request, list(binary())}.
+-type invalid_operation_currency_error() :: {invalid_operation_currency, {currency(), currency()}}.
 
 -export_type([t/0]).
+-export_type([invalid_operation_currency_error/0]).
 
 %%
 
 -spec compute(t(), stage(), lim_config_machine:config(), lim_context:t()) ->
-    {ok, amount()} | {error, lim_rates:conversion_error()} | {error, invalid_request_error()}.
+    {ok, amount()} | {error, lim_rates:conversion_error()} | {error, invalid_operation_currency_error()}.
 compute(number, hold, Config, LimitContext) ->
     #{amount := Amount} = get_body(Config, LimitContext),
     {ok, sign(Amount)};
@@ -51,18 +52,12 @@ denominate(#{amount := Amount, currency := Currency}, Currency, _Config, _LimitC
     {ok, Amount};
 denominate(Body = #{currency := Currency}, DestinationCurrency, Config, LimitContext) ->
     case genlib_app:env(limiter, currency_conversion, disabled) of
-        disabled -> invalid_request_currencies_mismatch(Currency, DestinationCurrency);
+        disabled -> currencies_mismatch_error(Currency, DestinationCurrency);
         enabled -> convert_currency(Body, DestinationCurrency, Config, LimitContext)
     end.
 
-invalid_request_currencies_mismatch(Currency, DestinationCurrency) ->
-    {error,
-        {invalid_request, [
-            genlib:format(
-                "Invalid operation currency: ~p, expected limit currency: ~p",
-                [Currency, DestinationCurrency]
-            )
-        ]}}.
+currencies_mismatch_error(Currency, ExpectedCurrency) ->
+    {error, {invalid_operation_currency, {Currency, ExpectedCurrency}}}.
 
 convert_currency(Body, DestinationCurrency, Config, LimitContext) ->
     case lim_rates:convert(Body, DestinationCurrency, Config, LimitContext) of
