@@ -620,7 +620,7 @@ extract_context_bit({from, payment_tool}, ContextType, LimitContext) ->
             {ok, mk_scope_component([<<"DW">>, Service, ID])}
     end;
 extract_context_bit({from, ValueName}, ContextType, LimitContext) ->
-    lim_context:get_value(ContextType, ValueName, LimitContext).
+    {ok, unwrap(lim_context:get_value(ContextType, ValueName, LimitContext))}.
 
 mk_scope_component(Fragments) ->
     lim_string:join($/, Fragments).

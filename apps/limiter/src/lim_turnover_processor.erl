@@ -129,8 +129,7 @@ ensure_limit_time_range(LimitID, Config, LimitContext) ->
 
 get_timestamp(Config, LimitContext) ->
     ContextType = lim_config_machine:context_type(Config),
-    {ok, Timestamp} = lim_context:get_value(ContextType, created_at, LimitContext),
-    Timestamp.
+    unwrap(lim_context:get_value(ContextType, created_at, LimitContext)).
 
 construct_plan_id(#limiter_LimitChange{change_id = ChangeID}) ->
     % DISCUSS

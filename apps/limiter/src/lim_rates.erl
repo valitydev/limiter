@@ -15,12 +15,14 @@
 -define(DEFAULT_FACTOR, 1.1).
 -define(DEFAULT_FACTOR_NAME, <<"DEFAULT">>).
 
+-import(lim_pipeline, [unwrap/1]).
+
 -spec convert(lim_body:cash(), lim_body:currency(), config(), limit_context()) ->
     {ok, lim_body:cash()}
     | {error, conversion_error()}.
 convert(#{amount := Amount, currency := Currency}, DestinationCurrency, Config, LimitContext) ->
     ContextType = lim_config_machine:context_type(Config),
-    {ok, Timestamp} = lim_context:get_value(ContextType, created_at, LimitContext),
+    Timestamp = unwrap(lim_context:get_value(ContextType, created_at, LimitContext)),
     Request = #rate_ConversionRequest{
         source = Currency,
         destination = DestinationCurrency,
