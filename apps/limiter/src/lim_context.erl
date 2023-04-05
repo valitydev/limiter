@@ -30,12 +30,14 @@
 -type unsupported_error(T) :: {unsupported, T}.
 -type operation_context_not_supported_error() ::
     {operation_context_not_supported, limproto_limiter_thrift:'LimitContextType'()}.
+-type context_error() :: notfound | unsupported_error(_) | operation_context_not_supported_error().
 
 -export_type([t/0]).
 -export_type([context_type/0]).
 -export_type([context_operation/0]).
 -export_type([unsupported_error/1]).
 -export_type([operation_context_not_supported_error/0]).
+-export_type([context_error/0]).
 
 -callback get_operation(context_inner()) -> {ok, context_operation()} | {error, notfound}.
 -callback get_value(_Name :: atom(), context_inner()) -> {ok, term()} | {error, notfound | unsupported_error(_)}.
@@ -70,8 +72,7 @@ get_operation(Type, Context) ->
         {ok, Mod, OperationContext} -> Mod:get_operation(OperationContext)
     end.
 
--spec get_value(context_type(), atom(), t()) ->
-    {ok, term()} | {error, notfound | unsupported_error(_) | operation_context_not_supported_error()}.
+-spec get_value(context_type(), atom(), t()) -> {ok, term()} | {error, context_error()}.
 get_value(Type, ValueName, Context) ->
     case get_operation_context(Type, Context) of
         {error, _} = Error -> Error;
