@@ -16,11 +16,15 @@
 -define(DEFAULT_FACTOR_NAME, <<"DEFAULT">>).
 
 -spec convert(lim_body:cash(), lim_body:currency(), config(), limit_context()) ->
-    {ok, lim_body:cash()}
-    | {error, conversion_error()}.
+    {ok, lim_body:cash()} | {error, conversion_error() | lim_context:context_error()}.
 convert(#{amount := Amount, currency := Currency}, DestinationCurrency, Config, LimitContext) ->
     ContextType = lim_config_machine:context_type(Config),
-    {ok, Timestamp} = lim_context:get_value(ContextType, created_at, LimitContext),
+    case lim_context:get_value(ContextType, created_at, LimitContext) of
+        {ok, Timestamp} -> do_convert(Timestamp, Amount, Currency, DestinationCurrency, LimitContext);
+        {error, _} = Error -> Error
+    end.
+
+do_convert(Timestamp, Amount, Currency, DestinationCurrency, LimitContext) ->
     Request = #rate_ConversionRequest{
         source = Currency,
         destination = DestinationCurrency,

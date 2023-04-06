@@ -90,6 +90,19 @@ handle_get_error(Error) ->
 -spec handle_hold_error(_) -> no_return().
 handle_hold_error({_, {invalid_request, Errors}}) ->
     woody_error:raise(business, #base_InvalidRequest{errors = Errors});
+handle_hold_error({_, {invalid_operation_currency, {Currency, ExpectedCurrency}}}) ->
+    woody_error:raise(business, #limiter_InvalidOperationCurrency{
+        currency = Currency,
+        expected_currency = ExpectedCurrency
+    });
+handle_hold_error({_, {operation_context_not_supported, ContextType}}) ->
+    woody_error:raise(business, #limiter_OperationContextNotSupported{
+        context_type = ContextType
+    });
+handle_hold_error({_, {unsupported, {payment_tool, Type}}}) ->
+    woody_error:raise(business, #limiter_PaymentToolNotSupported{
+        payment_tool = atom_to_binary(Type)
+    });
 handle_hold_error(Error) ->
     handle_default_error(Error).
 

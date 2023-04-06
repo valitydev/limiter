@@ -538,21 +538,24 @@ mk_shard_id(Prefix, Units, ShardSize) ->
     ID = integer_to_binary(abs(Units) div ShardSize),
     <<Prefix/binary, "/", ID/binary>>.
 
--spec mk_scope_prefix(config(), lim_context()) -> prefix().
+-spec mk_scope_prefix(config(), lim_context()) -> {ok, prefix()} | {error, lim_context:context_error()}.
 mk_scope_prefix(Config, LimitContext) ->
     mk_scope_prefix_impl(scope(Config), context_type(Config), LimitContext).
 
--spec mk_scope_prefix_impl(limit_scope(), context_type(), lim_context()) -> prefix().
+-spec mk_scope_prefix_impl(limit_scope(), context_type(), lim_context()) ->
+    {ok, prefix()} | {error, lim_context:context_error()}.
 mk_scope_prefix_impl(Scope, ContextType, LimitContext) ->
-    Bits = enumerate_context_bits(Scope),
-    lists:foldl(
-        fun(Bit, Acc) ->
-            {ok, Value} = extract_context_bit(Bit, ContextType, LimitContext),
-            append_prefix(Value, Acc)
-        end,
-        <<>>,
-        Bits
-    ).
+    do(fun() ->
+        Bits = enumerate_context_bits(Scope),
+        lists:foldl(
+            fun(Bit, Acc) ->
+                Value = unwrap(extract_context_bit(Bit, ContextType, LimitContext)),
+                append_prefix(Value, Acc)
+            end,
+            <<>>,
+            Bits
+        )
+    end).
 
 -spec append_prefix(binary(), prefix()) -> prefix().
 append_prefix(Fragment, Acc) ->
@@ -606,18 +609,20 @@ get_context_bits(terminal) ->
 get_context_bits(payer_contact_email) ->
     [{prefix, <<"payer_contact_email">>}, {from, payer_contact_email}].
 
--spec extract_context_bit(context_bit(), context_type(), lim_context()) -> {ok, binary()}.
+-spec extract_context_bit(context_bit(), context_type(), lim_context()) ->
+    {ok, binary()} | {error, lim_context:context_error()}.
 extract_context_bit({prefix, Prefix}, _ContextType, _LimitContext) ->
     {ok, Prefix};
 extract_context_bit({from, payment_tool}, ContextType, LimitContext) ->
-    {ok, PaymentTool} = lim_context:get_value(ContextType, payment_tool, LimitContext),
-    case PaymentTool of
-        {bank_card, #{token := Token, exp_date := {Month, Year}}} ->
+    case lim_context:get_value(ContextType, payment_tool, LimitContext) of
+        {ok, {bank_card, #{token := Token, exp_date := {Month, Year}}}} ->
             {ok, mk_scope_component([Token, Month, Year])};
-        {bank_card, #{token := Token, exp_date := undefined}} ->
+        {ok, {bank_card, #{token := Token, exp_date := undefined}}} ->
             {ok, mk_scope_component([Token, <<"undefined">>])};
-        {digital_wallet, #{id := ID, service := Service}} ->
-            {ok, mk_scope_component([<<"DW">>, Service, ID])}
+        {ok, {digital_wallet, #{id := ID, service := Service}}} ->
+            {ok, mk_scope_component([<<"DW">>, Service, ID])};
+        {error, _} = Error ->
+            Error
     end;
 extract_context_bit({from, ValueName}, ContextType, LimitContext) ->
     lim_context:get_value(ContextType, ValueName, LimitContext).
@@ -913,22 +918,22 @@ check_calculate_year_shard_id_test() ->
 -spec global_scope_empty_prefix_test() -> _.
 global_scope_empty_prefix_test() ->
     Context = #{context => ?PAYPROC_CTX_INVOICE(?INVOICE(<<"OWNER">>, <<"SHOP">>))},
-    ?assertEqual(<<>>, mk_scope_prefix_impl(ordsets:new(), payment_processing, Context)).
+    ?assertEqual({ok, <<>>}, mk_scope_prefix_impl(ordsets:new(), payment_processing, Context)).
 
 -spec preserve_scope_prefix_order_test_() -> [_TestGen].
 preserve_scope_prefix_order_test_() ->
     Context = #{context => ?PAYPROC_CTX_INVOICE(?INVOICE(<<"OWNER">>, <<"SHOP">>))},
     [
         ?_assertEqual(
-            <<"/OWNER/SHOP">>,
+            {ok, <<"/OWNER/SHOP">>},
             mk_scope_prefix_impl(ordsets:from_list([shop, party]), payment_processing, Context)
         ),
         ?_assertEqual(
-            <<"/OWNER/SHOP">>,
+            {ok, <<"/OWNER/SHOP">>},
             mk_scope_prefix_impl(ordsets:from_list([party, shop]), payment_processing, Context)
         ),
         ?_assertEqual(
-            <<"/OWNER/SHOP">>,
+            {ok, <<"/OWNER/SHOP">>},
             mk_scope_prefix_impl(ordsets:from_list([shop]), payment_processing, Context)
         )
     ].
@@ -951,19 +956,19 @@ prefix_content_test_() ->
     },
     [
         ?_assertEqual(
-            <<"/terminal/22/2">>,
+            {ok, <<"/terminal/22/2">>},
             mk_scope_prefix_impl(ordsets:from_list([terminal, provider]), payment_processing, Context)
         ),
         ?_assertEqual(
-            <<"/terminal/22/2">>,
+            {ok, <<"/terminal/22/2">>},
             mk_scope_prefix_impl(ordsets:from_list([provider, terminal]), payment_processing, Context)
         ),
         ?_assertEqual(
-            <<"/OWNER/wallet/IDENTITY/WALLET">>,
+            {ok, <<"/OWNER/wallet/IDENTITY/WALLET">>},
             mk_scope_prefix_impl(ordsets:from_list([wallet, identity, party]), withdrawal_processing, WithdrawalContext)
         ),
         ?_assertEqual(
-            <<"/token/2/2022/payer_contact_email/email">>,
+            {ok, <<"/token/2/2022/payer_contact_email/email">>},
             mk_scope_prefix_impl(ordsets:from_list([payer_contact_email, payment_tool]), payment_processing, Context)
         )
     ].

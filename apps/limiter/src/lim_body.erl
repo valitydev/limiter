@@ -23,7 +23,7 @@
 get(BodyType, Config, LimitContext) ->
     do(fun() ->
         ContextType = lim_config_machine:context_type(Config),
-        {ok, Operation} = lim_context:get_operation(ContextType, LimitContext),
+        Operation = unwrap(lim_context:get_operation(ContextType, LimitContext)),
         Body = unwrap(get_body_for_operation(BodyType, ContextType, LimitContext)),
         apply_op_behaviour(Operation, Body, Config)
     end).

@@ -20,7 +20,9 @@
 -export([commit_with_default_exchange/1]).
 -export([partial_commit_with_exchange/1]).
 -export([commit_with_exchange/1]).
--export([commit_with_disabled_exchange/1]).
+-export([hold_with_disabled_exchange/1]).
+-export([hold_with_wrong_operation_context/1]).
+-export([hold_with_wrong_payment_tool/1]).
 -export([get_limit_ok/1]).
 -export([get_limit_notfound/1]).
 -export([hold_ok/1]).
@@ -76,7 +78,9 @@ groups() ->
             commit_with_default_exchange,
             partial_commit_with_exchange,
             commit_with_exchange,
-            commit_with_disabled_exchange,
+            hold_with_disabled_exchange,
+            hold_with_wrong_operation_context,
+            hold_with_wrong_payment_tool,
             get_limit_ok,
             get_limit_notfound,
             hold_ok,
@@ -101,7 +105,9 @@ groups() ->
             commit_with_default_exchange,
             partial_commit_with_exchange,
             commit_with_exchange,
-            commit_with_disabled_exchange,
+            hold_with_disabled_exchange,
+            hold_with_wrong_operation_context,
+            hold_with_wrong_payment_tool,
             get_limit_ok,
             get_limit_notfound,
             hold_ok,
@@ -280,15 +286,39 @@ commit_with_exchange(C) ->
     {ok, {vector, _}} = hold_and_commit(?LIMIT_CHANGE(ID, ?CHANGE_ID, Version), Context, ?config(client, C)),
     {ok, #limiter_Limit{amount = 10500}} = lim_client:get(ID, Version, Context, ?config(client, C)).
 
--spec commit_with_disabled_exchange(config()) -> _.
-commit_with_disabled_exchange(C) ->
+-spec hold_with_disabled_exchange(config()) -> _.
+hold_with_disabled_exchange(C) ->
     ok = application:set_env(limiter, currency_conversion, disabled),
     Rational = #base_Rational{p = 1000000, q = 100},
     _ = mock_exchange(Rational, C),
-    {ID, Version} = configure_limit(?time_range_month(), ?global(), C),
-    Cost = ?cash(10000, <<"USD">>),
+    ConfiguredCurrency = <<"RUB">>,
+    {ID, Version} = configure_limit(?time_range_month(), ?global(), ?turnover_metric_amount(ConfiguredCurrency), C),
+    Currency = <<"USD">>,
+    Cost = ?cash(10000, Currency),
     Context = ?payproc_ctx_invoice(Cost),
-    {exception, #base_InvalidRequest{}} =
+    {exception, #limiter_InvalidOperationCurrency{currency = Currency, expected_currency = ConfiguredCurrency}} =
+        lim_client:hold(?LIMIT_CHANGE(ID, ?CHANGE_ID, Version), Context, ?config(client, C)).
+
+-spec hold_with_wrong_operation_context(config()) -> _.
+hold_with_wrong_operation_context(C) ->
+    Rational = #base_Rational{p = 1000000, q = 100},
+    _ = mock_exchange(Rational, C),
+    {ID, Version} = configure_limit(?time_range_month(), ?global(), C),
+    Cost = ?cash(10000),
+    Context = ?wthdproc_ctx_withdrawal(Cost),
+    {exception, #limiter_OperationContextNotSupported{
+        context_type = {withdrawal_processing, #limiter_config_LimitContextTypeWithdrawalProcessing{}}
+    }} =
+        lim_client:hold(?LIMIT_CHANGE(ID, ?CHANGE_ID, Version), Context, ?config(client, C)).
+
+-spec hold_with_wrong_payment_tool(config()) -> _.
+hold_with_wrong_payment_tool(C) ->
+    Rational = #base_Rational{p = 1000000, q = 100},
+    _ = mock_exchange(Rational, C),
+    {ID, Version} = configure_limit(?time_range_week(), ?scope([?scope_payment_tool()]), ?turnover_metric_number(), C),
+    NotSupportedPaymentTool = {crypto_currency, #domain_CryptoCurrencyRef{id = <<"wow;so-cryptic;much-hidden">>}},
+    Context = ?payproc_ctx_payment(?invoice_payment(?cash(10000), ?cash(10000), NotSupportedPaymentTool)),
+    {exception, #limiter_PaymentToolNotSupported{payment_tool = <<"crypto_currency">>}} =
         lim_client:hold(?LIMIT_CHANGE(ID, ?CHANGE_ID, Version), Context, ?config(client, C)).
 
 -spec get_limit_ok(config()) -> _.

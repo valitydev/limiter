@@ -3,7 +3,6 @@
 -include_lib("limiter_proto/include/limproto_context_withdrawal_thrift.hrl").
 -include_lib("limiter_proto/include/limproto_base_thrift.hrl").
 -include_lib("damsel/include/dmsl_wthd_domain_thrift.hrl").
--include_lib("damsel/include/dmsl_domain_thrift.hrl").
 
 -behaviour(lim_context).
 -export([get_operation/1]).
