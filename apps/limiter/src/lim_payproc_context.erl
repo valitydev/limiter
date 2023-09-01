@@ -12,7 +12,6 @@
 
 -type operation() ::
     invoice
-    | invoice_adjustment
     | invoice_payment
     | invoice_payment_adjustment
     | invoice_payment_refund
@@ -67,12 +66,6 @@ get_value(ValueName, _Operation, _Context) ->
     }
 }).
 
--define(INVOICE_ADJUSTMENT(V), #context_payproc_Context{
-    invoice = #context_payproc_Invoice{
-        adjustment = V = #domain_InvoiceAdjustment{}
-    }
-}).
-
 -define(INVOICE_PAYMENT(V), #context_payproc_Context{
     invoice = #context_payproc_Invoice{
         payment = #context_payproc_InvoicePayment{payment = V = #domain_InvoicePayment{}}
@@ -115,8 +108,6 @@ get_shop_id(_) ->
 
 get_created_at(invoice, ?INVOICE(Invoice)) ->
     {ok, Invoice#domain_Invoice.created_at};
-get_created_at(invoice_adjustment, ?INVOICE_ADJUSTMENT(Adjustment)) ->
-    {ok, Adjustment#domain_InvoiceAdjustment.created_at};
 get_created_at(invoice_payment, ?INVOICE_PAYMENT(Payment)) ->
     {ok, Payment#domain_InvoicePayment.created_at};
 get_created_at(invoice_payment_adjustment, ?INVOICE_PAYMENT_ADJUSTMENT(Adjustment)) ->
