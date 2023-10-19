@@ -174,7 +174,7 @@ init_per_suite(Config) ->
                 memory => 52428800
             }},
             {woody_event_handlers, [
-                {scoper_woody_event_handler, #{
+                {lim_woody_event_handler, #{
                     event_handler_opts => #{
                         formatter_opts => #{
                             max_length => 1000

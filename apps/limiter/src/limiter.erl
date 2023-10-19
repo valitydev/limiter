@@ -39,7 +39,7 @@ init([]) ->
     RouteOptsEnv = genlib_app:env(?MODULE, route_opts, #{}),
     EventHandlers = genlib_app:env(?MODULE, woody_event_handlers, [woody_event_handler_default]),
     EventHandlerOpts = genlib_app:env(?MODULE, scoper_event_handler_options, #{}),
-    RouteOpts = RouteOptsEnv#{event_handler => {scoper_woody_event_handler, EventHandlerOpts}},
+    RouteOpts = RouteOptsEnv#{event_handler => {lim_woody_event_handler, EventHandlerOpts}},
 
     ChildSpec = woody_server:child_spec(
         ?MODULE,

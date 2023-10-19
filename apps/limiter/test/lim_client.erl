@@ -67,7 +67,7 @@ call(Function, Args, Client) ->
     Call = {{limproto_limiter_thrift, 'Limiter'}, Function, Args},
     Opts = #{
         url => <<"http://limiter:8022/v1/limiter">>,
-        event_handler => scoper_woody_event_handler,
+        event_handler => lim_woody_event_handler,
         transport_opts => #{
             max_connections => 10000
         }
@@ -79,7 +79,7 @@ call_configurator(Function, Args, Client) ->
     Call = {{limproto_configurator_thrift, 'Configurator'}, Function, Args},
     Opts = #{
         url => <<"http://limiter:8022/v1/configurator">>,
-        event_handler => scoper_woody_event_handler,
+        event_handler => lim_woody_event_handler,
         transport_opts => #{
             max_connections => 10000
         }
