@@ -23,7 +23,7 @@ services:
         condition: service_healthy
 
   dominant:
-    image: ghcr.io/valitydev/dominant:sha-e0afa44
+    image: ghcr.io/valitydev/dominant:sha-2150eea
     command: /opt/dominant/bin/dominant foreground
     depends_on:
       machinegun:
@@ -35,10 +35,10 @@ services:
       retries: 10
 
   machinegun:
-    image: ghcr.io/valitydev/machinegun:sha-7e785cd
+    image: ghcr.io/valitydev/machinegun:sha-5c0db56
+    command: /opt/machinegun/bin/machinegun foreground
     volumes:
       - ./test/machinegun/config.yaml:/opt/machinegun/etc/config.yaml
-      - ./test/log/machinegun:/var/log/machinegun
       - ./test/machinegun/cookie:/opt/machinegun/etc/cookie
     healthcheck:
       test: "/opt/machinegun/bin/machinegun ping"

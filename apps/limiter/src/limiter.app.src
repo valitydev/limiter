@@ -11,7 +11,10 @@
         woody,
         scoper,  % should be before any scoper event handler usage
         erl_health,
-        dmt_client
+        dmt_client,
+        opentelemetry_api,
+        opentelemetry_exporter,
+        opentelemetry
     ]},
     {mod, {limiter, []}},
     {env, []}
