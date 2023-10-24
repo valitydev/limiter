@@ -12,7 +12,7 @@
 
 -spec call(service_name(), woody:func(), woody:args(), woody_context:ctx()) -> woody:result().
 call(ServiceName, Function, Args, Context) ->
-    EventHandler = lim_woody_event_handler,
+    EventHandler = scoper_woody_event_handler,
     call(ServiceName, Function, Args, Context, EventHandler).
 
 -spec call(service_name(), woody:func(), woody:args(), woody_context:ctx(), woody:ev_handler()) -> woody:result().
