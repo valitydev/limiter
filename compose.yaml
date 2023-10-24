@@ -23,7 +23,7 @@ services:
         condition: service_healthy
 
   dominant:
-    image: ghcr.io/valitydev/dominant:sha-e0afa44
+    image: ghcr.io/valitydev/dominant:sha-2150eea
     command: /opt/dominant/bin/dominant foreground
     depends_on:
       machinegun:
