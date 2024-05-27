@@ -71,8 +71,14 @@ marshal_config(Config) ->
         context_type = marshal_context_type(lim_config_machine:context_type(Config)),
         type = maybe_apply(lim_config_machine:type(Config), fun marshal_type/1),
         scope = maybe_apply(lim_config_machine:scope(Config), fun marshal_scope/1),
-        op_behaviour = maybe_apply(lim_config_machine:op_behaviour(Config), fun marshal_op_behaviour/1)
+        op_behaviour = maybe_apply(lim_config_machine:op_behaviour(Config), fun marshal_op_behaviour/1),
+        currency_conversion = marshal_currency_conversion(lim_config_machine:currency_conversion(Config))
     }.
+
+marshal_currency_conversion(true) ->
+    #config_CurrencyConversion{};
+marshal_currency_conversion(_) ->
+    undefined.
 
 marshal_op_behaviour(OpBehaviour) ->
     PaymentRefund = maps:get(invoice_payment_refund, OpBehaviour, undefined),
@@ -153,7 +159,8 @@ unmarshal('LimitConfigObject', #domain_LimitConfigObject{
         type = Type,
         scopes = Scopes,
         description = Description,
-        op_behaviour = OpBehaviour
+        op_behaviour = OpBehaviour,
+        currency_conversion = CurrencyConversion
     }
 }) ->
     genlib_map:compact(#{
@@ -167,7 +174,8 @@ unmarshal('LimitConfigObject', #domain_LimitConfigObject{
         type => maybe_apply(Type, fun unmarshal_type/1),
         scope => maybe_apply(Scopes, fun unmarshal_scope/1),
         description => Description,
-        op_behaviour => maybe_apply(OpBehaviour, fun unmarshal_op_behaviour/1)
+        op_behaviour => maybe_apply(OpBehaviour, fun unmarshal_op_behaviour/1),
+        currency_conversion => CurrencyConversion =/= undefined
     }).
 
 unmarshal_timestamp(Timestamp) when is_binary(Timestamp) ->
@@ -196,7 +204,8 @@ unmarshal_params(#config_LimitConfigParams{
     context_type = ContextType,
     type = Type,
     scope = Scope,
-    op_behaviour = OpBehaviour
+    op_behaviour = OpBehaviour,
+    currency_conversion = CurrencyConversion
 }) ->
     genlib_map:compact(#{
         id => ID,
@@ -207,7 +216,8 @@ unmarshal_params(#config_LimitConfigParams{
         type => maybe_apply(Type, fun unmarshal_type/1),
         scope => maybe_apply(Scope, fun unmarshal_scope/1),
         description => Description,
-        op_behaviour => maybe_apply(OpBehaviour, fun unmarshal_op_behaviour/1)
+        op_behaviour => maybe_apply(OpBehaviour, fun unmarshal_op_behaviour/1),
+        currency_conversion => CurrencyConversion =/= undefined
     }).
 
 unmarshal_change({created, #config_CreatedChange{limit_config = Config}}) ->
@@ -225,6 +235,7 @@ unmarshal_config(#config_LimitConfig{
     type = TypeIn,
     scope = Scope,
     op_behaviour = OpBehaviour,
+    currency_conversion = CurrencyConversion,
     body_type_deprecated = BodyTypeIn
 }) ->
     Type = maybe_apply(TypeIn, fun unmarshal_type/1),
@@ -240,7 +251,8 @@ unmarshal_config(#config_LimitConfig{
         type => derive_type(Type, BodyType),
         scope => maybe_apply(Scope, fun unmarshal_scope/1),
         description => Description,
-        op_behaviour => maybe_apply(OpBehaviour, fun unmarshal_op_behaviour/1)
+        op_behaviour => maybe_apply(OpBehaviour, fun unmarshal_op_behaviour/1),
+        currency_conversion => CurrencyConversion =/= undefined
     }).
 
 derive_type(Type, undefined) ->
