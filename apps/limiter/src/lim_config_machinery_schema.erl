@@ -102,7 +102,8 @@ marshal_unmarshal_created_test() ->
             context_type => payment_processing,
             type => {turnover, {amount, <<"RUB">>}},
             scope => ordsets:from_list([party]),
-            description => <<"description">>
+            description => <<"description">>,
+            currency_conversion => false
         }},
     Context = #{machine_id => ID, machine_ns => config},
     Event = {ev, lim_time:machinery_now(), Created},

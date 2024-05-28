@@ -68,6 +68,8 @@
     invoice_payment_refund = Refund
 }).
 
+-define(currency_conversion(), #config_CurrencyConversion{}).
+
 -define(op_addition(), {addition, #config_Addition{}}).
 -define(op_subtraction(), {subtraction, #config_Subtraction{}}).
 

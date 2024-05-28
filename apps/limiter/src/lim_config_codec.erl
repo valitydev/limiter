@@ -371,7 +371,8 @@ marshal_unmarshal_created_test() ->
             context_type => payment_processing,
             type => {turnover, number},
             scope => ordsets:from_list([party, shop]),
-            description => <<"description">>
+            description => <<"description">>,
+            currency_conversion => false
         }},
     Event = {ev, lim_time:machinery_now(), Created},
     ?assertEqual(Event, unmarshal(timestamped_change, marshal(timestamped_change, Event))).
@@ -433,7 +434,8 @@ unmarshal_config_object_test() ->
         context_type => payment_processing,
         type => {turnover, number},
         scope => ordsets:from_list([party, shop]),
-        description => <<"description">>
+        description => <<"description">>,
+        currency_conversion => true
     },
     Object = #domain_LimitConfigObject{
         ref = #domain_LimitConfigRef{id = <<"id">>},
@@ -449,7 +451,8 @@ unmarshal_config_object_test() ->
             scopes = ordsets:from_list([
                 {'party', #limiter_config_LimitScopeEmptyDetails{}}, {'shop', #limiter_config_LimitScopeEmptyDetails{}}
             ]),
-            description = <<"description">>
+            description = <<"description">>,
+            currency_conversion = #config_CurrencyConversion{}
         }
     },
     ?assertEqual(Config, unmarshal('LimitConfigObject', Object)).
