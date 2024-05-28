@@ -21,7 +21,6 @@
 -export([partial_commit_with_exchange/1]).
 -export([commit_with_exchange/1]).
 -export([hold_with_disabled_exchange/1]).
--export([hold_with_disabled_exchange_by_config/1]).
 -export([rollback_with_wrong_currency/1]).
 -export([hold_with_wrong_operation_context/1]).
 -export([rollback_with_wrong_operation_context/1]).
@@ -83,7 +82,6 @@ groups() ->
             partial_commit_with_exchange,
             commit_with_exchange,
             hold_with_disabled_exchange,
-            hold_with_disabled_exchange_by_config,
             rollback_with_wrong_currency,
             hold_with_wrong_operation_context,
             rollback_with_wrong_operation_context,
@@ -243,7 +241,6 @@ commit_with_long_change_id(C) ->
 
 -spec commit_with_default_exchange(config()) -> _.
 commit_with_default_exchange(C) ->
-    ok = application:set_env(limiter, currency_conversion, enabled),
     Rational = #base_Rational{p = 1000000, q = 100},
     _ = mock_exchange(Rational, C),
     {ID, Version} = configure_limit(
@@ -256,7 +253,6 @@ commit_with_default_exchange(C) ->
 
 -spec partial_commit_with_exchange(config()) -> _.
 partial_commit_with_exchange(C) ->
-    ok = application:set_env(limiter, currency_conversion, enabled),
     Rational = #base_Rational{p = 800000, q = 100},
     _ = mock_exchange(Rational, C),
     {ID, Version} = configure_limit(
@@ -270,7 +266,6 @@ partial_commit_with_exchange(C) ->
 
 -spec commit_with_exchange(config()) -> _.
 commit_with_exchange(C) ->
-    ok = application:set_env(limiter, currency_conversion, enabled),
     Rational = #base_Rational{p = 1000000, q = 100},
     _ = mock_exchange(Rational, C),
     {ID, Version} = configure_limit(
@@ -281,24 +276,8 @@ commit_with_exchange(C) ->
     {ok, {vector, _}} = hold_and_commit(?LIMIT_CHANGE(ID, ?CHANGE_ID, Version), Context, ?config(client, C)),
     {ok, #limiter_Limit{amount = 10500}} = lim_client:get(ID, Version, Context, ?config(client, C)).
 
--spec hold_with_disabled_exchange_by_config(config()) -> _.
-hold_with_disabled_exchange_by_config(C) ->
-    %% Repeats `hold_with_disabled_exchange' but with env flag enabled
-    %% and no according option set in limit config itself.
-    ok = application:set_env(limiter, currency_conversion, enabled),
-    Rational = #base_Rational{p = 1000000, q = 100},
-    _ = mock_exchange(Rational, C),
-    ConfiguredCurrency = <<"RUB">>,
-    {ID, Version} = configure_limit(?time_range_month(), ?global(), ?turnover_metric_amount(ConfiguredCurrency), C),
-    Currency = <<"USD">>,
-    Cost = ?cash(10000, Currency),
-    Context = ?payproc_ctx_invoice(Cost),
-    {exception, #limiter_InvalidOperationCurrency{currency = Currency, expected_currency = ConfiguredCurrency}} =
-        lim_client:hold(?LIMIT_CHANGE(ID, ?CHANGE_ID, Version), Context, ?config(client, C)).
-
 -spec hold_with_disabled_exchange(config()) -> _.
 hold_with_disabled_exchange(C) ->
-    ok = application:set_env(limiter, currency_conversion, disabled),
     Rational = #base_Rational{p = 1000000, q = 100},
     _ = mock_exchange(Rational, C),
     ConfiguredCurrency = <<"RUB">>,
@@ -311,7 +290,6 @@ hold_with_disabled_exchange(C) ->
 
 -spec rollback_with_wrong_currency(config()) -> _.
 rollback_with_wrong_currency(C) ->
-    ok = application:set_env(limiter, currency_conversion, disabled),
     Rational = #base_Rational{p = 1000000, q = 100},
     _ = mock_exchange(Rational, C),
     ConfiguredCurrency = <<"RUB">>,
