@@ -452,7 +452,7 @@ unmarshal_config_object_test() ->
                 {'party', #limiter_config_LimitScopeEmptyDetails{}}, {'shop', #limiter_config_LimitScopeEmptyDetails{}}
             ]),
             description = <<"description">>,
-            currency_conversion = #config_CurrencyConversion{}
+            currency_conversion = #limiter_config_CurrencyConversion{}
         }
     },
     ?assertEqual(Config, unmarshal('LimitConfigObject', Object)).
