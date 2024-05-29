@@ -138,7 +138,8 @@ create_config(C) ->
             ?scope_party()
         ]),
         op_behaviour = ?op_behaviour(),
-        context_type = ?ctx_type_payproc()
+        context_type = ?ctx_type_payproc(),
+        currency_conversion = ?currency_conversion()
     },
     ?assertMatch(
         {ok, #config_LimitConfig{
@@ -159,7 +160,8 @@ create_config_single_scope(C) ->
         type = ?lim_type_turnover(),
         scope = {single, ?scope_party()},
         context_type = ?ctx_type_payproc(),
-        op_behaviour = ?op_behaviour()
+        op_behaviour = ?op_behaviour(),
+        currency_conversion = undefined
     },
     {ok, #config_LimitConfig{
         scope = Scope

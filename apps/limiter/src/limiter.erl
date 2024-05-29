@@ -37,7 +37,7 @@ init([]) ->
     ok = application:set_env(limiter, backends, maps:from_list(Backends)),
 
     RouteOptsEnv = genlib_app:env(?MODULE, route_opts, #{}),
-    EventHandlers = genlib_app:env(?MODULE, woody_event_handlers, [woody_event_handler_default]),
+    EventHandlers = genlib_app:env(?MODULE, woody_event_handlers, [{woody_event_handler_default, #{}}]),
     EventHandlerOpts = genlib_app:env(?MODULE, scoper_event_handler_options, #{}),
     RouteOpts = RouteOptsEnv#{event_handler => {scoper_woody_event_handler, EventHandlerOpts}},
 

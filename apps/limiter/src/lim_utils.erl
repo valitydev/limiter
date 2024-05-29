@@ -24,4 +24,4 @@ get_woody_client(Url) ->
 
 -spec get_woody_event_handlers() -> woody:ev_handlers().
 get_woody_event_handlers() ->
-    genlib_app:env(limiter, woody_event_handlers, [scoper_woody_event_handler]).
+    genlib_app:env(limiter, woody_event_handlers, [{scoper_woody_event_handler, #{}}]).

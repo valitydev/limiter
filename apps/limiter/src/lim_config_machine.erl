@@ -17,6 +17,7 @@
 -export([scope/1]).
 -export([context_type/1]).
 -export([op_behaviour/1]).
+-export([currency_conversion/1]).
 
 %% API
 
@@ -63,7 +64,8 @@
     type := limit_type(),
     scope => limit_scope(),
     description => description(),
-    op_behaviour => op_behaviour()
+    op_behaviour => op_behaviour(),
+    currency_conversion => currency_conversion()
 }.
 
 -type create_params() :: #{
@@ -75,11 +77,13 @@
     type => limit_type(),
     scope => limit_scope(),
     description => description(),
-    op_behaviour => op_behaviour()
+    op_behaviour => op_behaviour(),
+    current_function => currency_conversion()
 }.
 
 -type op_behaviour() :: #{operation_type() := addition | subtraction}.
 -type operation_type() :: invoice_payment_refund.
+-type currency_conversion() :: boolean().
 
 -type lim_id() :: limproto_limiter_thrift:'LimitID'().
 -type lim_version() :: dmsl_domain_thrift:'DataRevision'() | undefined.
@@ -106,6 +110,7 @@
 -export([process_call/4]).
 -export([process_timeout/3]).
 -export([process_repair/4]).
+-export([process_notification/4]).
 
 -type timestamped_event(T) ::
     {ev, machinery:timestamp(), T}.
@@ -212,6 +217,12 @@ op_behaviour(#{op_behaviour := Value}) ->
     Value;
 op_behaviour(_) ->
     undefined.
+
+-spec currency_conversion(config()) -> currency_conversion().
+currency_conversion(#{currency_conversion := Value}) ->
+    Value;
+currency_conversion(_) ->
+    false.
 
 %%
 
@@ -649,6 +660,10 @@ process_timeout(_Machine, _HandlerArgs, _HandlerOpts) ->
 -spec process_repair(args(_), machine(), handler_args(), handler_opts()) -> no_return().
 process_repair(_Args, _Machine, _HandlerArgs, _HandlerOpts) ->
     not_implemented(repair).
+
+-spec process_notification(args(_), machine(), handler_args(), handler_opts()) -> no_return().
+process_notification(_Args, _Machine, _HandlerArgs, _HandlerOpts) ->
+    not_implemented(notification).
 
 %%% Internal functions
 

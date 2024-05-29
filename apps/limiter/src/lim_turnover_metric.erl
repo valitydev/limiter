@@ -51,9 +51,9 @@ get_commit_body(Config, LimitContext) ->
 denominate(#{amount := Amount, currency := Currency}, Currency, _Config, _LimitContext) ->
     {ok, Amount};
 denominate(Body = #{currency := Currency}, DestinationCurrency, Config, LimitContext) ->
-    case genlib_app:env(limiter, currency_conversion, disabled) of
-        disabled -> currencies_mismatch_error(Currency, DestinationCurrency);
-        enabled -> convert_currency(Body, DestinationCurrency, Config, LimitContext)
+    case lim_config_machine:currency_conversion(Config) of
+        false -> currencies_mismatch_error(Currency, DestinationCurrency);
+        true -> convert_currency(Body, DestinationCurrency, Config, LimitContext)
     end.
 
 currencies_mismatch_error(Currency, ExpectedCurrency) ->

@@ -76,7 +76,7 @@ all() ->
 -spec groups() -> [{atom(), list(), [test_case_name()]}].
 groups() ->
     [
-        {default, [], [
+        {base, [], [
             commit_with_long_change_id,
             commit_with_default_exchange,
             partial_commit_with_exchange,
@@ -93,11 +93,9 @@ groups() ->
             commit_ok,
             rollback_ok,
             partial_zero_commit_rollbacks,
-            get_config_ok,
             refund_ok,
             commit_inexistent_hold_fails,
             partial_commit_inexistent_hold_fails,
-            commit_multirange_limit_ok,
             commit_with_payment_tool_scope_ok,
             commit_with_party_scope_ok,
             commit_with_provider_scope_ok,
@@ -105,33 +103,13 @@ groups() ->
             commit_with_email_scope_ok,
             commit_with_multi_scope_ok
         ]},
-        %% Repeats `default` group exept for `get_config_ok` and `commit_multirange_limit_ok`
+        {default, [], [
+            {group, base},
+            get_config_ok,
+            commit_multirange_limit_ok
+        ]},
         {default_with_dominant, [], [
-            commit_with_long_change_id,
-            commit_with_default_exchange,
-            partial_commit_with_exchange,
-            commit_with_exchange,
-            hold_with_disabled_exchange,
-            rollback_with_wrong_currency,
-            hold_with_wrong_operation_context,
-            rollback_with_wrong_operation_context,
-            hold_with_wrong_payment_tool,
-            rollback_with_wrong_payment_tool,
-            get_limit_ok,
-            get_limit_notfound,
-            hold_ok,
-            commit_ok,
-            rollback_ok,
-            partial_zero_commit_rollbacks,
-            refund_ok,
-            commit_inexistent_hold_fails,
-            partial_commit_inexistent_hold_fails,
-            commit_with_payment_tool_scope_ok,
-            commit_with_party_scope_ok,
-            commit_with_provider_scope_ok,
-            commit_with_terminal_scope_ok,
-            commit_with_email_scope_ok,
-            commit_with_multi_scope_ok
+            {group, base}
         ]},
         {withdrawals, [parallel], [
             get_limit_ok,
@@ -263,10 +241,11 @@ commit_with_long_change_id(C) ->
 
 -spec commit_with_default_exchange(config()) -> _.
 commit_with_default_exchange(C) ->
-    ok = application:set_env(limiter, currency_conversion, enabled),
     Rational = #base_Rational{p = 1000000, q = 100},
     _ = mock_exchange(Rational, C),
-    {ID, Version} = configure_limit(?time_range_month(), ?global(), C),
+    {ID, Version} = configure_limit(
+        ?time_range_month(), ?global(), ?turnover_metric_amount(<<"RUB">>), ?currency_conversion(), C
+    ),
     Cost = ?cash(10000, <<"SOME_CURRENCY">>),
     Context = ?payproc_ctx_invoice(Cost),
     {ok, {vector, _}} = hold_and_commit(?LIMIT_CHANGE(ID, ?CHANGE_ID, Version), Context, ?config(client, C)),
@@ -274,10 +253,11 @@ commit_with_default_exchange(C) ->
 
 -spec partial_commit_with_exchange(config()) -> _.
 partial_commit_with_exchange(C) ->
-    ok = application:set_env(limiter, currency_conversion, enabled),
     Rational = #base_Rational{p = 800000, q = 100},
     _ = mock_exchange(Rational, C),
-    {ID, Version} = configure_limit(?time_range_month(), ?global(), C),
+    {ID, Version} = configure_limit(
+        ?time_range_month(), ?global(), ?turnover_metric_amount(<<"RUB">>), ?currency_conversion(), C
+    ),
     Cost = ?cash(1000, <<"USD">>),
     CaptureCost = ?cash(800, <<"USD">>),
     Context = ?payproc_ctx_payment(Cost, CaptureCost),
@@ -286,10 +266,11 @@ partial_commit_with_exchange(C) ->
 
 -spec commit_with_exchange(config()) -> _.
 commit_with_exchange(C) ->
-    ok = application:set_env(limiter, currency_conversion, enabled),
     Rational = #base_Rational{p = 1000000, q = 100},
     _ = mock_exchange(Rational, C),
-    {ID, Version} = configure_limit(?time_range_month(), ?global(), C),
+    {ID, Version} = configure_limit(
+        ?time_range_month(), ?global(), ?turnover_metric_amount(<<"RUB">>), ?currency_conversion(), C
+    ),
     Cost = ?cash(10000, <<"USD">>),
     Context = ?payproc_ctx_invoice(Cost),
     {ok, {vector, _}} = hold_and_commit(?LIMIT_CHANGE(ID, ?CHANGE_ID, Version), Context, ?config(client, C)),
@@ -297,7 +278,6 @@ commit_with_exchange(C) ->
 
 -spec hold_with_disabled_exchange(config()) -> _.
 hold_with_disabled_exchange(C) ->
-    ok = application:set_env(limiter, currency_conversion, disabled),
     Rational = #base_Rational{p = 1000000, q = 100},
     _ = mock_exchange(Rational, C),
     ConfiguredCurrency = <<"RUB">>,
@@ -310,7 +290,6 @@ hold_with_disabled_exchange(C) ->
 
 -spec rollback_with_wrong_currency(config()) -> _.
 rollback_with_wrong_currency(C) ->
-    ok = application:set_env(limiter, currency_conversion, disabled),
     Rational = #base_Rational{p = 1000000, q = 100},
     _ = mock_exchange(Rational, C),
     ConfiguredCurrency = <<"RUB">>,
@@ -750,6 +729,9 @@ configure_limit(TimeRange, Scope, C) ->
     configure_limit(TimeRange, Scope, ?turnover_metric_amount(<<"RUB">>), C).
 
 configure_limit(TimeRange, Scope, Metric, C) ->
+    configure_limit(TimeRange, Scope, Metric, undefined, C).
+
+configure_limit(TimeRange, Scope, Metric, CurrencyConversion, C) ->
     ID = ?config(id, C),
     ContextType =
         case get_group_name(C) of
@@ -764,7 +746,8 @@ configure_limit(TimeRange, Scope, Metric, C) ->
         type = ?lim_type_turnover(Metric),
         scope = Scope,
         context_type = ContextType,
-        op_behaviour = ?op_behaviour(?op_subtraction())
+        op_behaviour = ?op_behaviour(?op_subtraction()),
+        currency_conversion = CurrencyConversion
     },
     ConfigSource = proplists:get_value(limit_config_source, C, legacy),
     put_config_into_repository(ConfigSource, CreateParams, ?config(client, C)).
