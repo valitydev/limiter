@@ -578,7 +578,8 @@ append_prefix(Fragment, Acc) ->
 
 -spec enumerate_context_bits(limit_scope()) -> [context_bit()].
 enumerate_context_bits(Types) ->
-    TypesOrder = [party, shop, identity, wallet, payment_tool, provider, terminal, payer_contact_email],
+    TypesOrder =
+        [party, shop, identity, wallet, payment_tool, provider, terminal, payer_contact_email, sender, receiver],
     SortedTypes = lists:filter(fun(T) -> ordsets:is_element(T, Types) end, TypesOrder),
     SquashedTypes = squash_scope_types(SortedTypes),
     lists:flatmap(fun get_context_bits/1, SquashedTypes).

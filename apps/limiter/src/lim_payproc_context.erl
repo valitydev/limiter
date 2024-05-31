@@ -55,6 +55,10 @@ get_value(terminal_id, Operation, Context) ->
     get_terminal_id(Operation, Context);
 get_value(payer_contact_email, Operation, Context) ->
     get_payer_contact_email(Operation, Context);
+get_value(sender, Operation, Context) ->
+    get_destination_sender(Operation, Context);
+get_value(receiver, Operation, Context) ->
+    get_destination_receiver(Operation, Context);
 get_value(ValueName, _Operation, _Context) ->
     {error, {unsupported, ValueName}}.
 
@@ -196,6 +200,12 @@ get_payer_contact_info(#domain_CustomerPayer{contact_info = CI}) ->
     CI;
 get_payer_contact_info(#domain_RecurrentPayer{contact_info = CI}) ->
     CI.
+
+get_destination_sender(_, _CtxWithdrawal) ->
+    {error, notfound}.
+
+get_destination_receiver(_, _CtxWithdrawal) ->
+    {error, notfound}.
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").

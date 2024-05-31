@@ -49,6 +49,10 @@ get_value(provider_id, Operation, Context) ->
     get_provider_id(Operation, Context);
 get_value(terminal_id, Operation, Context) ->
     get_terminal_id(Operation, Context);
+get_value(sender, Operation, Context) ->
+    get_destination_sender(Operation, Context);
+get_value(receiver, Operation, Context) ->
+    get_destination_receiver(Operation, Context);
 get_value(ValueName, _Operation, _Context) ->
     {error, {unsupported, ValueName}}.
 
@@ -69,6 +73,14 @@ get_value(ValueName, _Operation, _Context) ->
         route = V = #base_Route{}
     }
 }).
+
+-define(AUTH_DATA(V), #context_withdrawal_Context{
+    withdrawal = #context_withdrawal_Withdrawal{
+        withdrawal = #wthd_domain_Withdrawal{auth_data = V}
+    }
+}).
+
+-define(SENDER_RECEIVER(V), ?AUTH_DATA({sender_receiver, V})).
 
 get_owner_id(?WITHDRAWAL(Wthd)) ->
     Identity = Wthd#wthd_domain_Withdrawal.sender,
@@ -113,3 +125,17 @@ get_terminal_id(withdrawal, ?ROUTE(Route)) ->
     lim_context_utils:route_terminal_id(Route);
 get_terminal_id(_, _CtxWithdrawal) ->
     {error, notfound}.
+
+get_destination_sender(withdrawal, ?SENDER_RECEIVER(#wthd_domain_SenderReceiverAuthData{sender = Token})) ->
+    {ok, hash_token(Token)};
+get_destination_sender(_, _CtxWithdrawal) ->
+    {error, notfound}.
+
+get_destination_receiver(withdrawal, ?SENDER_RECEIVER(#wthd_domain_SenderReceiverAuthData{receiver = Token})) ->
+    {ok, hash_token(Token)};
+get_destination_receiver(_, _CtxWithdrawal) ->
+    {error, notfound}.
+
+hash_token(Token) ->
+    <<I:160/integer>> = crypto:hash(sha, Token),
+    genlib_format:format_int_base(I, 61).
