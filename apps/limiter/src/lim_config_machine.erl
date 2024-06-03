@@ -619,7 +619,11 @@ get_context_bits(provider) ->
 get_context_bits(terminal) ->
     [{prefix, <<"terminal">>}, {from, provider_id}, {from, terminal_id}];
 get_context_bits(payer_contact_email) ->
-    [{prefix, <<"payer_contact_email">>}, {from, payer_contact_email}].
+    [{prefix, <<"payer_contact_email">>}, {from, payer_contact_email}];
+get_context_bits(sender) ->
+    [{prefix, <<"sender">>}, {from, sender}];
+get_context_bits(receiver) ->
+    [{prefix, <<"receiver">>}, {from, receiver}].
 
 -spec extract_context_bit(context_bit(), context_type(), lim_context()) ->
     {ok, binary()} | {error, lim_context:context_error()}.

@@ -57,6 +57,11 @@
 -export([commit_with_identity_scope_ok/1]).
 -export([commit_with_wallet_scope_ok/1]).
 -export([commit_with_multi_scope_ok/1]).
+-export([hold_with_sender_notfound/1]).
+-export([hold_with_receiver_notfound/1]).
+-export([commit_with_sender_scope_ok/1]).
+-export([commit_with_receiver_scope_ok/1]).
+-export([commit_with_sender_receiver_scope_ok/1]).
 
 -type group_name() :: atom().
 -type test_case_name() :: atom().
@@ -101,7 +106,9 @@ groups() ->
             commit_with_provider_scope_ok,
             commit_with_terminal_scope_ok,
             commit_with_email_scope_ok,
-            commit_with_multi_scope_ok
+            commit_with_multi_scope_ok,
+            hold_with_sender_notfound,
+            hold_with_receiver_notfound
         ]},
         {default, [], [
             {group, base},
@@ -120,7 +127,10 @@ groups() ->
             commit_with_provider_scope_ok,
             commit_with_terminal_scope_ok,
             commit_with_identity_scope_ok,
-            commit_with_wallet_scope_ok
+            commit_with_wallet_scope_ok,
+            commit_with_sender_scope_ok,
+            commit_with_receiver_scope_ok,
+            commit_with_sender_receiver_scope_ok
         ]},
         {cashless, [parallel], [
             commit_number_ok,
@@ -652,7 +662,7 @@ commit_with_some_scope(Scope, C) ->
     {ID, Version} = configure_limit(?time_range_month(), Scope, C),
     Context =
         case get_group_name(C) of
-            withdrawals -> ?wthdproc_ctx_withdrawal(?cash(10, <<"RUB">>));
+            withdrawals -> ?wthdproc_ctx_withdrawal_w_auth_data(?cash(10, <<"RUB">>), ?token, ?token);
             _Default -> ?payproc_ctx_payment(?cash(10, <<"RUB">>), ?cash(10, <<"RUB">>))
         end,
     {ok, {vector, _}} = hold_and_commit(?LIMIT_CHANGE(ID, ?CHANGE_ID, Version), Context, ?config(client, C)),
@@ -709,6 +719,40 @@ commit_with_multi_scope_ok(C) ->
         LimitState1#limiter_Limit.amount,
         LimitState0#limiter_Limit.amount + 10
     ).
+
+-spec hold_with_sender_notfound(config()) -> _.
+hold_with_sender_notfound(C) ->
+    hold_with_scope_notfound([?scope_sender()], C).
+
+-spec hold_with_receiver_notfound(config()) -> _.
+hold_with_receiver_notfound(C) ->
+    hold_with_scope_notfound([?scope_receiver()], C).
+
+hold_with_scope_notfound(Scopes, C) ->
+    Context =
+        case get_group_name(C) of
+            withdrawals -> ?wthdproc_ctx_withdrawal(?cash(0));
+            _Default -> ?payproc_ctx_invoice(?cash(0))
+        end,
+    {ID, Version} = configure_limit(?time_range_month(), ?scope(Scopes), C),
+    ?assertException(
+        error,
+        {woody_error,
+            {external, result_unexpected, <<"error:{unknown_error,{lim_turnover_processor,notfound}}", _/binary>>}},
+        lim_client:hold(?LIMIT_CHANGE(ID, ?CHANGE_ID, Version), Context, ?config(client, C))
+    ).
+
+-spec commit_with_sender_scope_ok(config()) -> _.
+commit_with_sender_scope_ok(C) ->
+    _ = commit_with_some_scope(?scope([?scope_sender()]), C).
+
+-spec commit_with_receiver_scope_ok(config()) -> _.
+commit_with_receiver_scope_ok(C) ->
+    _ = commit_with_some_scope(?scope([?scope_receiver()]), C).
+
+-spec commit_with_sender_receiver_scope_ok(config()) -> _.
+commit_with_sender_receiver_scope_ok(C) ->
+    _ = commit_with_some_scope(?scope([?scope_sender(), ?scope_receiver()]), C).
 
 %%
 

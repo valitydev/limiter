@@ -5,7 +5,6 @@
     {applications, [
         kernel,
         stdlib,
-        crypto,
         limiter_proto,
         xrates_proto,
         machinery,
