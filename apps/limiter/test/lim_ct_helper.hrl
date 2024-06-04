@@ -12,6 +12,7 @@
 
 -define(currency, <<"RUB">>).
 -define(string, <<"STRING">>).
+-define(token, <<"TOKEN">>).
 -define(integer, 999).
 -define(timestamp, <<"2000-01-01T00:00:00Z">>).
 
@@ -38,6 +39,8 @@
 -define(scope_payer_contact_email(), {payer_contact_email, #config_LimitScopeEmptyDetails{}}).
 -define(scope_identity(), {identity, #config_LimitScopeEmptyDetails{}}).
 -define(scope_wallet(), {wallet, #config_LimitScopeEmptyDetails{}}).
+-define(scope_sender(), {sender, #config_LimitScopeEmptyDetails{}}).
+-define(scope_receiver(), {receiver, #config_LimitScopeEmptyDetails{}}).
 
 -define(lim_type_turnover(), ?lim_type_turnover(?turnover_metric_number())).
 -define(lim_type_turnover(Metric),
@@ -215,13 +218,20 @@
     owner_id = OwnerID
 }).
 
+-define(auth_data(Sender, Receiver),
+    {sender_receiver, #wthd_domain_SenderReceiverAuthData{sender = Sender, receiver = Receiver}}
+).
+
 -define(withdrawal(Body), ?withdrawal(Body, ?bank_card(), ?string)).
 
--define(withdrawal(Body, Destination, OwnerID), #wthd_domain_Withdrawal{
+-define(withdrawal(Body, Destination, OwnerID), ?withdrawal(Body, Destination, OwnerID, undefined)).
+
+-define(withdrawal(Body, Destination, OwnerID, AuthData), #wthd_domain_Withdrawal{
     body = Body,
     created_at = ?timestamp,
     destination = Destination,
-    sender = ?identity(OwnerID)
+    sender = ?identity(OwnerID),
+    auth_data = AuthData
 }).
 
 -define(op_withdrawal, {withdrawal, #context_withdrawal_OperationWithdrawal{}}).
@@ -231,6 +241,17 @@
         op = ?op_withdrawal,
         withdrawal = #context_withdrawal_Withdrawal{
             withdrawal = ?withdrawal(Cost),
+            route = ?route(),
+            wallet_id = ?string
+        }
+    }
+}).
+
+-define(wthdproc_ctx_withdrawal_w_auth_data(Cost, Sender, Receiver), #limiter_LimitContext{
+    withdrawal_processing = #context_withdrawal_Context{
+        op = ?op_withdrawal,
+        withdrawal = #context_withdrawal_Withdrawal{
+            withdrawal = ?withdrawal(Cost, ?bank_card(), ?string, ?auth_data(Sender, Receiver)),
             route = ?route(),
             wallet_id = ?string
         }
