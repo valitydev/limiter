@@ -218,7 +218,9 @@
     owner_id = OwnerID
 }).
 
--define(auth_data(Sender, Receiver), {sender_receiver, #wthd_domain_SenderReceiverAuthData{sender = Sender, receiver = Receiver}}).
+-define(auth_data(Sender, Receiver),
+    {sender_receiver, #wthd_domain_SenderReceiverAuthData{sender = Sender, receiver = Receiver}}
+).
 
 -define(withdrawal(Body), ?withdrawal(Body, ?bank_card(), ?string)).
 
