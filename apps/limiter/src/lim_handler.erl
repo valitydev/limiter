@@ -3,6 +3,7 @@
 -include_lib("limiter_proto/include/limproto_limiter_thrift.hrl").
 -include_lib("limiter_proto/include/limproto_base_thrift.hrl").
 -include_lib("damsel/include/dmsl_base_thrift.hrl").
+-include_lib("liminator_proto/include/liminator_liminator_thrift.hrl").
 
 %% Woody handler
 
@@ -15,6 +16,7 @@
 -type lim_context() :: lim_context:t().
 
 -define(LIMIT_CHANGE(ID), #limiter_LimitChange{id = ID}).
+-define(LIMIT_REQUEST(ID, Changes), #limiter_LimitRequest{operation_id = ID, limit_changes = Changes}).
 
 %%
 
@@ -81,7 +83,77 @@ handle_function_('Rollback', {LimitChange = ?LIMIT_CHANGE(LimitID), Clock, Conte
             {ok, {vector, #limiter_VectorClock{state = <<>>}}};
         {error, Error} ->
             handle_rollback_error(Error)
+    end;
+handle_function_('GetBatch', {?LIMIT_REQUEST(OperationID, Changes), Context}, LimitContext, _Opts) ->
+    scoper:add_meta(#{operation_id => OperationID}),
+    case
+        lim_config_machine:get_batch(
+            OperationID,
+            Changes,
+            lim_context:set_context(Context, LimitContext)
+        )
+    of
+        {ok, Responses} ->
+            {ok, convert_responses(Responses)};
+        {error, Error} ->
+            handle_get_error(Error)
+    end;
+handle_function_('HoldBatch', {?LIMIT_REQUEST(OperationID, Changes), Context}, LimitContext, _Opts) ->
+    scoper:add_meta(#{operation_id => OperationID}),
+    case
+        lim_config_machine:hold_batch(
+            OperationID,
+            Changes,
+            lim_context:set_context(Context, LimitContext)
+        )
+    of
+        {ok, Responses} ->
+            {ok, convert_responses(Responses)};
+        {error, Error} ->
+            handle_hold_error(Error)
+    end;
+handle_function_('CommitBatch', {?LIMIT_REQUEST(OperationID, Changes), Context}, LimitContext, _Opts) ->
+    scoper:add_meta(#{operation_id => OperationID}),
+    case
+        lim_config_machine:commit_batch(
+            OperationID,
+            Changes,
+            lim_context:set_context(Context, LimitContext)
+        )
+    of
+        ok ->
+            ok;
+        {error, Error} ->
+            handle_commit_error(Error)
+    end;
+handle_function_('RollbackBatch', {?LIMIT_REQUEST(OperationID, Changes), Context}, LimitContext, _Opts) ->
+    scoper:add_meta(#{operation_id => OperationID}),
+    case
+        lim_config_machine:rollback_batch(
+            OperationID,
+            Changes,
+            lim_context:set_context(Context, LimitContext)
+        )
+    of
+        ok ->
+            ok;
+        {error, Error} ->
+            handle_rollback_error(Error)
     end.
+
+convert_responses([]) ->
+    [];
+convert_responses([Response | Other]) ->
+    [convert_response(Response) | convert_responses(Other)].
+
+convert_response(#liminator_LimitResponse{
+    limit_id = LimitID,
+    hold_value = Value
+}) ->
+    #limiter_Limit{
+        id = LimitID,
+        amount = Value
+    }.
 
 -spec handle_get_error(_) -> no_return().
 handle_get_error(Error) ->

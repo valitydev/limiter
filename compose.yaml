@@ -21,6 +21,8 @@ services:
         condition: service_healthy
       shumway:
         condition: service_healthy
+      liminator:
+        condition: service_healthy
 
   dominant:
     image: ghcr.io/valitydev/dominant:sha-2150eea
@@ -70,5 +72,34 @@ services:
     image: docker.io/library/postgres:9.6
     environment:
       - POSTGRES_DB=shumway
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+
+  liminator:
+    image: ghcr.io/valitydev/liminator:sha-a0e3197
+    restart: unless-stopped
+    entrypoint:
+      - java
+      - -Xmx512m
+      - -jar
+      - /opt/liminator/liminator.jar
+      - --spring.datasource.url=jdbc:postgresql://liminator-db:5432/liminator
+      - --spring.datasource.username=postgres
+      - --spring.datasource.password=postgres
+      - --spring.flyway.url=jdbc:postgresql://liminator-db:5432/liminator
+      - --spring.flyway.username=postgres
+      - --spring.flyway.password=postgres
+    depends_on:
+      - liminator-db
+    healthcheck:
+      test: "curl http://localhost:8022/actuator/health"
+      interval: 5s
+      timeout: 1s
+      retries: 20
+
+  liminator-db:
+    image: docker.io/library/postgres:9.6
+    environment:
+      - POSTGRES_DB=liminator
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres

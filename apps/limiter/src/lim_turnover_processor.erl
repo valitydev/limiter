@@ -4,6 +4,8 @@
 
 -behaviour(lim_config_machine).
 
+-export([get_change/4]).
+
 -export([get_limit/3]).
 -export([hold/3]).
 -export([commit/3]).
@@ -23,6 +25,10 @@
 }.
 
 -type get_limit_error() :: {range, notfound}.
+-type get_change_error() ::
+    lim_rates:conversion_error()
+    | lim_context:operation_context_not_supported_error()
+    | lim_turnover_metric:invalid_operation_currency_error().
 
 -type hold_error() ::
     lim_rates:conversion_error()
@@ -40,12 +46,22 @@
     lim_rates:conversion_error()
     | lim_accounting:invalid_request_error().
 
+-export_type([get_change_error/0]).
 -export_type([get_limit_error/0]).
 -export_type([hold_error/0]).
 -export_type([commit_error/0]).
 -export_type([rollback_error/0]).
 
 -import(lim_pipeline, [do/1, unwrap/1]).
+
+-spec get_change(lim_turnover_metric:stage(), lim_change(), config(), lim_context()) ->
+    {ok, lim_liminator:limit_change()} | {error, get_change_error()}.
+get_change(Stage, #limiter_LimitChange{id = LimitID, version = Version}, Config, LimitContext) ->
+    do(fun() ->
+        LimitRangeID = unwrap(compute_limit_range_id(LimitID, Version, Config, LimitContext)),
+        Metric = unwrap(compute_metric(Stage, Config, LimitContext)),
+        lim_liminator:construct_change(LimitID, LimitRangeID, Metric)
+    end).
 
 -spec get_limit(lim_id(), config(), lim_context()) -> {ok, limit()} | {error, get_limit_error()}.
 get_limit(LimitID, Config, LimitContext) ->
@@ -110,10 +126,17 @@ rollback(LimitChange = #limiter_LimitChange{id = LimitID}, Config, LimitContext)
         unwrap(lim_accounting:rollback(construct_plan_id(LimitChange), [{1, [Posting]}], LimitContext))
     end).
 
+compute_limit_range_id(LimitID, Version, Config, LimitContext) ->
+    do(fun() ->
+        Timestamp = unwrap(get_timestamp(Config, LimitContext)),
+        unwrap(construct_range_id(Timestamp, LimitID, Version, Config, LimitContext))
+    end).
+
 compute_limit_time_range_location(LimitID, Config, LimitContext) ->
     do(fun() ->
         Timestamp = unwrap(get_timestamp(Config, LimitContext)),
-        LimitRangeID = unwrap(construct_range_id(LimitID, Timestamp, Config, LimitContext)),
+        %% TODO: pass version from limit change here
+        LimitRangeID = unwrap(compute_limit_range_id(LimitID, 0, Config, LimitContext)),
         TimeRange = lim_config_machine:calculate_time_range(Timestamp, Config),
         {LimitRangeID, TimeRange}
     end).
@@ -139,11 +162,12 @@ construct_plan_id(#limiter_LimitChange{change_id = ChangeID}) ->
     % DISCUSS
     ChangeID.
 
-construct_range_id(LimitID, Timestamp, Config, LimitContext) ->
+construct_range_id(Timestamp, LimitID, Version, Config, LimitContext) ->
+    BinaryVersion = genlib:to_binary(Version),
     case lim_config_machine:mk_scope_prefix(Config, LimitContext) of
         {ok, Prefix} ->
             ShardID = lim_config_machine:calculate_shard_id(Timestamp, Config),
-            {ok, <<LimitID/binary, Prefix/binary, "/", ShardID/binary>>};
+            {ok, <<LimitID/binary, BinaryVersion/binary, Prefix/binary, "/", ShardID/binary>>};
         {error, _} = Error ->
             Error
     end.

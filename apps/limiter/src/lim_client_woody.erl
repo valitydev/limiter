@@ -39,6 +39,8 @@ get_service_client_url(ServiceName) ->
 -spec get_service_modname(service_name()) -> woody:service().
 get_service_modname(xrates) ->
     {xrates_rate_thrift, 'Rates'};
+get_service_modname(liminator) ->
+    {liminator_liminator_thrift, 'LiminatorService'};
 get_service_modname(accounter) ->
     {dmsl_accounter_thrift, 'Accounter'}.
 

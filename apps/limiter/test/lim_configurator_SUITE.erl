@@ -75,6 +75,9 @@ init_per_suite(Config) ->
         ]) ++
             genlib_app:start_application_with(limiter, [
                 {service_clients, #{
+                    liminator => #{
+                        url => <<"http://liminator:8022/liminator/v1">>
+                    },
                     accounter => #{
                         url => <<"http://shumway:8022/accounter">>
                     },

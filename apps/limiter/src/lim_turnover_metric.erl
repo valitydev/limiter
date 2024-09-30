@@ -10,6 +10,7 @@
 -type invalid_operation_currency_error() :: {invalid_operation_currency, {currency(), currency()}}.
 
 -export_type([t/0]).
+-export_type([stage/0]).
 -export_type([invalid_operation_currency_error/0]).
 
 %%

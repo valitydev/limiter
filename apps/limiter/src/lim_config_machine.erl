@@ -29,6 +29,11 @@
 -export([commit/2]).
 -export([rollback/2]).
 
+-export([get_batch/3]).
+-export([hold_batch/3]).
+-export([commit_batch/3]).
+-export([rollback_batch/3]).
+
 -export([calculate_shard_id/2]).
 -export([calculate_time_range/2]).
 -export([mk_scope_prefix/2]).
@@ -90,6 +95,8 @@
 -type lim_change() :: limproto_limiter_thrift:'LimitChange'().
 -type limit() :: limproto_limiter_thrift:'Limit'().
 -type timestamp() :: dmsl_base_thrift:'Timestamp'().
+-type operation_id() :: limproto_limiter_thrift:'OperationID'().
+-type lim_changes() :: [lim_change()].
 
 -export_type([config/0]).
 -export_type([limit_type/0]).
@@ -131,6 +138,13 @@
 
 %% Handler behaviour
 
+-callback get_change(
+    Stage :: lim_turnover_metric:stage(),
+    LimitChange :: lim_change(),
+    Config :: config(),
+    LimitContext :: lim_context()
+) -> {ok, lim_liminator:limit_change()} | {error, get_change_error()}.
+
 -callback get_limit(
     ID :: lim_id(),
     Config :: config(),
@@ -155,6 +169,7 @@
     LimitContext :: lim_context()
 ) -> ok | {error, rollback_error()}.
 
+-type get_change_error() :: lim_turnover_processor:get_change_error().
 -type get_limit_error() :: lim_turnover_processor:get_limit_error().
 -type hold_error() :: lim_turnover_processor:hold_error().
 -type commit_error() :: lim_turnover_processor:commit_error().
@@ -273,6 +288,47 @@ rollback(LimitChange = #limiter_LimitChange{id = ID, version = Version}, LimitCo
     do(fun() ->
         {Handler, Config} = unwrap(get_handler(ID, Version, LimitContext)),
         unwrap(Handler, Handler:rollback(LimitChange, Config, LimitContext))
+    end).
+
+-spec get_batch(operation_id(), lim_changes(), lim_context()) ->
+    {ok, [lim_liminator:limit_response()]} | {error, config_error() | {processor(), get_limit_error()}}.
+get_batch(OperationID, LimitChanges, LimitContext) ->
+    do(fun() ->
+        unwrap(lim_liminator:get(OperationID, unwrap(collect_changes(hold, LimitChanges, LimitContext)), LimitContext))
+    end).
+
+-spec hold_batch(operation_id(), lim_changes(), lim_context()) ->
+    {ok, [lim_liminator:limit_response()]} | {error, config_error() | {processor(), hold_error()}}.
+hold_batch(OperationID, LimitChanges, LimitContext) ->
+    do(fun() ->
+        unwrap(lim_liminator:hold(OperationID, unwrap(collect_changes(hold, LimitChanges, LimitContext)), LimitContext))
+    end).
+
+-spec commit_batch(operation_id(), lim_changes(), lim_context()) ->
+    ok | {error, config_error() | {processor(), hold_error()}}.
+commit_batch(OperationID, LimitChanges, LimitContext) ->
+    do(fun() ->
+        unwrap(
+            lim_liminator:commit(OperationID, unwrap(collect_changes(commit, LimitChanges, LimitContext)), LimitContext)
+        )
+    end).
+
+-spec rollback_batch(operation_id(), lim_changes(), lim_context()) ->
+    ok | {error, config_error() | {processor(), hold_error()}}.
+rollback_batch(OperationID, LimitChanges, LimitContext) ->
+    do(fun() ->
+        unwrap(
+            lim_liminator:rollback(OperationID, unwrap(collect_changes(hold, LimitChanges, LimitContext)), LimitContext)
+        )
+    end).
+
+collect_changes(_Stage, [], _LimitContext) ->
+    {ok, []};
+collect_changes(Stage, [LimitChange = #limiter_LimitChange{id = ID, version = Version} | Other], LimitContext) ->
+    do(fun() ->
+        {Handler, Config} = unwrap(get_handler(ID, Version, LimitContext)),
+        Change = unwrap(Handler, Handler:get_change(Stage, LimitChange, Config, LimitContext)),
+        [Change | unwrap(collect_changes(Stage, Other, LimitContext))]
     end).
 
 get_handler(ID, Version, LimitContext) ->
