@@ -6,6 +6,7 @@
         kernel,
         stdlib,
         limiter_proto,
+        liminator_proto,
         xrates_proto,
         machinery,
         woody,

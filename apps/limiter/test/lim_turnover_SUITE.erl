@@ -63,6 +63,10 @@
 -export([commit_with_receiver_scope_ok/1]).
 -export([commit_with_sender_receiver_scope_ok/1]).
 
+-export([batch_hold_ok/1]).
+-export([batch_commit_ok/1]).
+-export([batch_rollback_ok/1]).
+
 -type group_name() :: atom().
 -type test_case_name() :: atom().
 
@@ -116,7 +120,10 @@ groups() ->
             commit_multirange_limit_ok
         ]},
         {default_with_dominant, [], [
-            {group, base}
+            {group, base},
+            batch_hold_ok,
+            batch_commit_ok,
+            batch_rollback_ok
         ]},
         {withdrawals, [parallel], [
             get_limit_ok,
@@ -177,6 +184,9 @@ init_per_suite(Config) ->
         ]) ++
             genlib_app:start_application_with(limiter, [
                 {service_clients, #{
+                    liminator => #{
+                        url => <<"http://liminator:8022/liminator/v1">>
+                    },
                     accounter => #{
                         url => <<"http://shumway:8022/accounter">>
                     },
@@ -235,6 +245,7 @@ end_per_testcase(_Name, C) ->
     change_id = gen_change_id(ID, ChangeID),
     version = Version
 }).
+-define(LIMIT_REQUEST(ID, Changes), #limiter_LimitRequest{operation_id = ID, limit_changes = Changes}).
 
 -spec commit_with_long_change_id(config()) -> _.
 commit_with_long_change_id(C) ->
@@ -753,6 +764,52 @@ commit_with_receiver_scope_ok(C) ->
 -spec commit_with_sender_receiver_scope_ok(config()) -> _.
 commit_with_sender_receiver_scope_ok(C) ->
     _ = commit_with_some_scope(?scope([?scope_sender(), ?scope_receiver()]), C).
+
+%%
+
+construct_request(C) ->
+    {ID0, Version0} = configure_limit(?time_range_month(), ?global(), C),
+    {ID1, Version1} = configure_limit(?time_range_month(), ?global(), C),
+    {ID2, Version2} = configure_limit(?time_range_month(), ?global(), C),
+    ?LIMIT_REQUEST(?string, [
+        ?LIMIT_CHANGE(ID0, 0, Version0),
+        ?LIMIT_CHANGE(ID1, 0, Version1),
+        ?LIMIT_CHANGE(ID2, 0, Version2)
+    ]).
+
+-spec batch_hold_ok(config()) -> _.
+batch_hold_ok(C) ->
+    Context =
+        case get_group_name(C) of
+            withdrawals -> ?wthdproc_ctx_withdrawal(?cash(10));
+            _Default -> ?payproc_ctx_invoice(?cash(10))
+        end,
+    Request = construct_request(C),
+    {ok, [Limits]} = lim_client:hold_batch(Request, Context, ?config(client, C)),
+    {ok, [Limits]} = lim_client:get_batch(Request, Context, ?config(client, C)).
+
+-spec batch_commit_ok(config()) -> _.
+batch_commit_ok(C) ->
+    Context =
+        case get_group_name(C) of
+            withdrawals -> ?wthdproc_ctx_withdrawal(?cash(10));
+            _Default -> ?payproc_ctx_invoice(?cash(10))
+        end,
+    Request = construct_request(C),
+    {ok, [Limits]} = lim_client:hold_batch(Request, Context, ?config(client, C)),
+    {ok, ok} = lim_client:commit_batch(Request, Context, ?config(client, C)),
+    {ok, [Limits]} = lim_client:get_batch(Request, Context, ?config(client, C)).
+
+-spec batch_rollback_ok(config()) -> _.
+batch_rollback_ok(C) ->
+    Context =
+        case get_group_name(C) of
+            withdrawals -> ?wthdproc_ctx_withdrawal(?cash(10));
+            _Default -> ?payproc_ctx_invoice(?cash(10))
+        end,
+    Request = construct_request(C),
+    {ok, [_Limits]} = lim_client:hold_batch(Request, Context, ?config(client, C)),
+    {ok, ok} = lim_client:rollback_batch(Request, Context, ?config(client, C)).
 
 %%
 
