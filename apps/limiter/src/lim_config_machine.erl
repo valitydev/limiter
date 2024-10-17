@@ -579,7 +579,21 @@ append_prefix(Fragment, Acc) ->
 -spec enumerate_context_bits(limit_scope()) -> [context_bit()].
 enumerate_context_bits(Types) ->
     TypesOrder =
-        [party, shop, identity, wallet, payment_tool, provider, terminal, payer_contact_email, sender, receiver],
+        [
+            party,
+            shop,
+            identity,
+            wallet,
+            payment_tool,
+            provider,
+            terminal,
+            payer_contact_email,
+            %% FIXME Better name instead of 'phone_number'.
+            %% Maybe 'destination_phone_number'?
+            phone_number,
+            sender,
+            receiver
+        ],
     SortedTypes = lists:filter(fun(T) -> ordsets:is_element(T, Types) end, TypesOrder),
     SquashedTypes = squash_scope_types(SortedTypes),
     lists:flatmap(fun get_context_bits/1, SquashedTypes).
@@ -620,6 +634,8 @@ get_context_bits(terminal) ->
     [{prefix, <<"terminal">>}, {from, provider_id}, {from, terminal_id}];
 get_context_bits(payer_contact_email) ->
     [{prefix, <<"payer_contact_email">>}, {from, payer_contact_email}];
+get_context_bits(phone_number) ->
+    [{prefix, <<"phone_number">>}, {from, phone_number}];
 get_context_bits(sender) ->
     [{prefix, <<"sender">>}, {from, sender}];
 get_context_bits(receiver) ->

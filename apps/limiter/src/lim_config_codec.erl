@@ -139,6 +139,8 @@ marshal_scope_type(terminal) ->
     {terminal, #config_LimitScopeEmptyDetails{}};
 marshal_scope_type(payer_contact_email) ->
     {payer_contact_email, #config_LimitScopeEmptyDetails{}};
+marshal_scope_type(phone_number) ->
+    {phone_number, #config_LimitScopeEmptyDetails{}};
 marshal_scope_type(sender) ->
     {sender, #config_LimitScopeEmptyDetails{}};
 marshal_scope_type(receiver) ->
@@ -354,6 +356,8 @@ unmarshal_scope_type({terminal, _}) ->
     terminal;
 unmarshal_scope_type({payer_contact_email, _}) ->
     payer_contact_email;
+unmarshal_scope_type({phone_number, _}) ->
+    phone_number;
 unmarshal_scope_type({sender, _}) ->
     sender;
 unmarshal_scope_type({receiver, _}) ->
