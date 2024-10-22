@@ -19,7 +19,7 @@
         service := binary()
     }}
     | {generic, #{
-        id := binary(),
+        service := binary(),
         data := #{
             type := binary(),
             data := binary()
@@ -52,7 +52,7 @@ payment_tool({generic, G}) ->
     Content = G#domain_GenericPaymentTool.data,
     {ok,
         {generic, #{
-            id => G#domain_GenericPaymentTool.payment_service#domain_PaymentServiceRef.id,
+            service => G#domain_GenericPaymentTool.payment_service#domain_PaymentServiceRef.id,
             data => #{
                 %% TODO Content decoding
                 type => Content#base_Content.type,
