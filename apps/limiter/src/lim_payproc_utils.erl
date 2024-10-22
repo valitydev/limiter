@@ -1,6 +1,7 @@
 -module(lim_payproc_utils).
 
 -include_lib("damsel/include/dmsl_domain_thrift.hrl").
+-include_lib("damsel/include/dmsl_base_thrift.hrl").
 
 -export([cash/1]).
 -export([payment_tool/1]).
@@ -16,6 +17,13 @@
     | {digital_wallet, #{
         id := binary(),
         service := binary()
+    }}
+    | {generic, #{
+        id := binary(),
+        data := #{
+            type := binary(),
+            data := binary()
+        }
     }}.
 
 %%
@@ -38,6 +46,18 @@ payment_tool({digital_wallet, DW}) ->
         {digital_wallet, #{
             id => DW#domain_DigitalWallet.id,
             service => DW#domain_DigitalWallet.payment_service#domain_PaymentServiceRef.id
+        }}};
+payment_tool({generic, G}) ->
+    %% TODO Move to codec into marshal/unmarshal clauses
+    Content = G#domain_GenericPaymentTool.data,
+    {ok,
+        {generic, #{
+            id => G#domain_GenericPaymentTool.payment_service#domain_PaymentServiceRef.id,
+            data => #{
+                %% TODO Content decoding
+                type => Content#base_Content.type,
+                data => Content#base_Content.data
+            }
         }}};
 payment_tool({Type, _}) ->
     {error, {unsupported, {payment_tool, Type}}}.

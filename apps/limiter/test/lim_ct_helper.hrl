@@ -41,7 +41,7 @@
 -define(scope_wallet(), {wallet, #config_LimitScopeEmptyDetails{}}).
 -define(scope_sender(), {sender, #config_LimitScopeEmptyDetails{}}).
 -define(scope_receiver(), {receiver, #config_LimitScopeEmptyDetails{}}).
-%% -define(scope_phone_number(), {phone_number, #config_LimitScopeEmptyDetails{}}).
+%% -define(scope_destination_field(FieldPath), {destination_field, #config_LimitScopeDestinationFieldDetails{field_path = FieldPath}}).
 
 -define(lim_type_turnover(), ?lim_type_turnover(?turnover_metric_number())).
 -define(lim_type_turnover(Metric),

@@ -49,8 +49,6 @@ get_value(provider_id, Operation, Context) ->
     get_provider_id(Operation, Context);
 get_value(terminal_id, Operation, Context) ->
     get_terminal_id(Operation, Context);
-get_value(phone_number, Operation, Context) ->
-    get_phone_number(Operation, Context);
 get_value(sender, Operation, Context) ->
     get_destination_sender(Operation, Context);
 get_value(receiver, Operation, Context) ->
@@ -128,31 +126,12 @@ get_terminal_id(withdrawal, ?ROUTE(Route)) ->
 get_terminal_id(_, _CtxWithdrawal) ->
     {error, notfound}.
 
-get_phone_number(
-    withdrawal,
-    ?WITHDRAWAL(#wthd_domain_Withdrawal{
-        receiver = #wthd_domain_Identity{contact = ContactDetails}
-    })
-) ->
-    case lists:keyfind(phone_number, 1, ContactDetails) of
-        {phone_number, V} ->
-            {ok, V};
-        _ ->
-            {error, notfound}
-    end;
-get_phone_number(_Operation, _Context) ->
-    {error, notfound}.
-
 get_destination_sender(withdrawal, ?SENDER_RECEIVER(#wthd_domain_SenderReceiverAuthData{sender = Token})) ->
-    {ok, hash_token(Token)};
+    {ok, lim_context_utils:base61_hash(Token)};
 get_destination_sender(_, _CtxWithdrawal) ->
     {error, notfound}.
 
 get_destination_receiver(withdrawal, ?SENDER_RECEIVER(#wthd_domain_SenderReceiverAuthData{receiver = Token})) ->
-    {ok, hash_token(Token)};
+    {ok, lim_context_utils:base61_hash(Token)};
 get_destination_receiver(_, _CtxWithdrawal) ->
     {error, notfound}.
-
-hash_token(Token) ->
-    <<I:160/integer>> = crypto:hash(sha, Token),
-    genlib_format:format_int_base(I, 61).
