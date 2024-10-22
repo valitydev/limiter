@@ -7,6 +7,7 @@
 -include_lib("limiter_proto/include/limproto_limiter_thrift.hrl").
 -include_lib("limiter_proto/include/limproto_context_payproc_thrift.hrl").
 -include_lib("limiter_proto/include/limproto_context_withdrawal_thrift.hrl").
+-include_lib("damsel/include/dmsl_base_thrift.hrl").
 -include_lib("damsel/include/dmsl_domain_thrift.hrl").
 -include_lib("damsel/include/dmsl_wthd_domain_thrift.hrl").
 
@@ -41,6 +42,9 @@
 -define(scope_wallet(), {wallet, #config_LimitScopeEmptyDetails{}}).
 -define(scope_sender(), {sender, #config_LimitScopeEmptyDetails{}}).
 -define(scope_receiver(), {receiver, #config_LimitScopeEmptyDetails{}}).
+-define(scope_destination_field(FieldPath),
+    {destination_field, #config_LimitScopeDestinationFieldDetails{field_path = FieldPath}}
+).
 
 -define(lim_type_turnover(), ?lim_type_turnover(?turnover_metric_number())).
 -define(lim_type_turnover(Metric),
@@ -116,6 +120,15 @@
     }}
 ).
 
+-define(generic_pt(),
+    {generic, #domain_GenericPaymentTool{
+        payment_service = #domain_PaymentServiceRef{id = <<"ID42">>},
+        data = #base_Content{
+            type = <<"application/json">>, data = <<"{\"opaque\":{\"payload\":{\"data\":\"value\"}}}">>
+        }
+    }}
+).
+
 -define(invoice(OwnerID, ShopID, Cost), #domain_Invoice{
     id = ?string,
     owner_id = OwnerID,
@@ -153,14 +166,19 @@
         }}
 }).
 
--define(payproc_ctx_invoice(Cost), #limiter_LimitContext{
+-define(payproc_ctx(Op, Invoice, InvoicePayment), #limiter_LimitContext{
     payment_processing = #context_payproc_Context{
-        op = ?op_invoice,
+        op = Op,
         invoice = #context_payproc_Invoice{
-            invoice = ?invoice(?string, ?string, Cost)
+            invoice = Invoice,
+            payment = InvoicePayment
         }
     }
 }).
+
+-define(payproc_ctx(Invoice, InvoicePayment), ?payproc_ctx(?op_invoice, Invoice, InvoicePayment)).
+
+-define(payproc_ctx_invoice(Cost), ?payproc_ctx(?invoice(?string, ?string, Cost), undefined)).
 
 -define(payproc_ctx_payment(Cost, CaptureCost),
     ?payproc_ctx_payment(?string, ?string, Cost, CaptureCost)
@@ -236,26 +254,21 @@
 
 -define(op_withdrawal, {withdrawal, #context_withdrawal_OperationWithdrawal{}}).
 
--define(wthdproc_ctx_withdrawal(Cost), #limiter_LimitContext{
+-define(wthdproc_ctx(Withdrawal), #limiter_LimitContext{
     withdrawal_processing = #context_withdrawal_Context{
         op = ?op_withdrawal,
         withdrawal = #context_withdrawal_Withdrawal{
-            withdrawal = ?withdrawal(Cost),
+            withdrawal = Withdrawal,
             route = ?route(),
             wallet_id = ?string
         }
     }
 }).
 
--define(wthdproc_ctx_withdrawal_w_auth_data(Cost, Sender, Receiver), #limiter_LimitContext{
-    withdrawal_processing = #context_withdrawal_Context{
-        op = ?op_withdrawal,
-        withdrawal = #context_withdrawal_Withdrawal{
-            withdrawal = ?withdrawal(Cost, ?bank_card(), ?string, ?auth_data(Sender, Receiver)),
-            route = ?route(),
-            wallet_id = ?string
-        }
-    }
-}).
+-define(wthdproc_ctx_withdrawal(Cost), ?wthdproc_ctx(?withdrawal(Cost))).
+
+-define(wthdproc_ctx_withdrawal_w_auth_data(Cost, Sender, Receiver),
+    ?wthdproc_ctx(?withdrawal(Cost, ?bank_card(), ?string, ?auth_data(Sender, Receiver)))
+).
 
 -endif.
