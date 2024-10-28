@@ -671,8 +671,9 @@ extract_context_bit({from, {destination_field, FieldPath}}, ContextType, LimitCo
         #{type := Type, data := Data} = unwrap(get_generic_payment_tool_resource(ContextType, LimitContext)),
         DecodedData = unwrap(lim_context_utils:decode_content(Type, Data)),
         FieldValue = unwrap(lim_context_utils:get_field_by_path(FieldPath, DecodedData)),
-        Fragments = FieldPath ++ [lim_context_utils:base61_hash(FieldValue)],
-        mk_scope_component(Fragments)
+        PrefixedValue = lim_string:join($., FieldPath ++ [FieldValue]),
+        HashedValue = lim_context_utils:base61_hash(PrefixedValue),
+        mk_scope_component([HashedValue])
     end);
 extract_context_bit({from, payment_tool}, ContextType, LimitContext) ->
     case lim_context:get_value(ContextType, payment_tool, LimitContext) of
