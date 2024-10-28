@@ -357,6 +357,10 @@ unmarshal_scope_type({terminal, _}) ->
 unmarshal_scope_type({payer_contact_email, _}) ->
     payer_contact_email;
 unmarshal_scope_type({destination_field, #config_LimitScopeDestinationFieldDetails{field_path = FieldPath}}) ->
+    %% Limiter proto variant clause
+    {destination_field, FieldPath};
+unmarshal_scope_type({destination_field, #limiter_config_LimitScopeDestinationFieldDetails{field_path = FieldPath}}) ->
+    %% Domain config variant clause
     {destination_field, FieldPath};
 unmarshal_scope_type({sender, _}) ->
     sender;
@@ -445,7 +449,7 @@ unmarshal_config_object_test() ->
         time_range_type => {calendar, day},
         context_type => payment_processing,
         type => {turnover, number},
-        scope => ordsets:from_list([party, shop]),
+        scope => ordsets:from_list([party, shop, {destination_field, [<<"path">>, <<"to">>, <<"field">>]}]),
         description => <<"description">>,
         currency_conversion => true
     },
@@ -461,7 +465,11 @@ unmarshal_config_object_test() ->
             type =
                 {turnover, #limiter_config_LimitTypeTurnover{metric = {number, #limiter_config_LimitTurnoverNumber{}}}},
             scopes = ordsets:from_list([
-                {'party', #limiter_config_LimitScopeEmptyDetails{}}, {'shop', #limiter_config_LimitScopeEmptyDetails{}}
+                {'party', #limiter_config_LimitScopeEmptyDetails{}},
+                {'shop', #limiter_config_LimitScopeEmptyDetails{}},
+                {'destination_field', #limiter_config_LimitScopeDestinationFieldDetails{
+                    field_path = [<<"path">>, <<"to">>, <<"field">>]
+                }}
             ]),
             description = <<"description">>,
             currency_conversion = #limiter_config_CurrencyConversion{}
