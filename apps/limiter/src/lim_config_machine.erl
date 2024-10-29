@@ -41,7 +41,16 @@
 
 -type limit_type() :: {turnover, lim_turnover_metric:t()}.
 -type limit_scope() :: ordsets:ordset(limit_scope_type()).
--type limit_scope_type() :: party | shop | wallet | identity | payment_tool | provider | terminal | payer_contact_email.
+-type limit_scope_type() ::
+    party
+    | shop
+    | wallet
+    | identity
+    | payment_tool
+    | provider
+    | terminal
+    | payer_contact_email
+    | {destination_field, [Field :: binary()]}.
 -type shard_size() :: pos_integer().
 -type shard_id() :: binary().
 -type prefix() :: binary().
@@ -579,8 +588,34 @@ append_prefix(Fragment, Acc) ->
 -spec enumerate_context_bits(limit_scope()) -> [context_bit()].
 enumerate_context_bits(Types) ->
     TypesOrder =
-        [party, shop, identity, wallet, payment_tool, provider, terminal, payer_contact_email, sender, receiver],
-    SortedTypes = lists:filter(fun(T) -> ordsets:is_element(T, Types) end, TypesOrder),
+        [
+            party,
+            shop,
+            identity,
+            wallet,
+            payment_tool,
+            provider,
+            terminal,
+            payer_contact_email,
+            %% Scope 'destination_field' differs from other scope
+            %% types by having an attribute and being represented as a
+            %% tuple '{destination_field, [Field :: binary()]}'.
+            destination_field,
+            sender,
+            receiver
+        ],
+    SortedTypes = lists:filtermap(
+        fun
+            (destination_field) ->
+                case lists:keyfind(destination_field, 1, Types) of
+                    {destination_field, _} = Found -> {true, Found};
+                    _ -> false
+                end;
+            (T) ->
+                ordsets:is_element(T, Types)
+        end,
+        TypesOrder
+    ),
     SquashedTypes = squash_scope_types(SortedTypes),
     lists:flatmap(fun get_context_bits/1, SquashedTypes).
 
@@ -620,6 +655,8 @@ get_context_bits(terminal) ->
     [{prefix, <<"terminal">>}, {from, provider_id}, {from, terminal_id}];
 get_context_bits(payer_contact_email) ->
     [{prefix, <<"payer_contact_email">>}, {from, payer_contact_email}];
+get_context_bits({destination_field, FieldPath}) ->
+    [{prefix, <<"destination">>}, {from, {destination_field, FieldPath}}];
 get_context_bits(sender) ->
     [{prefix, <<"sender">>}, {from, sender}];
 get_context_bits(receiver) ->
@@ -629,6 +666,15 @@ get_context_bits(receiver) ->
     {ok, binary()} | {error, lim_context:context_error()}.
 extract_context_bit({prefix, Prefix}, _ContextType, _LimitContext) ->
     {ok, Prefix};
+extract_context_bit({from, {destination_field, FieldPath}}, ContextType, LimitContext) ->
+    do(fun() ->
+        #{type := Type, data := Data} = unwrap(get_generic_payment_tool_resource(ContextType, LimitContext)),
+        DecodedData = unwrap(lim_context_utils:decode_content(Type, Data)),
+        FieldValue = unwrap(lim_context_utils:get_field_by_path(FieldPath, DecodedData)),
+        PrefixedValue = lim_string:join($., FieldPath ++ [FieldValue]),
+        HashedValue = lim_context_utils:base61_hash(PrefixedValue),
+        mk_scope_component([HashedValue])
+    end);
 extract_context_bit({from, payment_tool}, ContextType, LimitContext) ->
     case lim_context:get_value(ContextType, payment_tool, LimitContext) of
         {ok, {bank_card, #{token := Token, exp_date := {Month, Year}}}} ->
@@ -637,6 +683,9 @@ extract_context_bit({from, payment_tool}, ContextType, LimitContext) ->
             {ok, mk_scope_component([Token, <<"undefined">>])};
         {ok, {digital_wallet, #{id := ID, service := Service}}} ->
             {ok, mk_scope_component([<<"DW">>, Service, ID])};
+        %% Generic payment tool is supposed to be not supported
+        {ok, {generic = Type, _}} ->
+            {error, {unsupported, {payment_tool, Type}}};
         {error, _} = Error ->
             Error
     end;
@@ -645,6 +694,16 @@ extract_context_bit({from, ValueName}, ContextType, LimitContext) ->
 
 mk_scope_component(Fragments) ->
     lim_string:join($/, Fragments).
+
+get_generic_payment_tool_resource(ContextType, LimitContext) ->
+    case lim_context:get_value(ContextType, payment_tool, LimitContext) of
+        {ok, {generic, #{data := ResourceData}}} ->
+            {ok, ResourceData};
+        {ok, {ToolType, _}} ->
+            {error, {unsupported, ToolType}};
+        {error, _} = Error ->
+            Error
+    end.
 
 %%% Machinery callbacks
 
