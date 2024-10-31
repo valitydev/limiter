@@ -5,11 +5,13 @@
     {applications, [
         kernel,
         stdlib,
+        prometheus,
+        prometheus_cowboy,
+        scoper,  % should be before any scoper event handler usage
+        woody,
         limiter_proto,
         xrates_proto,
         machinery,
-        woody,
-        scoper,  % should be before any scoper event handler usage
         erl_health,
         dmt_client,
         opentelemetry_api,
