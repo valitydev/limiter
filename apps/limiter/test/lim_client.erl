@@ -8,6 +8,7 @@
 -export([commit/3]).
 -export([rollback/3]).
 
+-export([get_values/3]).
 -export([get_batch/3]).
 -export([hold_batch/3]).
 -export([commit_batch/3]).
@@ -51,6 +52,10 @@ commit(LimitChange, Context, Client) ->
 -spec rollback(limit_change(), limit_context(), client()) -> woody:result() | no_return().
 rollback(LimitChange, Context, Client) ->
     call('Rollback', {LimitChange, clock(), Context}, Client).
+
+-spec get_values(limit_request(), limit_context(), client()) -> woody:result() | no_return().
+get_values(LimitRequest, Context, Client) ->
+    call('GetValues', {LimitRequest, Context}, Client).
 
 -spec get_batch(limit_request(), limit_context(), client()) -> woody:result() | no_return().
 get_batch(LimitRequest, Context, Client) ->

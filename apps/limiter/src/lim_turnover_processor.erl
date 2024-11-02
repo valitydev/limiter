@@ -167,7 +167,7 @@ construct_range_id(Timestamp, LimitID, Version, Config, LimitContext) ->
     case lim_config_machine:mk_scope_prefix(Config, LimitContext) of
         {ok, Prefix} ->
             ShardID = lim_config_machine:calculate_shard_id(Timestamp, Config),
-            {ok, <<LimitID/binary, BinaryVersion/binary, Prefix/binary, "/", ShardID/binary>>};
+            {ok, <<LimitID/binary, "/", BinaryVersion/binary, Prefix/binary, "/", ShardID/binary>>};
         {error, _} = Error ->
             Error
     end.

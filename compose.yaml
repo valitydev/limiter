@@ -76,7 +76,7 @@ services:
       - POSTGRES_PASSWORD=postgres
 
   liminator:
-    image: ghcr.io/valitydev/liminator:sha-a0e3197
+    image: ghcr.io/valitydev/liminator:sha-d9c1407
     restart: unless-stopped
     entrypoint:
       - java
@@ -84,11 +84,12 @@ services:
       - -jar
       - /opt/liminator/liminator.jar
       - --spring.datasource.url=jdbc:postgresql://liminator-db:5432/liminator
-      - --spring.datasource.username=postgres
+      - --spring.datasource.username=vality
       - --spring.datasource.password=postgres
       - --spring.flyway.url=jdbc:postgresql://liminator-db:5432/liminator
-      - --spring.flyway.username=postgres
+      - --spring.flyway.username=vality
       - --spring.flyway.password=postgres
+      - --service.skipExistedHoldOps=false
     depends_on:
       - liminator-db
     healthcheck:
@@ -101,5 +102,5 @@ services:
     image: docker.io/library/postgres:9.6
     environment:
       - POSTGRES_DB=liminator
-      - POSTGRES_USER=postgres
+      - POSTGRES_USER=vality
       - POSTGRES_PASSWORD=postgres

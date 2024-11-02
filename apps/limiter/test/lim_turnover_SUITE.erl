@@ -66,6 +66,10 @@
 -export([batch_hold_ok/1]).
 -export([batch_commit_ok/1]).
 -export([batch_rollback_ok/1]).
+-export([two_batch_hold_ok/1]).
+-export([two_batch_commit_ok/1]).
+-export([two_batch_rollback_ok/1]).
+-export([retry_batch_hold_ok/1]).
 
 -type group_name() :: atom().
 -type test_case_name() :: atom().
@@ -123,7 +127,11 @@ groups() ->
             {group, base},
             batch_hold_ok,
             batch_commit_ok,
-            batch_rollback_ok
+            batch_rollback_ok,
+            two_batch_hold_ok,
+            two_batch_commit_ok,
+            two_batch_rollback_ok,
+            retry_batch_hold_ok
         ]},
         {withdrawals, [parallel], [
             get_limit_ok,
@@ -246,6 +254,7 @@ end_per_testcase(_Name, C) ->
     version = Version
 }).
 -define(LIMIT_REQUEST(ID, Changes), #limiter_LimitRequest{operation_id = ID, limit_changes = Changes}).
+-define(LIMIT(Amount), #limiter_Limit{amount = Amount}).
 
 -spec commit_with_long_change_id(config()) -> _.
 commit_with_long_change_id(C) ->
@@ -768,10 +777,32 @@ commit_with_sender_receiver_scope_ok(C) ->
 %%
 
 construct_request(C) ->
-    {ID0, Version0} = configure_limit(?time_range_month(), ?global(), C),
-    {ID1, Version1} = configure_limit(?time_range_month(), ?global(), C),
-    {ID2, Version2} = configure_limit(?time_range_month(), ?global(), C),
-    ?LIMIT_REQUEST(?string, [
+    ID = ?config(id, C),
+    {ID0, Version0} = configure_limit(
+        ?time_range_month(),
+        ?global(),
+        ?turnover_metric_amount(<<"RUB">>),
+        undefined,
+        genlib:format("~s/~B", [ID, 0]),
+        C
+    ),
+    {ID1, Version1} = configure_limit(
+        ?time_range_month(),
+        ?global(),
+        ?turnover_metric_amount(<<"RUB">>),
+        undefined,
+        genlib:format("~s/~B", [ID, 1]),
+        C
+    ),
+    {ID2, Version2} = configure_limit(
+        ?time_range_month(),
+        ?global(),
+        ?turnover_metric_amount(<<"RUB">>),
+        undefined,
+        genlib:format("~s/~B", [ID, 2]),
+        C
+    ),
+    ?LIMIT_REQUEST(ID, [
         ?LIMIT_CHANGE(ID0, 0, Version0),
         ?LIMIT_CHANGE(ID1, 0, Version1),
         ?LIMIT_CHANGE(ID2, 0, Version2)
@@ -785,8 +816,7 @@ batch_hold_ok(C) ->
             _Default -> ?payproc_ctx_invoice(?cash(10))
         end,
     Request = construct_request(C),
-    {ok, [Limits]} = lim_client:hold_batch(Request, Context, ?config(client, C)),
-    {ok, [Limits]} = lim_client:get_batch(Request, Context, ?config(client, C)).
+    ok = hold_and_assert_batch(10, Request, Context, C).
 
 -spec batch_commit_ok(config()) -> _.
 batch_commit_ok(C) ->
@@ -796,9 +826,9 @@ batch_commit_ok(C) ->
             _Default -> ?payproc_ctx_invoice(?cash(10))
         end,
     Request = construct_request(C),
-    {ok, [Limits]} = lim_client:hold_batch(Request, Context, ?config(client, C)),
+    ok = hold_and_assert_batch(10, Request, Context, C),
     {ok, ok} = lim_client:commit_batch(Request, Context, ?config(client, C)),
-    {ok, [Limits]} = lim_client:get_batch(Request, Context, ?config(client, C)).
+    ok = assert_values(10, Request, Context, C).
 
 -spec batch_rollback_ok(config()) -> _.
 batch_rollback_ok(C) ->
@@ -808,10 +838,105 @@ batch_rollback_ok(C) ->
             _Default -> ?payproc_ctx_invoice(?cash(10))
         end,
     Request = construct_request(C),
-    {ok, [_Limits]} = lim_client:hold_batch(Request, Context, ?config(client, C)),
-    {ok, ok} = lim_client:rollback_batch(Request, Context, ?config(client, C)).
+    ok = hold_and_assert_batch(10, Request, Context, C),
+    {ok, ok} = lim_client:rollback_batch(Request, Context, ?config(client, C)),
+    ok = assert_values(0, Request, Context, C).
+
+-spec two_batch_hold_ok(config()) -> _.
+two_batch_hold_ok(C) ->
+    Context =
+        case get_group_name(C) of
+            withdrawals -> ?wthdproc_ctx_withdrawal(?cash(10));
+            _Default -> ?payproc_ctx_invoice(?cash(10))
+        end,
+    ?LIMIT_REQUEST(RequestID, Changes) = Request0 = construct_request(C),
+    Request1 = ?LIMIT_REQUEST(genlib:format("~s/~B", [RequestID, 1000]), Changes),
+    ok = hold_and_assert_batch(10, Request0, Context, C),
+    ok = hold_and_assert_batch(20, Request1, Context, C).
+
+-spec two_batch_commit_ok(config()) -> _.
+two_batch_commit_ok(C) ->
+    Context =
+        case get_group_name(C) of
+            withdrawals -> ?wthdproc_ctx_withdrawal(?cash(10));
+            _Default -> ?payproc_ctx_invoice(?cash(10))
+        end,
+    ?LIMIT_REQUEST(RequestID, Changes) = Request0 = construct_request(C),
+    Request1 = ?LIMIT_REQUEST(genlib:format("~s/~B", [RequestID, 1000]), Changes),
+    ok = hold_and_assert_batch(10, Request0, Context, C),
+    {ok, ok} = lim_client:commit_batch(Request0, Context, ?config(client, C)),
+    ok = hold_and_assert_batch(20, Request1, Context, C),
+    {ok, ok} = lim_client:commit_batch(Request1, Context, ?config(client, C)),
+    ok = assert_values(20, Request1, Context, C).
+
+-spec two_batch_rollback_ok(config()) -> _.
+two_batch_rollback_ok(C) ->
+    Context =
+        case get_group_name(C) of
+            withdrawals -> ?wthdproc_ctx_withdrawal(?cash(10));
+            _Default -> ?payproc_ctx_invoice(?cash(10))
+        end,
+    ?LIMIT_REQUEST(RequestID, Changes) = Request0 = construct_request(C),
+    Request1 = ?LIMIT_REQUEST(genlib:format("~s/~B", [RequestID, 1000]), Changes),
+    ok = hold_and_assert_batch(10, Request0, Context, C),
+    ok = hold_and_assert_batch(20, Request1, Context, C),
+    {ok, ok} = lim_client:rollback_batch(Request0, Context, ?config(client, C)),
+    ok = assert_values(10, Request1, Context, C),
+    {ok, ok} = lim_client:rollback_batch(Request1, Context, ?config(client, C)),
+    ok = assert_values(0, Request1, Context, C).
+
+-spec retry_batch_hold_ok(config()) -> _.
+retry_batch_hold_ok(C) ->
+    Context =
+        case get_group_name(C) of
+            withdrawals -> ?wthdproc_ctx_withdrawal(?cash(10));
+            _Default -> ?payproc_ctx_invoice(?cash(10))
+        end,
+    ?LIMIT_REQUEST(RequestID, Changes) = Request0 = construct_request(C),
+    Request1 = ?LIMIT_REQUEST(genlib:format("~s/~B", [RequestID, 1000]), Changes),
+    Request2 = ?LIMIT_REQUEST(genlib:format("~s/~B", [RequestID, 2000]), Changes),
+    ok = hold_and_assert_batch(10, Request0, Context, C),
+    ok = assert_batch(10, Request0, Context, C),
+    ok = hold_and_assert_batch(20, Request1, Context, C),
+    ok = assert_batch(10, Request0, Context, C),
+    ok = assert_batch(20, Request1, Context, C),
+    ok = hold_and_assert_batch(30, Request2, Context, C),
+    ok = assert_batch(10, Request0, Context, C),
+    ok = assert_batch(20, Request1, Context, C),
+    ok = assert_batch(30, Request2, Context, C),
+    {ok, ok} = lim_client:commit_batch(Request2, Context, ?config(client, C)),
+    ok = assert_values(30, Request1, Context, C),
+    ok = assert_batch(10, Request0, Context, C),
+    ok = assert_batch(20, Request1, Context, C),
+    {ok, ok} = lim_client:commit_batch(Request1, Context, ?config(client, C)),
+    ok = assert_values(30, Request1, Context, C),
+    ok = assert_batch(10, Request0, Context, C),
+    {ok, ok} = lim_client:commit_batch(Request0, Context, ?config(client, C)),
+    ok = assert_values(30, Request1, Context, C).
 
 %%
+
+hold_and_assert_batch(Value, Request0, Context, C) ->
+    {ok, [LimitState0 | [LimitState1 | [LimitState2]]]} = lim_client:hold_batch(Request0, Context, ?config(client, C)),
+    ?assertEqual(Value, LimitState0#limiter_Limit.amount),
+    ?assertEqual(Value, LimitState1#limiter_Limit.amount),
+    ?assertEqual(Value, LimitState2#limiter_Limit.amount),
+    {ok, [LimitState0 | [LimitState1 | [LimitState2]]]} = lim_client:get_values(Request0, Context, ?config(client, C)),
+    ok.
+
+assert_batch(BatchValue, Request0, Context, C) ->
+    {ok, [LimitState0 | [LimitState1 | [LimitState2]]]} = lim_client:get_batch(Request0, Context, ?config(client, C)),
+    ?assertEqual(BatchValue, LimitState0#limiter_Limit.amount),
+    ?assertEqual(BatchValue, LimitState1#limiter_Limit.amount),
+    ?assertEqual(BatchValue, LimitState2#limiter_Limit.amount),
+    ok.
+
+assert_values(Value, Request0, Context, C) ->
+    {ok, [LimitState0 | [LimitState1 | [LimitState2]]]} = lim_client:get_values(Request0, Context, ?config(client, C)),
+    ?assertEqual(Value, LimitState0#limiter_Limit.amount),
+    ?assertEqual(Value, LimitState1#limiter_Limit.amount),
+    ?assertEqual(Value, LimitState2#limiter_Limit.amount),
+    ok.
 
 gen_change_id(LimitID, ChangeID) ->
     genlib:format("~s/~p", [LimitID, ChangeID]).
@@ -833,7 +958,9 @@ configure_limit(TimeRange, Scope, Metric, C) ->
     configure_limit(TimeRange, Scope, Metric, undefined, C).
 
 configure_limit(TimeRange, Scope, Metric, CurrencyConversion, C) ->
-    ID = ?config(id, C),
+    configure_limit(TimeRange, Scope, Metric, CurrencyConversion, ?config(id, C), C).
+
+configure_limit(TimeRange, Scope, Metric, CurrencyConversion, ID, C) ->
     ContextType =
         case get_group_name(C) of
             withdrawals -> ?ctx_type_wthdproc();

@@ -29,6 +29,7 @@
 -export([commit/2]).
 -export([rollback/2]).
 
+-export([get_values/2]).
 -export([get_batch/3]).
 -export([hold_batch/3]).
 -export([commit_batch/3]).
@@ -288,6 +289,15 @@ rollback(LimitChange = #limiter_LimitChange{id = ID, version = Version}, LimitCo
     do(fun() ->
         {Handler, Config} = unwrap(get_handler(ID, Version, LimitContext)),
         unwrap(Handler, Handler:rollback(LimitChange, Config, LimitContext))
+    end).
+
+-spec get_values([lim_changes()], lim_context()) ->
+    {ok, [lim_liminator:limit_response()]} | {error, config_error() | {processor(), get_limit_error()}}.
+get_values(LimitChanges, LimitContext) ->
+    do(fun() ->
+        Changes = unwrap(collect_changes(hold, LimitChanges, LimitContext)),
+        Names = lists:map(fun lim_liminator:get_name/1, Changes),
+        unwrap(lim_liminator:get_values(Names, LimitContext))
     end).
 
 -spec get_batch(operation_id(), lim_changes(), lim_context()) ->

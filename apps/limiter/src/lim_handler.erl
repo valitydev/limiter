@@ -84,6 +84,19 @@ handle_function_('Rollback', {LimitChange = ?LIMIT_CHANGE(LimitID), Clock, Conte
         {error, Error} ->
             handle_rollback_error(Error)
     end;
+handle_function_('GetValues', {?LIMIT_REQUEST(OperationID, Changes), Context}, LimitContext, _Opts) ->
+    scoper:add_meta(#{operation_id => OperationID}),
+    case
+        lim_config_machine:get_values(
+            Changes,
+            lim_context:set_context(Context, LimitContext)
+        )
+    of
+        {ok, Responses} ->
+            {ok, convert_responses(Responses)};
+        {error, Error} ->
+            handle_get_error(Error)
+    end;
 handle_function_('GetBatch', {?LIMIT_REQUEST(OperationID, Changes), Context}, LimitContext, _Opts) ->
     scoper:add_meta(#{operation_id => OperationID}),
     case
@@ -122,7 +135,7 @@ handle_function_('CommitBatch', {?LIMIT_REQUEST(OperationID, Changes), Context},
         )
     of
         ok ->
-            ok;
+            {ok, ok};
         {error, Error} ->
             handle_commit_error(Error)
     end;
@@ -136,7 +149,7 @@ handle_function_('RollbackBatch', {?LIMIT_REQUEST(OperationID, Changes), Context
         )
     of
         ok ->
-            ok;
+            {ok, ok};
         {error, Error} ->
             handle_rollback_error(Error)
     end.
@@ -148,7 +161,7 @@ convert_responses([Response | Other]) ->
 
 convert_response(#liminator_LimitResponse{
     limit_id = LimitID,
-    hold_value = Value
+    total_value = Value
 }) ->
     #limiter_Limit{
         id = LimitID,

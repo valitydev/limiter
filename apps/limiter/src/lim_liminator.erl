@@ -2,8 +2,10 @@
 
 -include_lib("liminator_proto/include/liminator_liminator_thrift.hrl").
 
+-export([get_name/1]).
 -export([construct_change/3]).
 
+-export([get_values/2]).
 -export([get/3]).
 -export([hold/3]).
 -export([commit/3]).
@@ -32,6 +34,15 @@ construct_change(ID, Name, Value) ->
         limit_name = Name,
         value = Value
     }.
+
+-spec get_name(limit_change()) -> limit_name().
+get_name(#liminator_LimitChange{limit_name = Name}) ->
+    Name.
+
+-spec get_values([limit_name()], lim_context()) ->
+    {ok, [limit_response()]} | {error, invalid_request_error()}.
+get_values(Names, LimitContext) ->
+    do('GetLastLimitsValues', Names, LimitContext).
 
 -spec get(operation_id(), [limit_change()], lim_context()) ->
     {ok, [limit_response()]} | {error, invalid_request_error()}.
