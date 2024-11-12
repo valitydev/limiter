@@ -70,6 +70,11 @@
 -export([two_batch_commit_ok/1]).
 -export([two_batch_rollback_ok/1]).
 -export([retry_batch_hold_ok/1]).
+-export([batch_commit_less_ok/1]).
+-export([batch_commit_more_ok/1]).
+-export([batch_commit_negative_ok/1]).
+-export([batch_commit_negative_less_ok/1]).
+-export([batch_commit_negative_more_ok/1]).
 
 -type group_name() :: atom().
 -type test_case_name() :: atom().
@@ -131,7 +136,12 @@ groups() ->
             two_batch_hold_ok,
             two_batch_commit_ok,
             two_batch_rollback_ok,
-            retry_batch_hold_ok
+            retry_batch_hold_ok,
+            batch_commit_less_ok,
+            batch_commit_more_ok,
+            batch_commit_negative_ok,
+            batch_commit_negative_less_ok,
+            batch_commit_negative_more_ok
         ]},
         {withdrawals, [parallel], [
             get_limit_ok,
@@ -908,11 +918,61 @@ retry_batch_hold_ok(C) ->
     ok = assert_values(30, Request1, Context, C),
     ok = assert_batch(10, Request0, Context, C),
     ok = assert_batch(20, Request1, Context, C),
-    {ok, ok} = lim_client:commit_batch(Request1, Context, ?config(client, C)),
-    ok = assert_values(30, Request1, Context, C),
+    {ok, ok} = lim_client:rollback_batch(Request1, Context, ?config(client, C)),
+    ok = assert_values(20, Request1, Context, C),
     ok = assert_batch(10, Request0, Context, C),
     {ok, ok} = lim_client:commit_batch(Request0, Context, ?config(client, C)),
-    ok = assert_values(30, Request1, Context, C).
+    ok = assert_values(20, Request1, Context, C).
+
+-spec batch_commit_less_ok(config()) -> _.
+batch_commit_less_ok(C) ->
+    Cost = ?cash(1000, <<"RUB">>),
+    CaptureCost = ?cash(800, <<"RUB">>),
+    Context = ?payproc_ctx_payment(Cost, CaptureCost),
+    Request = construct_request(C),
+    ok = hold_and_assert_batch(1000, Request, Context, C),
+    {ok, ok} = lim_client:commit_batch(Request, Context, ?config(client, C)),
+    ok = assert_values(800, Request, Context, C).
+
+-spec batch_commit_more_ok(config()) -> _.
+batch_commit_more_ok(C) ->
+    Cost = ?cash(1000, <<"RUB">>),
+    CaptureCost = ?cash(1200, <<"RUB">>),
+    Context = ?payproc_ctx_payment(Cost, CaptureCost),
+    Request = construct_request(C),
+    ok = hold_and_assert_batch(1000, Request, Context, C),
+    {ok, ok} = lim_client:commit_batch(Request, Context, ?config(client, C)),
+    ok = assert_values(1200, Request, Context, C).
+
+-spec batch_commit_negative_ok(config()) -> _.
+batch_commit_negative_ok(C) ->
+    Cost = ?cash(-1000, <<"RUB">>),
+    CaptureCost = ?cash(-1000, <<"RUB">>),
+    Context = ?payproc_ctx_payment(Cost, CaptureCost),
+    Request = construct_request(C),
+    ok = hold_and_assert_batch(-1000, Request, Context, C),
+    {ok, ok} = lim_client:commit_batch(Request, Context, ?config(client, C)),
+    ok = assert_values(-1000, Request, Context, C).
+
+-spec batch_commit_negative_less_ok(config()) -> _.
+batch_commit_negative_less_ok(C) ->
+    Cost = ?cash(-1000, <<"RUB">>),
+    CaptureCost = ?cash(-800, <<"RUB">>),
+    Context = ?payproc_ctx_payment(Cost, CaptureCost),
+    Request = construct_request(C),
+    ok = hold_and_assert_batch(-1000, Request, Context, C),
+    {ok, ok} = lim_client:commit_batch(Request, Context, ?config(client, C)),
+    ok = assert_values(-800, Request, Context, C).
+
+-spec batch_commit_negative_more_ok(config()) -> _.
+batch_commit_negative_more_ok(C) ->
+    Cost = ?cash(-1000, <<"RUB">>),
+    CaptureCost = ?cash(-1200, <<"RUB">>),
+    Context = ?payproc_ctx_payment(Cost, CaptureCost),
+    Request = construct_request(C),
+    ok = hold_and_assert_batch(-1000, Request, Context, C),
+    {ok, ok} = lim_client:commit_batch(Request, Context, ?config(client, C)),
+    ok = assert_values(-1200, Request, Context, C).
 
 %%
 

@@ -3,7 +3,7 @@
 -include_lib("liminator_proto/include/liminator_liminator_thrift.hrl").
 
 -export([get_name/1]).
--export([construct_change/3]).
+-export([construct_change/4]).
 
 -export([get_values/2]).
 -export([get/3]).
@@ -15,6 +15,7 @@
 -type limit_change() :: liminator_liminator_thrift:'LimitChange'().
 -type limit_name() :: liminator_liminator_thrift:'LimitName'().
 -type limit_id() :: liminator_liminator_thrift:'LimitId'().
+-type change_context() :: liminator_liminator_thrift:'Context'().
 -type limit_response() :: liminator_liminator_thrift:'LimitResponse'().
 -type amount() :: liminator_liminator_thrift:'Value'().
 -type lim_context() :: lim_context:t().
@@ -25,14 +26,15 @@
 -export_type([invalid_request_error/0]).
 -export_type([limit_response/0]).
 -export_type([limit_change/0]).
+-export_type([change_context/0]).
 
--spec construct_change(limit_id(), limit_name(), amount()) -> limit_change().
-construct_change(ID, Name, Value) ->
-    %% TODO: Add context - info from name in map
+-spec construct_change(limit_id(), limit_name(), amount(), change_context()) -> limit_change().
+construct_change(ID, Name, Value, ChangeContext) ->
     #liminator_LimitChange{
         limit_id = ID,
         limit_name = Name,
-        value = Value
+        value = Value,
+        context = ChangeContext
     }.
 
 -spec get_name(limit_change()) -> limit_name().

@@ -148,6 +148,7 @@
 
 -callback get_limit(
     ID :: lim_id(),
+    Version :: lim_version(),
     Config :: config(),
     LimitContext :: lim_context()
 ) -> {ok, limit()} | {error, get_limit_error()}.
@@ -267,7 +268,7 @@ get(ID, LimitContext) ->
 get_limit(ID, Version, LimitContext) ->
     do(fun() ->
         {Handler, Config} = unwrap(get_handler(ID, Version, LimitContext)),
-        unwrap(Handler, Handler:get_limit(ID, Config, LimitContext))
+        unwrap(Handler, Handler:get_limit(ID, Version, Config, LimitContext))
     end).
 
 -spec hold(lim_change(), lim_context()) -> ok | {error, config_error() | {processor(), hold_error()}}.
@@ -625,11 +626,11 @@ mk_scope_prefix_impl(Scope, ContextType, LimitContext) ->
     do(fun() ->
         Bits = enumerate_context_bits(Scope),
         lists:foldl(
-            fun(Bit, Acc) ->
+            fun(Bit, {Map, AccPrefix}) ->
                 Value = unwrap(extract_context_bit(Bit, ContextType, LimitContext)),
-                append_prefix(Value, Acc)
+                {Map, append_prefix(Value, AccPrefix)}
             end,
-            <<>>,
+            {#{}, <<>>},
             Bits
         )
     end).
