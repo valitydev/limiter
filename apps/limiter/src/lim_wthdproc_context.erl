@@ -157,15 +157,11 @@ get_terminal_id(_, _CtxWithdrawal) ->
     {error, notfound}.
 
 get_destination_sender(withdrawal, ?SENDER_RECEIVER(#wthd_domain_SenderReceiverAuthData{sender = Token})) ->
-    {ok, hash_token(Token)};
+    {ok, lim_context_utils:base61_hash(Token)};
 get_destination_sender(_, _CtxWithdrawal) ->
     {error, notfound}.
 
 get_destination_receiver(withdrawal, ?SENDER_RECEIVER(#wthd_domain_SenderReceiverAuthData{receiver = Token})) ->
-    {ok, hash_token(Token)};
+    {ok, lim_context_utils:base61_hash(Token)};
 get_destination_receiver(_, _CtxWithdrawal) ->
     {error, notfound}.
-
-hash_token(Token) ->
-    <<I:160/integer>> = crypto:hash(sha, Token),
-    genlib_format:format_int_base(I, 61).
