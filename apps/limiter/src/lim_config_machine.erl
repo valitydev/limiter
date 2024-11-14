@@ -139,12 +139,12 @@
 
 %% Handler behaviour
 
--callback get_change(
+-callback make_change(
     Stage :: lim_turnover_metric:stage(),
     LimitChange :: lim_change(),
     Config :: config(),
     LimitContext :: lim_context()
-) -> {ok, lim_liminator:limit_change()} | {error, get_change_error()}.
+) -> {ok, lim_liminator:limit_change()} | {error, make_change_error()}.
 
 -callback get_limit(
     ID :: lim_id(),
@@ -171,7 +171,7 @@
     LimitContext :: lim_context()
 ) -> ok | {error, rollback_error()}.
 
--type get_change_error() :: lim_turnover_processor:get_change_error().
+-type make_change_error() :: lim_turnover_processor:make_change_error().
 -type get_limit_error() :: lim_turnover_processor:get_limit_error().
 -type hold_error() :: lim_turnover_processor:hold_error().
 -type commit_error() :: lim_turnover_processor:commit_error().
@@ -292,7 +292,7 @@ rollback(LimitChange = #limiter_LimitChange{id = ID, version = Version}, LimitCo
         unwrap(Handler, Handler:rollback(LimitChange, Config, LimitContext))
     end).
 
--spec get_values([lim_changes()], lim_context()) ->
+-spec get_values(lim_changes(), lim_context()) ->
     {ok, [lim_liminator:limit_response()]} | {error, config_error() | {processor(), get_limit_error()}}.
 get_values(LimitChanges, LimitContext) ->
     do(fun() ->
@@ -338,7 +338,7 @@ collect_changes(_Stage, [], _LimitContext) ->
 collect_changes(Stage, [LimitChange = #limiter_LimitChange{id = ID, version = Version} | Other], LimitContext) ->
     do(fun() ->
         {Handler, Config} = unwrap(get_handler(ID, Version, LimitContext)),
-        Change = unwrap(Handler, Handler:get_change(Stage, LimitChange, Config, LimitContext)),
+        Change = unwrap(Handler, Handler:make_change(Stage, LimitChange, Config, LimitContext)),
         [Change | unwrap(collect_changes(Stage, Other, LimitContext))]
     end).
 
@@ -616,24 +616,31 @@ mk_shard_id(Prefix, Units, ShardSize) ->
     ID = integer_to_binary(abs(Units) div ShardSize),
     <<Prefix/binary, "/", ID/binary>>.
 
--spec mk_scope_prefix(config(), lim_context()) -> {ok, prefix()} | {error, lim_context:context_error()}.
+-spec mk_scope_prefix(config(), lim_context()) ->
+    {ok, {prefix(), lim_context:change_context()}} | {error, lim_context:context_error()}.
 mk_scope_prefix(Config, LimitContext) ->
     mk_scope_prefix_impl(scope(Config), context_type(Config), LimitContext).
 
 -spec mk_scope_prefix_impl(limit_scope(), context_type(), lim_context()) ->
-    {ok, prefix()} | {error, lim_context:context_error()}.
+    {ok, {prefix(), lim_context:change_context()}} | {error, lim_context:context_error()}.
 mk_scope_prefix_impl(Scope, ContextType, LimitContext) ->
     do(fun() ->
         Bits = enumerate_context_bits(Scope),
         lists:foldl(
-            fun(Bit, {Map, AccPrefix}) ->
+            fun(Bit, {AccPrefix, Map}) ->
+                BinaryBit = encode_bit(Bit),
                 Value = unwrap(extract_context_bit(Bit, ContextType, LimitContext)),
-                {Map, append_prefix(Value, AccPrefix)}
+                {append_prefix(Value, AccPrefix), Map#{<<"Scope.", BinaryBit/binary>> => Value}}
             end,
-            {#{}, <<>>},
+            {<<>>, #{}},
             Bits
         )
     end).
+
+encode_bit({prefix, _Prefix}) ->
+    genlib:to_binary(prefix);
+encode_bit({from, BitType}) ->
+    genlib:to_binary(BitType).
 
 -spec append_prefix(binary(), prefix()) -> prefix().
 append_prefix(Fragment, Acc) ->

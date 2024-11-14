@@ -76,7 +76,7 @@ services:
       - POSTGRES_PASSWORD=postgres
 
   liminator:
-    image: ghcr.io/valitydev/liminator:sha-d9c1407
+    image: ghcr.io/valitydev/liminator:sha-96c6325
     restart: unless-stopped
     entrypoint:
       - java
