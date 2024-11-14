@@ -648,6 +648,8 @@ mk_scope_prefix_impl(Scope, ContextType, LimitContext) ->
 
 encode_bit({prefix, _Prefix}) ->
     genlib:to_binary(prefix);
+encode_bit({from, {destination_field, FieldPath}}) ->
+    lim_string:join($., [<<"destination_field">>] ++ FieldPath);
 encode_bit({from, BitType}) ->
     genlib:to_binary(BitType).
 
