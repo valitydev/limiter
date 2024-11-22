@@ -850,7 +850,7 @@ construct_request(C) ->
     ID = ?config(id, C),
     {ID0, Version0} = configure_limit(
         ?time_range_month(),
-        ?scope([?scope_provider(), ?scope_payment_tool()]),
+        ?global(),
         ?turnover_metric_amount(<<"RUB">>),
         undefined,
         genlib:format("~s/~B", [ID, 0]),
@@ -858,7 +858,7 @@ construct_request(C) ->
     ),
     {ID1, Version1} = configure_limit(
         ?time_range_month(),
-        ?scope([?scope_provider(), ?scope_payment_tool()]),
+        ?global(),
         ?turnover_metric_amount(<<"RUB">>),
         undefined,
         genlib:format("~s/~B", [ID, 1]),
@@ -866,7 +866,7 @@ construct_request(C) ->
     ),
     {ID2, Version2} = configure_limit(
         ?time_range_month(),
-        ?scope([?scope_provider(), ?scope_payment_tool()]),
+        ?global(),
         ?turnover_metric_amount(<<"RUB">>),
         undefined,
         genlib:format("~s/~B", [ID, 2]),
