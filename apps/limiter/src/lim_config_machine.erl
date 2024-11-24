@@ -1119,36 +1119,40 @@ prefix_content_test_() ->
     },
     [
         ?_assertEqual(
-            {ok, {<<"/terminal/22/2">>, #{
-                <<"Scope.prefix">> => <<"terminal">>,
-                <<"Scope.provider_id">> => <<"22">>,
-                <<"Scope.terminal_id">> => <<"2">>
-            }}},
+            {ok,
+                {<<"/terminal/22/2">>, #{
+                    <<"Scope.prefix">> => <<"terminal">>,
+                    <<"Scope.provider_id">> => <<"22">>,
+                    <<"Scope.terminal_id">> => <<"2">>
+                }}},
             mk_scope_prefix_impl(ordsets:from_list([terminal, provider]), payment_processing, Context)
         ),
         ?_assertEqual(
-            {ok, {<<"/terminal/22/2">>, #{
-                <<"Scope.prefix">> => <<"terminal">>,
-                <<"Scope.provider_id">> => <<"22">>,
-                <<"Scope.terminal_id">> => <<"2">>
-            }}},
+            {ok,
+                {<<"/terminal/22/2">>, #{
+                    <<"Scope.prefix">> => <<"terminal">>,
+                    <<"Scope.provider_id">> => <<"22">>,
+                    <<"Scope.terminal_id">> => <<"2">>
+                }}},
             mk_scope_prefix_impl(ordsets:from_list([provider, terminal]), payment_processing, Context)
         ),
         ?_assertEqual(
-            {ok, {<<"/OWNER/wallet/IDENTITY/WALLET">>, #{
-                <<"Scope.identity_id">> => <<"IDENTITY">>,
-                <<"Scope.owner_id">> => <<"OWNER">>,
-                <<"Scope.prefix">> => <<"wallet">>,
-                <<"Scope.wallet_id">> => <<"WALLET">>
-            }}},
+            {ok,
+                {<<"/OWNER/wallet/IDENTITY/WALLET">>, #{
+                    <<"Scope.identity_id">> => <<"IDENTITY">>,
+                    <<"Scope.owner_id">> => <<"OWNER">>,
+                    <<"Scope.prefix">> => <<"wallet">>,
+                    <<"Scope.wallet_id">> => <<"WALLET">>
+                }}},
             mk_scope_prefix_impl(ordsets:from_list([wallet, identity, party]), withdrawal_processing, WithdrawalContext)
         ),
         ?_assertEqual(
-            {ok, {<<"/token/2/2022/payer_contact_email/email">>, #{
-                <<"Scope.payer_contact_email">> => <<"email">>,
-                <<"Scope.payment_tool">> => <<"token/2/2022">>,
-                <<"Scope.prefix">> => <<"payer_contact_email">>
-            }}},
+            {ok,
+                {<<"/token/2/2022/payer_contact_email/email">>, #{
+                    <<"Scope.payer_contact_email">> => <<"email">>,
+                    <<"Scope.payment_tool">> => <<"token/2/2022">>,
+                    <<"Scope.prefix">> => <<"payer_contact_email">>
+                }}},
             mk_scope_prefix_impl(ordsets:from_list([payer_contact_email, payment_tool]), payment_processing, Context)
         )
     ].
