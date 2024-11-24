@@ -883,7 +883,7 @@ batch_hold_ok(C) ->
     Context =
         case get_group_name(C) of
             withdrawals -> ?wthdproc_ctx_withdrawal(?cash(10));
-            _Default -> ?payproc_ctx_invoice(?cash(10))
+            _Default -> ?payproc_ctx_payment(?cash(10), ?cash(10))
         end,
     Request = construct_request(C),
     ok = hold_and_assert_batch(10, Request, Context, C).
@@ -893,7 +893,7 @@ batch_commit_ok(C) ->
     Context =
         case get_group_name(C) of
             withdrawals -> ?wthdproc_ctx_withdrawal(?cash(10));
-            _Default -> ?payproc_ctx_invoice(?cash(10))
+            _Default -> ?payproc_ctx_payment(?cash(10), ?cash(10))
         end,
     Request = construct_request(C),
     ok = hold_and_assert_batch(10, Request, Context, C),
@@ -905,7 +905,7 @@ batch_rollback_ok(C) ->
     Context =
         case get_group_name(C) of
             withdrawals -> ?wthdproc_ctx_withdrawal(?cash(10));
-            _Default -> ?payproc_ctx_invoice(?cash(10))
+            _Default -> ?payproc_ctx_payment(?cash(10), ?cash(10))
         end,
     Request = construct_request(C),
     ok = hold_and_assert_batch(10, Request, Context, C),
@@ -917,7 +917,7 @@ two_batch_hold_ok(C) ->
     Context =
         case get_group_name(C) of
             withdrawals -> ?wthdproc_ctx_withdrawal(?cash(10));
-            _Default -> ?payproc_ctx_invoice(?cash(10))
+            _Default -> ?payproc_ctx_payment(?cash(10), ?cash(10))
         end,
     ?LIMIT_REQUEST(RequestID, Changes) = Request0 = construct_request(C),
     Request1 = ?LIMIT_REQUEST(genlib:format("~s/~B", [RequestID, 1000]), Changes),
@@ -929,7 +929,7 @@ two_batch_commit_ok(C) ->
     Context =
         case get_group_name(C) of
             withdrawals -> ?wthdproc_ctx_withdrawal(?cash(10));
-            _Default -> ?payproc_ctx_invoice(?cash(10))
+            _Default -> ?payproc_ctx_payment(?cash(10), ?cash(10))
         end,
     ?LIMIT_REQUEST(RequestID, Changes) = Request0 = construct_request(C),
     Request1 = ?LIMIT_REQUEST(genlib:format("~s/~B", [RequestID, 1000]), Changes),
@@ -944,7 +944,7 @@ two_batch_rollback_ok(C) ->
     Context =
         case get_group_name(C) of
             withdrawals -> ?wthdproc_ctx_withdrawal(?cash(10));
-            _Default -> ?payproc_ctx_invoice(?cash(10))
+            _Default -> ?payproc_ctx_payment(?cash(10), ?cash(10))
         end,
     ?LIMIT_REQUEST(RequestID, Changes) = Request0 = construct_request(C),
     Request1 = ?LIMIT_REQUEST(genlib:format("~s/~B", [RequestID, 1000]), Changes),
@@ -960,7 +960,7 @@ retry_batch_hold_ok(C) ->
     Context =
         case get_group_name(C) of
             withdrawals -> ?wthdproc_ctx_withdrawal(?cash(10));
-            _Default -> ?payproc_ctx_invoice(?cash(10))
+            _Default -> ?payproc_ctx_payment(?cash(10), ?cash(10))
         end,
     ?LIMIT_REQUEST(RequestID, Changes) = Request0 = construct_request(C),
     Request1 = ?LIMIT_REQUEST(genlib:format("~s/~B", [RequestID, 1000]), Changes),
@@ -988,7 +988,11 @@ retry_batch_hold_ok(C) ->
 batch_commit_less_ok(C) ->
     Cost = ?cash(1000, <<"RUB">>),
     CaptureCost = ?cash(800, <<"RUB">>),
-    Context = ?payproc_ctx_payment(Cost, CaptureCost),
+    Context =
+        case get_group_name(C) of
+            withdrawals -> ?wthdproc_ctx_withdrawal(Cost);
+            _Default -> ?payproc_ctx_payment(Cost, CaptureCost)
+        end,
     Request = construct_request(C),
     ok = hold_and_assert_batch(1000, Request, Context, C),
     {ok, ok} = lim_client:commit_batch(Request, Context, ?config(client, C)),
@@ -998,17 +1002,26 @@ batch_commit_less_ok(C) ->
 batch_commit_more_ok(C) ->
     Cost = ?cash(1000, <<"RUB">>),
     CaptureCost = ?cash(1200, <<"RUB">>),
-    Context = ?payproc_ctx_payment(Cost, CaptureCost),
+    Context =
+        case get_group_name(C) of
+            withdrawals -> ?wthdproc_ctx_withdrawal(Cost);
+            _Default -> ?payproc_ctx_payment(Cost, CaptureCost)
+        end,
     Request = construct_request(C),
     ok = hold_and_assert_batch(1000, Request, Context, C),
-    {ok, ok} = lim_client:commit_batch(Request, Context, ?config(client, C)),
-    ok = assert_values(1200, Request, Context, C).
+    {exception, #base_InvalidRequest{errors = [<<"OperationNotFound">>]}} = lim_client:commit_batch(
+        Request, Context, ?config(client, C)
+    ).
 
 -spec batch_commit_negative_ok(config()) -> _.
 batch_commit_negative_ok(C) ->
     Cost = ?cash(-1000, <<"RUB">>),
     CaptureCost = ?cash(-1000, <<"RUB">>),
-    Context = ?payproc_ctx_payment(Cost, CaptureCost),
+    Context =
+        case get_group_name(C) of
+            withdrawals -> ?wthdproc_ctx_withdrawal(Cost);
+            _Default -> ?payproc_ctx_payment(Cost, CaptureCost)
+        end,
     Request = construct_request(C),
     ok = hold_and_assert_batch(-1000, Request, Context, C),
     {ok, ok} = lim_client:commit_batch(Request, Context, ?config(client, C)),
@@ -1018,7 +1031,11 @@ batch_commit_negative_ok(C) ->
 batch_commit_negative_less_ok(C) ->
     Cost = ?cash(-1000, <<"RUB">>),
     CaptureCost = ?cash(-800, <<"RUB">>),
-    Context = ?payproc_ctx_payment(Cost, CaptureCost),
+    Context =
+        case get_group_name(C) of
+            withdrawals -> ?wthdproc_ctx_withdrawal(Cost);
+            _Default -> ?payproc_ctx_payment(Cost, CaptureCost)
+        end,
     Request = construct_request(C),
     ok = hold_and_assert_batch(-1000, Request, Context, C),
     {ok, ok} = lim_client:commit_batch(Request, Context, ?config(client, C)),
@@ -1028,11 +1045,16 @@ batch_commit_negative_less_ok(C) ->
 batch_commit_negative_more_ok(C) ->
     Cost = ?cash(-1000, <<"RUB">>),
     CaptureCost = ?cash(-1200, <<"RUB">>),
-    Context = ?payproc_ctx_payment(Cost, CaptureCost),
+    Context =
+        case get_group_name(C) of
+            withdrawals -> ?wthdproc_ctx_withdrawal(Cost);
+            _Default -> ?payproc_ctx_payment(Cost, CaptureCost)
+        end,
     Request = construct_request(C),
     ok = hold_and_assert_batch(-1000, Request, Context, C),
-    {ok, ok} = lim_client:commit_batch(Request, Context, ?config(client, C)),
-    ok = assert_values(-1200, Request, Context, C).
+    {exception, #base_InvalidRequest{errors = [<<"OperationNotFound">>]}} = lim_client:commit_batch(
+        Request, Context, ?config(client, C)
+    ).
 
 %%
 

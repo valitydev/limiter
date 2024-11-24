@@ -314,14 +314,20 @@ get_values(LimitChanges, LimitContext) ->
     {ok, [lim_liminator:limit_response()]} | {error, config_error() | {processor(), get_limit_error()}}.
 get_batch(OperationID, LimitChanges, LimitContext) ->
     do(fun() ->
-        unwrap(lim_liminator:get(OperationID, unwrap(collect_changes(hold, LimitChanges, LimitContext)), LimitContext))
+        unwrap(
+            OperationID,
+            lim_liminator:get(OperationID, unwrap(collect_changes(hold, LimitChanges, LimitContext)), LimitContext)
+        )
     end).
 
 -spec hold_batch(operation_id(), lim_changes(), lim_context()) ->
     {ok, [lim_liminator:limit_response()]} | {error, config_error() | {processor(), hold_error()}}.
 hold_batch(OperationID, LimitChanges, LimitContext) ->
     do(fun() ->
-        unwrap(lim_liminator:hold(OperationID, unwrap(collect_changes(hold, LimitChanges, LimitContext)), LimitContext))
+        unwrap(
+            OperationID,
+            lim_liminator:hold(OperationID, unwrap(collect_changes(hold, LimitChanges, LimitContext)), LimitContext)
+        )
     end).
 
 -spec commit_batch(operation_id(), lim_changes(), lim_context()) ->
@@ -329,6 +335,7 @@ hold_batch(OperationID, LimitChanges, LimitContext) ->
 commit_batch(OperationID, LimitChanges, LimitContext) ->
     do(fun() ->
         unwrap(
+            OperationID,
             lim_liminator:commit(OperationID, unwrap(collect_changes(commit, LimitChanges, LimitContext)), LimitContext)
         )
     end).
@@ -338,6 +345,7 @@ commit_batch(OperationID, LimitChanges, LimitContext) ->
 rollback_batch(OperationID, LimitChanges, LimitContext) ->
     do(fun() ->
         unwrap(
+            OperationID,
             lim_liminator:rollback(OperationID, unwrap(collect_changes(hold, LimitChanges, LimitContext)), LimitContext)
         )
     end).

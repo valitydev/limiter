@@ -1,4 +1,3 @@
-version: '3'
 services:
 
   testrunner:
@@ -69,14 +68,14 @@ services:
       retries: 20
 
   shumway-db:
-    image: docker.io/library/postgres:9.6
+    image: docker.io/library/postgres:14.3
     environment:
       - POSTGRES_DB=shumway
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
 
   liminator:
-    image: ghcr.io/valitydev/liminator:sha-96c6325
+    image: ghcr.io/valitydev/liminator:sha-fc6546f
     restart: unless-stopped
     entrypoint:
       - java
@@ -99,7 +98,7 @@ services:
       retries: 20
 
   liminator-db:
-    image: docker.io/library/postgres:9.6
+    image: docker.io/library/postgres:14.3
     environment:
       - POSTGRES_DB=liminator
       - POSTGRES_USER=vality
