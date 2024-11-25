@@ -8,6 +8,12 @@
 -export([commit/3]).
 -export([rollback/3]).
 
+-export([get_values/3]).
+-export([get_batch/3]).
+-export([hold_batch/3]).
+-export([commit_batch/3]).
+-export([rollback_batch/3]).
+
 -export([legacy_create_config/2]).
 -export([create_config/2]).
 -export([get_config/2]).
@@ -17,6 +23,7 @@
 -type limit_id() :: limproto_limiter_thrift:'LimitID'().
 -type limit_version() :: limproto_limiter_thrift:'Version'() | undefined.
 -type limit_change() :: limproto_limiter_thrift:'LimitChange'().
+-type limit_request() :: limproto_limiter_thrift:'LimitRequest'().
 -type limit_context() :: limproto_limiter_thrift:'LimitContext'().
 -type clock() :: limproto_limiter_thrift:'Clock'().
 -type legacy_create_params() :: limproto_configurator_thrift:'LimitCreateParams'().
@@ -45,6 +52,26 @@ commit(LimitChange, Context, Client) ->
 -spec rollback(limit_change(), limit_context(), client()) -> woody:result() | no_return().
 rollback(LimitChange, Context, Client) ->
     call('Rollback', {LimitChange, clock(), Context}, Client).
+
+-spec get_values(limit_request(), limit_context(), client()) -> woody:result() | no_return().
+get_values(LimitRequest, Context, Client) ->
+    call('GetValues', {LimitRequest, Context}, Client).
+
+-spec get_batch(limit_request(), limit_context(), client()) -> woody:result() | no_return().
+get_batch(LimitRequest, Context, Client) ->
+    call('GetBatch', {LimitRequest, Context}, Client).
+
+-spec hold_batch(limit_request(), limit_context(), client()) -> woody:result() | no_return().
+hold_batch(LimitRequest, Context, Client) ->
+    call('HoldBatch', {LimitRequest, Context}, Client).
+
+-spec commit_batch(limit_request(), limit_context(), client()) -> woody:result() | no_return().
+commit_batch(LimitRequest, Context, Client) ->
+    call('CommitBatch', {LimitRequest, Context}, Client).
+
+-spec rollback_batch(limit_request(), limit_context(), client()) -> woody:result() | no_return().
+rollback_batch(LimitRequest, Context, Client) ->
+    call('RollbackBatch', {LimitRequest, Context}, Client).
 
 %%
 

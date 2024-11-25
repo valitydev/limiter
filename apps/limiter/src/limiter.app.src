@@ -10,6 +10,7 @@
         scoper,  % should be before any scoper event handler usage
         woody,
         limiter_proto,
+        liminator_proto,
         xrates_proto,
         machinery,
         erl_health,

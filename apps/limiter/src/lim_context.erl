@@ -6,6 +6,7 @@
 -export([create/1]).
 -export([woody_context/1]).
 -export([get_operation/2]).
+-export([make_change_context/2]).
 -export([get_value/3]).
 
 -export([set_context/2]).
@@ -24,6 +25,7 @@
 }.
 
 -type context_type() :: payment_processing | withdrawal_processing.
+-type change_context() :: #{binary() => binary()}.
 -type context_inner() :: lim_payproc_context:context() | lim_wthdproc_context:context().
 -type context_operation() :: lim_payproc_context:operation() | lim_wthdproc_context:operation().
 
@@ -34,12 +36,14 @@
 
 -export_type([t/0]).
 -export_type([context_type/0]).
+-export_type([change_context/0]).
 -export_type([context_operation/0]).
 -export_type([unsupported_error/1]).
 -export_type([operation_context_not_supported_error/0]).
 -export_type([context_error/0]).
 
 -callback get_operation(context_inner()) -> {ok, context_operation()} | {error, notfound}.
+-callback make_change_context(context_inner()) -> {ok, change_context()}.
 -callback get_value(_Name :: atom(), context_inner()) -> {ok, term()} | {error, notfound | unsupported_error(_)}.
 
 -spec create(woody_context()) -> t().
@@ -70,6 +74,14 @@ get_operation(Type, Context) ->
     case get_operation_context(Type, Context) of
         {error, _} = Error -> Error;
         {ok, Mod, OperationContext} -> Mod:get_operation(OperationContext)
+    end.
+
+-spec make_change_context(context_type(), t()) ->
+    {ok, change_context()} | {error, operation_context_not_supported_error()}.
+make_change_context(Type, Context) ->
+    case get_operation_context(Type, Context) of
+        {error, _} = Error -> Error;
+        {ok, Mod, OperationContext} -> Mod:make_change_context(OperationContext)
     end.
 
 -spec get_value(context_type(), atom(), t()) -> {ok, term()} | {error, context_error()}.

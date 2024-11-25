@@ -6,6 +6,7 @@
 
 -behaviour(lim_context).
 -export([get_operation/1]).
+-export([make_change_context/1]).
 -export([get_value/2]).
 
 -type context() :: limproto_context_withdrawal_thrift:'Context'().
@@ -24,6 +25,22 @@ get_operation(#context_withdrawal_Context{op = {Operation, _}}) ->
 get_operation(#context_withdrawal_Context{op = undefined}) ->
     {error, notfound}.
 
+-spec make_change_context(context()) -> {ok, lim_context:change_context()}.
+make_change_context(#context_withdrawal_Context{op = undefined}) ->
+    {ok, #{}};
+make_change_context(
+    Context = #context_withdrawal_Context{
+        op = {Operation, _}
+    }
+) ->
+    {ok,
+        genlib_map:compact(#{
+            <<"Context.op">> => genlib:to_binary(Operation),
+            <<"Context.owner_id">> => try_get_value(owner_id, Context, undefined),
+            <<"Context.identity_id">> => try_get_value(identity_id, Context, undefined),
+            <<"Context.wallet_id">> => try_get_value(wallet_id, Context, undefined)
+        })}.
+
 -spec get_value(atom(), context()) -> {ok, term()} | {error, notfound | {unsupported, _}}.
 get_value(ValueName, Context) ->
     case get_operation(Context) of
@@ -31,6 +48,19 @@ get_value(ValueName, Context) ->
             get_value(ValueName, Operation, Context);
         {error, _} = Error ->
             Error
+    end.
+
+try_get_value(ValueName, Context, Default) ->
+    case get_operation(Context) of
+        {ok, Operation} ->
+            case get_value(ValueName, Operation, Context) of
+                {ok, Value} ->
+                    Value;
+                {error, _} ->
+                    Default
+            end;
+        {error, _} ->
+            Default
     end.
 
 get_value(owner_id, _Operation, Context) ->

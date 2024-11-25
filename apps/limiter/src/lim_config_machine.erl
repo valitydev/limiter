@@ -29,6 +29,12 @@
 -export([commit/2]).
 -export([rollback/2]).
 
+-export([get_values/2]).
+-export([get_batch/3]).
+-export([hold_batch/3]).
+-export([commit_batch/3]).
+-export([rollback_batch/3]).
+
 -export([calculate_shard_id/2]).
 -export([calculate_time_range/2]).
 -export([mk_scope_prefix/2]).
@@ -99,6 +105,8 @@
 -type lim_change() :: limproto_limiter_thrift:'LimitChange'().
 -type limit() :: limproto_limiter_thrift:'Limit'().
 -type timestamp() :: dmsl_base_thrift:'Timestamp'().
+-type operation_id() :: limproto_limiter_thrift:'OperationID'().
+-type lim_changes() :: [lim_change()].
 
 -export_type([config/0]).
 -export_type([limit_type/0]).
@@ -140,8 +148,16 @@
 
 %% Handler behaviour
 
+-callback make_change(
+    Stage :: lim_turnover_metric:stage(),
+    LimitChange :: lim_change(),
+    Config :: config(),
+    LimitContext :: lim_context()
+) -> {ok, lim_liminator:limit_change()} | {error, make_change_error()}.
+
 -callback get_limit(
     ID :: lim_id(),
+    Version :: lim_version(),
     Config :: config(),
     LimitContext :: lim_context()
 ) -> {ok, limit()} | {error, get_limit_error()}.
@@ -164,6 +180,7 @@
     LimitContext :: lim_context()
 ) -> ok | {error, rollback_error()}.
 
+-type make_change_error() :: lim_turnover_processor:make_change_error().
 -type get_limit_error() :: lim_turnover_processor:get_limit_error().
 -type hold_error() :: lim_turnover_processor:hold_error().
 -type commit_error() :: lim_turnover_processor:commit_error().
@@ -260,7 +277,7 @@ get(ID, LimitContext) ->
 get_limit(ID, Version, LimitContext) ->
     do(fun() ->
         {Handler, Config} = unwrap(get_handler(ID, Version, LimitContext)),
-        unwrap(Handler, Handler:get_limit(ID, Config, LimitContext))
+        unwrap(Handler, Handler:get_limit(ID, Version, Config, LimitContext))
     end).
 
 -spec hold(lim_change(), lim_context()) -> ok | {error, config_error() | {processor(), hold_error()}}.
@@ -282,6 +299,64 @@ rollback(LimitChange = #limiter_LimitChange{id = ID, version = Version}, LimitCo
     do(fun() ->
         {Handler, Config} = unwrap(get_handler(ID, Version, LimitContext)),
         unwrap(Handler, Handler:rollback(LimitChange, Config, LimitContext))
+    end).
+
+-spec get_values(lim_changes(), lim_context()) ->
+    {ok, [lim_liminator:limit_response()]} | {error, config_error() | {processor(), get_limit_error()}}.
+get_values(LimitChanges, LimitContext) ->
+    do(fun() ->
+        Changes = unwrap(collect_changes(hold, LimitChanges, LimitContext)),
+        Names = lists:map(fun lim_liminator:get_name/1, Changes),
+        unwrap(lim_liminator:get_values(Names, LimitContext))
+    end).
+
+-spec get_batch(operation_id(), lim_changes(), lim_context()) ->
+    {ok, [lim_liminator:limit_response()]} | {error, config_error() | {processor(), get_limit_error()}}.
+get_batch(OperationID, LimitChanges, LimitContext) ->
+    do(fun() ->
+        unwrap(
+            OperationID,
+            lim_liminator:get(OperationID, unwrap(collect_changes(hold, LimitChanges, LimitContext)), LimitContext)
+        )
+    end).
+
+-spec hold_batch(operation_id(), lim_changes(), lim_context()) ->
+    {ok, [lim_liminator:limit_response()]} | {error, config_error() | {processor(), hold_error()}}.
+hold_batch(OperationID, LimitChanges, LimitContext) ->
+    do(fun() ->
+        unwrap(
+            OperationID,
+            lim_liminator:hold(OperationID, unwrap(collect_changes(hold, LimitChanges, LimitContext)), LimitContext)
+        )
+    end).
+
+-spec commit_batch(operation_id(), lim_changes(), lim_context()) ->
+    ok | {error, config_error() | {processor(), hold_error()}}.
+commit_batch(OperationID, LimitChanges, LimitContext) ->
+    do(fun() ->
+        unwrap(
+            OperationID,
+            lim_liminator:commit(OperationID, unwrap(collect_changes(commit, LimitChanges, LimitContext)), LimitContext)
+        )
+    end).
+
+-spec rollback_batch(operation_id(), lim_changes(), lim_context()) ->
+    ok | {error, config_error() | {processor(), hold_error()}}.
+rollback_batch(OperationID, LimitChanges, LimitContext) ->
+    do(fun() ->
+        unwrap(
+            OperationID,
+            lim_liminator:rollback(OperationID, unwrap(collect_changes(hold, LimitChanges, LimitContext)), LimitContext)
+        )
+    end).
+
+collect_changes(_Stage, [], _LimitContext) ->
+    {ok, []};
+collect_changes(Stage, [LimitChange = #limiter_LimitChange{id = ID, version = Version} | Other], LimitContext) ->
+    do(fun() ->
+        {Handler, Config} = unwrap(get_handler(ID, Version, LimitContext)),
+        Change = unwrap(Handler, Handler:make_change(Stage, LimitChange, Config, LimitContext)),
+        [Change | unwrap(collect_changes(Stage, Other, LimitContext))]
     end).
 
 get_handler(ID, Version, LimitContext) ->
@@ -558,24 +633,33 @@ mk_shard_id(Prefix, Units, ShardSize) ->
     ID = integer_to_binary(abs(Units) div ShardSize),
     <<Prefix/binary, "/", ID/binary>>.
 
--spec mk_scope_prefix(config(), lim_context()) -> {ok, prefix()} | {error, lim_context:context_error()}.
+-spec mk_scope_prefix(config(), lim_context()) ->
+    {ok, {prefix(), lim_context:change_context()}} | {error, lim_context:context_error()}.
 mk_scope_prefix(Config, LimitContext) ->
     mk_scope_prefix_impl(scope(Config), context_type(Config), LimitContext).
 
 -spec mk_scope_prefix_impl(limit_scope(), context_type(), lim_context()) ->
-    {ok, prefix()} | {error, lim_context:context_error()}.
+    {ok, {prefix(), lim_context:change_context()}} | {error, lim_context:context_error()}.
 mk_scope_prefix_impl(Scope, ContextType, LimitContext) ->
     do(fun() ->
         Bits = enumerate_context_bits(Scope),
         lists:foldl(
-            fun(Bit, Acc) ->
+            fun(Bit, {AccPrefix, Map}) ->
+                BinaryBit = encode_bit(Bit),
                 Value = unwrap(extract_context_bit(Bit, ContextType, LimitContext)),
-                append_prefix(Value, Acc)
+                {append_prefix(Value, AccPrefix), Map#{<<"Scope.", BinaryBit/binary>> => Value}}
             end,
-            <<>>,
+            {<<>>, #{}},
             Bits
         )
     end).
+
+encode_bit({prefix, _Prefix}) ->
+    genlib:to_binary(prefix);
+encode_bit({from, {destination_field, FieldPath}}) ->
+    lim_string:join($., [<<"destination_field">>] ++ FieldPath);
+encode_bit({from, BitType}) ->
+    genlib:to_binary(BitType).
 
 -spec append_prefix(binary(), prefix()) -> prefix().
 append_prefix(Fragment, Acc) ->
@@ -997,22 +1081,22 @@ check_calculate_year_shard_id_test() ->
 -spec global_scope_empty_prefix_test() -> _.
 global_scope_empty_prefix_test() ->
     Context = #{context => ?PAYPROC_CTX_INVOICE(?INVOICE(<<"OWNER">>, <<"SHOP">>))},
-    ?assertEqual({ok, <<>>}, mk_scope_prefix_impl(ordsets:new(), payment_processing, Context)).
+    ?assertEqual({ok, {<<>>, #{}}}, mk_scope_prefix_impl(ordsets:new(), payment_processing, Context)).
 
 -spec preserve_scope_prefix_order_test_() -> [_TestGen].
 preserve_scope_prefix_order_test_() ->
     Context = #{context => ?PAYPROC_CTX_INVOICE(?INVOICE(<<"OWNER">>, <<"SHOP">>))},
     [
         ?_assertEqual(
-            {ok, <<"/OWNER/SHOP">>},
+            {ok, {<<"/OWNER/SHOP">>, #{<<"Scope.owner_id">> => <<"OWNER">>, <<"Scope.shop_id">> => <<"SHOP">>}}},
             mk_scope_prefix_impl(ordsets:from_list([shop, party]), payment_processing, Context)
         ),
         ?_assertEqual(
-            {ok, <<"/OWNER/SHOP">>},
+            {ok, {<<"/OWNER/SHOP">>, #{<<"Scope.owner_id">> => <<"OWNER">>, <<"Scope.shop_id">> => <<"SHOP">>}}},
             mk_scope_prefix_impl(ordsets:from_list([party, shop]), payment_processing, Context)
         ),
         ?_assertEqual(
-            {ok, <<"/OWNER/SHOP">>},
+            {ok, {<<"/OWNER/SHOP">>, #{<<"Scope.owner_id">> => <<"OWNER">>, <<"Scope.shop_id">> => <<"SHOP">>}}},
             mk_scope_prefix_impl(ordsets:from_list([shop]), payment_processing, Context)
         )
     ].
@@ -1035,19 +1119,40 @@ prefix_content_test_() ->
     },
     [
         ?_assertEqual(
-            {ok, <<"/terminal/22/2">>},
+            {ok,
+                {<<"/terminal/22/2">>, #{
+                    <<"Scope.prefix">> => <<"terminal">>,
+                    <<"Scope.provider_id">> => <<"22">>,
+                    <<"Scope.terminal_id">> => <<"2">>
+                }}},
             mk_scope_prefix_impl(ordsets:from_list([terminal, provider]), payment_processing, Context)
         ),
         ?_assertEqual(
-            {ok, <<"/terminal/22/2">>},
+            {ok,
+                {<<"/terminal/22/2">>, #{
+                    <<"Scope.prefix">> => <<"terminal">>,
+                    <<"Scope.provider_id">> => <<"22">>,
+                    <<"Scope.terminal_id">> => <<"2">>
+                }}},
             mk_scope_prefix_impl(ordsets:from_list([provider, terminal]), payment_processing, Context)
         ),
         ?_assertEqual(
-            {ok, <<"/OWNER/wallet/IDENTITY/WALLET">>},
+            {ok,
+                {<<"/OWNER/wallet/IDENTITY/WALLET">>, #{
+                    <<"Scope.identity_id">> => <<"IDENTITY">>,
+                    <<"Scope.owner_id">> => <<"OWNER">>,
+                    <<"Scope.prefix">> => <<"wallet">>,
+                    <<"Scope.wallet_id">> => <<"WALLET">>
+                }}},
             mk_scope_prefix_impl(ordsets:from_list([wallet, identity, party]), withdrawal_processing, WithdrawalContext)
         ),
         ?_assertEqual(
-            {ok, <<"/token/2/2022/payer_contact_email/email">>},
+            {ok,
+                {<<"/token/2/2022/payer_contact_email/email">>, #{
+                    <<"Scope.payer_contact_email">> => <<"email">>,
+                    <<"Scope.payment_tool">> => <<"token/2/2022">>,
+                    <<"Scope.prefix">> => <<"payer_contact_email">>
+                }}},
             mk_scope_prefix_impl(ordsets:from_list([payer_contact_email, payment_tool]), payment_processing, Context)
         )
     ].
