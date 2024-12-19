@@ -18,14 +18,14 @@ new(#{account_id_from := From, account_id_to := To}, Amount, Currency) ->
         description = <<>>
     }).
 
-reverse_negative_posting(Posting = #accounter_Posting{amount = Amount}) when Amount < 0 ->
+reverse_negative_posting(#accounter_Posting{amount = Amount} = Posting) when Amount < 0 ->
     PostingReversed = reverse(Posting),
     PostingReversed#accounter_Posting{amount = -Amount};
 reverse_negative_posting(Posting) ->
     Posting.
 
 -spec reverse(posting()) -> posting().
-reverse(Posting = #accounter_Posting{from_id = AccountFrom, to_id = AccountTo}) ->
+reverse(#accounter_Posting{from_id = AccountFrom, to_id = AccountTo} = Posting) ->
     Posting#accounter_Posting{
         from_id = AccountTo,
         to_id = AccountFrom

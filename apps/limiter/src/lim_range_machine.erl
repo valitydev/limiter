@@ -123,7 +123,7 @@ get(ID, LimitContext) ->
     get_state(ID, lim_context:woody_context(LimitContext)).
 
 -spec ensure_exists(create_params(), time_range(), lim_context()) -> {ok, time_range_ext()}.
-ensure_exists(Params = #{id := ID}, TimeRange, LimitContext) ->
+ensure_exists(#{id := ID} = Params, TimeRange, LimitContext) ->
     WoodyCtx = lim_context:woody_context(LimitContext),
     case get_state(ID, WoodyCtx) of
         {ok, State} ->
@@ -246,15 +246,15 @@ not_implemented(What) ->
 
 %%
 
--spec apply_event(machinery:event(timestamped_event(event())), lim_maybe:maybe(limit_range_state())) ->
+-spec apply_event(machinery:event(timestamped_event(event())), lim_maybe:'maybe'(limit_range_state())) ->
     limit_range_state().
 apply_event({_ID, _Ts, {ev, _EvTs, Event}}, Config) ->
     apply_event_(Event, Config).
 
--spec apply_event_(event(), lim_maybe:maybe(limit_range_state())) -> limit_range_state().
+-spec apply_event_(event(), lim_maybe:'maybe'(limit_range_state())) -> limit_range_state().
 apply_event_({created, LimitRange}, undefined) ->
     LimitRange;
-apply_event_({time_range_created, TimeRange}, LimitRange = #{ranges := Ranges}) ->
+apply_event_({time_range_created, TimeRange}, #{ranges := Ranges} = LimitRange) ->
     LimitRange#{ranges => [TimeRange | Ranges]};
 apply_event_({time_range_created, TimeRange}, LimitRange) ->
     LimitRange#{ranges => [TimeRange]}.

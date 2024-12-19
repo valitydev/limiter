@@ -87,7 +87,7 @@ find_range_balance_amount(LimitRangeID, TimeRange, LimitContext) ->
     end.
 
 -spec hold(lim_change(), config(), lim_context()) -> ok | {error, hold_error()}.
-hold(LimitChange = #limiter_LimitChange{id = LimitID, version = Version}, Config, LimitContext) ->
+hold(#limiter_LimitChange{id = LimitID, version = Version} = LimitChange, Config, LimitContext) ->
     do(fun() ->
         TimeRangeAccount = unwrap(ensure_limit_time_range(LimitID, Version, Config, LimitContext)),
         Metric = unwrap(compute_metric(hold, Config, LimitContext)),
@@ -96,7 +96,7 @@ hold(LimitChange = #limiter_LimitChange{id = LimitID, version = Version}, Config
     end).
 
 -spec commit(lim_change(), config(), lim_context()) -> ok | {error, commit_error()}.
-commit(LimitChange = #limiter_LimitChange{id = LimitID, version = Version}, Config, LimitContext) ->
+commit(#limiter_LimitChange{id = LimitID, version = Version} = LimitChange, Config, LimitContext) ->
     do(fun() ->
         TimeRangeAccount = unwrap(ensure_limit_time_range(LimitID, Version, Config, LimitContext)),
         PlanID = construct_plan_id(LimitChange),
@@ -120,7 +120,7 @@ commit(LimitChange = #limiter_LimitChange{id = LimitID, version = Version}, Conf
     end).
 
 -spec rollback(lim_change(), config(), lim_context()) -> ok | {error, rollback_error()}.
-rollback(LimitChange = #limiter_LimitChange{id = LimitID, version = Version}, Config, LimitContext) ->
+rollback(#limiter_LimitChange{id = LimitID, version = Version} = LimitChange, Config, LimitContext) ->
     do(fun() ->
         TimeRangeAccount = unwrap(ensure_limit_time_range(LimitID, Version, Config, LimitContext)),
         Metric = unwrap(compute_metric(hold, Config, LimitContext)),

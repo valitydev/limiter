@@ -200,7 +200,7 @@ created_at(#{created_at := CreatedAt}) ->
 id(#{id := ID}) ->
     ID.
 
--spec description(config()) -> lim_maybe:maybe(description()).
+-spec description(config()) -> lim_maybe:'maybe'(description()).
 description(#{description := ID}) ->
     ID;
 description(_) ->
@@ -238,7 +238,7 @@ scope(_) ->
 context_type(#{context_type := Value}) ->
     Value.
 
--spec op_behaviour(config()) -> lim_maybe:maybe(op_behaviour()).
+-spec op_behaviour(config()) -> lim_maybe:'maybe'(op_behaviour()).
 op_behaviour(#{op_behaviour := Value}) ->
     Value;
 op_behaviour(_) ->
@@ -281,21 +281,21 @@ get_limit(ID, Version, LimitContext) ->
     end).
 
 -spec hold(lim_change(), lim_context()) -> ok | {error, config_error() | {processor(), hold_error()}}.
-hold(LimitChange = #limiter_LimitChange{id = ID, version = Version}, LimitContext) ->
+hold(#limiter_LimitChange{id = ID, version = Version} = LimitChange, LimitContext) ->
     do(fun() ->
         {Handler, Config} = unwrap(get_handler(ID, Version, LimitContext)),
         unwrap(Handler, Handler:hold(LimitChange, Config, LimitContext))
     end).
 
 -spec commit(lim_change(), lim_context()) -> ok | {error, config_error() | {processor(), commit_error()}}.
-commit(LimitChange = #limiter_LimitChange{id = ID, version = Version}, LimitContext) ->
+commit(#limiter_LimitChange{id = ID, version = Version} = LimitChange, LimitContext) ->
     do(fun() ->
         {Handler, Config} = unwrap(get_handler(ID, Version, LimitContext)),
         unwrap(Handler, Handler:commit(LimitChange, Config, LimitContext))
     end).
 
 -spec rollback(lim_change(), lim_context()) -> ok | {error, config_error() | {processor(), rollback_error()}}.
-rollback(LimitChange = #limiter_LimitChange{id = ID, version = Version}, LimitContext) ->
+rollback(#limiter_LimitChange{id = ID, version = Version} = LimitChange, LimitContext) ->
     do(fun() ->
         {Handler, Config} = unwrap(get_handler(ID, Version, LimitContext)),
         unwrap(Handler, Handler:rollback(LimitChange, Config, LimitContext))
@@ -836,11 +836,11 @@ not_implemented(What) ->
 
 %%
 
--spec apply_event(machinery:event(timestamped_event(event())), lim_maybe:maybe(config())) -> config().
+-spec apply_event(machinery:event(timestamped_event(event())), lim_maybe:'maybe'(config())) -> config().
 apply_event({_ID, _Ts, {ev, _EvTs, Event}}, Config) ->
     apply_event_(Event, Config).
 
--spec apply_event_(event(), lim_maybe:maybe(config())) -> config().
+-spec apply_event_(event(), lim_maybe:'maybe'(config())) -> config().
 apply_event_({created, Config}, undefined) ->
     Config.
 
