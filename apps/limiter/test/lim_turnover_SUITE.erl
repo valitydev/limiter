@@ -271,7 +271,6 @@ end_per_testcase(_Name, C) ->
     version = Version
 }).
 -define(LIMIT_REQUEST(ID, Changes), #limiter_LimitRequest{operation_id = ID, limit_changes = Changes}).
--define(LIMIT(Amount), #limiter_Limit{amount = Amount}).
 
 -spec commit_with_long_change_id(config()) -> _.
 commit_with_long_change_id(C) ->
@@ -1122,10 +1121,10 @@ configure_limit(TimeRange, Scope, Metric, CurrencyConversion, ID, C) ->
     ConfigSource = proplists:get_value(limit_config_source, C, legacy),
     put_config_into_repository(ConfigSource, CreateParams, ?config(client, C)).
 
-put_config_into_repository(legacy, CreateParams = #config_LimitConfigParams{id = ID}, Client) ->
+put_config_into_repository(legacy, #config_LimitConfigParams{id = ID} = CreateParams, Client) ->
     {ok, _LimitConfig} = lim_client:create_config(CreateParams, Client),
     {ID, undefined};
-put_config_into_repository(repository, CreateParams = #config_LimitConfigParams{id = ID}, _Client) ->
+put_config_into_repository(repository, #config_LimitConfigParams{id = ID} = CreateParams, _Client) ->
     LimitConfigObject = mk_limit_config_object(CreateParams),
     Version = dmt_client:insert({limit_config, LimitConfigObject}),
     {ID, Version}.

@@ -47,5 +47,5 @@ apply_op_behaviour(Operation, Body, #{op_behaviour := ComputationConfig}) ->
 apply_op_behaviour(_Operation, Body, _Config) ->
     Body.
 
-invert_body(Cash = #{amount := Amount}) ->
+invert_body(#{amount := Amount} = Cash) ->
     Cash#{amount := -Amount}.
