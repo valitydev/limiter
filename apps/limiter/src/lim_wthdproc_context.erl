@@ -29,9 +29,9 @@ get_operation(#context_withdrawal_Context{op = undefined}) ->
 make_change_context(#context_withdrawal_Context{op = undefined}) ->
     {ok, #{}};
 make_change_context(
-    Context = #context_withdrawal_Context{
+    #context_withdrawal_Context{
         op = {Operation, _}
-    }
+    } = Context
 ) ->
     {ok,
         genlib_map:compact(#{

@@ -31,11 +31,11 @@ marshal(change, {time_range_created, TimeRange}) ->
     {time_range_created, #range_TimeRangeCreatedChange{time_range = marshal(time_range, TimeRange)}};
 marshal(
     range,
-    Range = #{
+    #{
         id := ID,
         type := Type,
         created_at := CreatedAt
-    }
+    } = Range
 ) ->
     #range_LimitRange{
         id = ID,

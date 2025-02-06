@@ -33,9 +33,9 @@ get_operation(#context_payproc_Context{op = undefined}) ->
 make_change_context(#context_payproc_Context{op = undefined}) ->
     {ok, #{}};
 make_change_context(
-    Context = #context_payproc_Context{
+    #context_payproc_Context{
         op = {Operation, _}
-    }
+    } = Context
 ) ->
     {ok,
         genlib_map:compact(#{
