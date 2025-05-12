@@ -59,7 +59,7 @@
   0},
  {<<"limiter_proto">>,
   {git,"https://github.com/valitydev/limiter-proto.git",
-       {ref,"efeb7d4a05bd13c95fada18514509b34b107fcb9"}},
+       {ref,"022ff522f96c91dcf5d161b9cb60a5eb5129cd28"}},
   0},
  {<<"machinery">>,
   {git,"https://github.com/valitydev/machinery-erlang.git",
