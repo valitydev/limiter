@@ -12,10 +12,6 @@ namespaces:
         processor:
             url: http://limiter:8022/v1/stateproc/lim/range_v1
             pool_size: 500
-    domain-config:
-        processor:
-            url: http://dominant:8022/v1/stateproc
-            pool_size: 300
 
 storage:
     type: memory
@@ -23,9 +19,3 @@ storage:
 logging:
     out_type: stdout
     level: info
-
-opentelemetry:
-    service_name: machinegun
-    exporter:
-        protocol: http/protobuf
-        endpoint: http://jaeger:4318
