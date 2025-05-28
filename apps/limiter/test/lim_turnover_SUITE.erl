@@ -4,6 +4,7 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("damsel/include/dmsl_base_thrift.hrl").
 -include_lib("damsel/include/dmsl_limiter_config_thrift.hrl").
+-include_lib("damsel/include/dmsl_domain_conf_v2_thrift.hrl").
 -include("lim_ct_helper.hrl").
 
 -export([all/0]).
@@ -203,8 +204,9 @@ init_per_suite(Config) ->
                 }}
             ]},
             {service_urls, #{
-                'Repository' => <<"http://dominant:8022/v1/domain/repository">>,
-                'RepositoryClient' => <<"http://dominant:8022/v1/domain/repository_client">>
+                'AuthorManagement' => <<"http://dmt:8022/v1/domain/author">>,
+                'Repository' => <<"http://dmt:8022/v1/domain/repository">>,
+                'RepositoryClient' => <<"http://dmt:8022/v1/domain/repository_client">>
             }}
         ]) ++
             genlib_app:start_application_with(limiter, [
@@ -1126,7 +1128,7 @@ put_config_into_repository(legacy, #config_LimitConfigParams{id = ID} = CreatePa
     {ID, undefined};
 put_config_into_repository(repository, #config_LimitConfigParams{id = ID} = CreateParams, _Client) ->
     LimitConfigObject = mk_limit_config_object(CreateParams),
-    Version = dmt_client:insert({limit_config, LimitConfigObject}),
+    Version = dmt_client:insert({limit_config, LimitConfigObject}, ensure_stub_author()),
     {ID, Version}.
 
 gen_unique_id(Prefix) ->
@@ -1199,3 +1201,16 @@ change_record_name_prefix(Record, OldPrefix, NewPrefix) ->
     [OldPrefix, TypeName] = string:split(RecordName, "_", trailing),
     NewRecordName = list_to_existing_atom(NewPrefix ++ "_" ++ TypeName),
     setelement(1, Record, NewRecordName).
+
+ensure_stub_author() ->
+    %% TODO DISCUSS Stubs and fallback authors
+    ensure_author(~b"unknown", ~b"unknown@local").
+
+ensure_author(Name, Email) ->
+    try
+        #domain_conf_v2_Author{id = ID} = dmt_client:get_author_by_email(Email),
+        ID
+    catch
+        throw:#domain_conf_v2_AuthorNotFound{} ->
+            dmt_client:create_author(Name, Email)
+    end.
