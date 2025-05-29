@@ -54,7 +54,6 @@
 -export([commit_with_terminal_scope_ok/1]).
 -export([commit_with_email_scope_ok/1]).
 
--export([commit_with_identity_scope_ok/1]).
 -export([commit_with_wallet_scope_ok/1]).
 -export([commit_with_multi_scope_ok/1]).
 -export([hold_with_sender_notfound/1]).
@@ -156,7 +155,6 @@ groups() ->
             commit_with_party_scope_ok,
             commit_with_provider_scope_ok,
             commit_with_terminal_scope_ok,
-            commit_with_identity_scope_ok,
             commit_with_wallet_scope_ok,
             commit_with_sender_scope_ok,
             commit_with_receiver_scope_ok,
@@ -714,16 +712,9 @@ commit_with_email_scope_ok(C) ->
     {ok, {vector, _}} = hold_and_commit(?LIMIT_CHANGE(ID, ?CHANGE_ID, Version), Context, ?config(client, C)),
     {ok, #limiter_Limit{}} = lim_client:get(ID, Version, Context, ?config(client, C)).
 
--spec commit_with_identity_scope_ok(config()) -> _.
-commit_with_identity_scope_ok(C) ->
-    {ID, Version} = configure_limit(?time_range_month(), ?scope([?scope_identity()]), C),
-    Context = ?wthdproc_ctx_withdrawal(?cash(10, <<"RUB">>)),
-    {ok, {vector, _}} = hold_and_commit(?LIMIT_CHANGE(ID, ?CHANGE_ID, Version), Context, ?config(client, C)),
-    {ok, #limiter_Limit{}} = lim_client:get(ID, Version, Context, ?config(client, C)).
-
 -spec commit_with_wallet_scope_ok(config()) -> _.
 commit_with_wallet_scope_ok(C) ->
-    {ID, Version} = configure_limit(?time_range_month(), ?scope([?scope_wallet()]), C),
+    {ID, Version} = configure_limit(?time_range_month(), ?scope([?scope_party(), ?scope_wallet()]), C),
     Context = ?wthdproc_ctx_withdrawal(?cash(10, <<"RUB">>)),
     {ok, {vector, _}} = hold_and_commit(?LIMIT_CHANGE(ID, ?CHANGE_ID, Version), Context, ?config(client, C)),
     {ok, #limiter_Limit{}} = lim_client:get(ID, Version, Context, ?config(client, C)).

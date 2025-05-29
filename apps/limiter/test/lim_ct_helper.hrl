@@ -38,7 +38,6 @@
 -define(scope_provider(), {provider, #config_LimitScopeEmptyDetails{}}).
 -define(scope_terminal(), {terminal, #config_LimitScopeEmptyDetails{}}).
 -define(scope_payer_contact_email(), {payer_contact_email, #config_LimitScopeEmptyDetails{}}).
--define(scope_identity(), {identity, #config_LimitScopeEmptyDetails{}}).
 -define(scope_wallet(), {wallet, #config_LimitScopeEmptyDetails{}}).
 -define(scope_sender(), {sender, #config_LimitScopeEmptyDetails{}}).
 -define(scope_receiver(), {receiver, #config_LimitScopeEmptyDetails{}}).
@@ -231,11 +230,6 @@
 
 %% Wthdproc
 
--define(identity(OwnerID), #wthd_domain_Identity{
-    id = OwnerID,
-    owner_id = OwnerID
-}).
-
 -define(auth_data(Sender, Receiver),
     {sender_receiver, #wthd_domain_SenderReceiverAuthData{sender = Sender, receiver = Receiver}}
 ).
@@ -248,7 +242,7 @@
     body = Body,
     created_at = ?timestamp,
     destination = Destination,
-    sender = ?identity(OwnerID),
+    sender = OwnerID,
     auth_data = AuthData
 }).
 

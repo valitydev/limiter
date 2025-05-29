@@ -24,7 +24,7 @@ services:
         condition: service_healthy
 
   dominant:
-    image: ghcr.io/valitydev/dominant:sha-2150eea
+    image: ghcr.io/valitydev/dominant:sha-ef03371-epic-party_here
     command: /opt/dominant/bin/dominant foreground
     depends_on:
       machinegun:
