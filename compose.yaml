@@ -24,7 +24,7 @@ services:
         condition: service_healthy
 
   dmt:
-    image: ghcr.io/valitydev/dominant-v2:sha-ba60639-epic-fixes_for_client
+    image: ghcr.io/valitydev/dominant-v2:sha-fede605-epic-domain-party-support
     command: /opt/dmt/bin/dmt foreground
     healthcheck:
       test: "/opt/dmt/bin/dmt ping"
