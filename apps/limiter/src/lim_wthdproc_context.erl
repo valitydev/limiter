@@ -37,7 +37,6 @@ make_change_context(
         genlib_map:compact(#{
             <<"Context.op">> => genlib:to_binary(Operation),
             <<"Context.owner_id">> => try_get_value(owner_id, Context, undefined),
-            <<"Context.identity_id">> => try_get_value(identity_id, Context, undefined),
             <<"Context.wallet_id">> => try_get_value(wallet_id, Context, undefined)
         })}.
 
@@ -71,8 +70,6 @@ get_value(cost, Operation, Context) ->
     get_cost(Operation, Context);
 get_value(payment_tool, Operation, Context) ->
     get_payment_tool(Operation, Context);
-get_value(identity_id, Operation, Context) ->
-    get_identity_id(Operation, Context);
 get_value(wallet_id, Operation, Context) ->
     get_wallet_id(Operation, Context);
 get_value(provider_id, Operation, Context) ->
@@ -113,8 +110,7 @@ get_value(ValueName, _Operation, _Context) ->
 -define(SENDER_RECEIVER(V), ?AUTH_DATA({sender_receiver, V})).
 
 get_owner_id(?WITHDRAWAL(Wthd)) ->
-    Identity = Wthd#wthd_domain_Withdrawal.sender,
-    {ok, Identity#wthd_domain_Identity.owner_id};
+    {ok, Wthd#wthd_domain_Withdrawal.sender};
 get_owner_id(_CtxWithdrawal) ->
     {error, notfound}.
 
@@ -133,12 +129,6 @@ get_payment_tool(withdrawal, ?WITHDRAWAL(Wthd)) ->
     Destination = Wthd#wthd_domain_Withdrawal.destination,
     lim_payproc_utils:payment_tool(Destination);
 get_payment_tool(_, _CtxWithdrawal) ->
-    {error, notfound}.
-
-get_identity_id(withdrawal, ?WITHDRAWAL(Wthd)) ->
-    Identity = Wthd#wthd_domain_Withdrawal.sender,
-    {ok, Identity#wthd_domain_Identity.id};
-get_identity_id(_, _CtxWithdrawal) ->
     {error, notfound}.
 
 get_wallet_id(withdrawal, ?WALLET_ID(WalletID)) ->

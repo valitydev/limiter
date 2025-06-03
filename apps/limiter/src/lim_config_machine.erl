@@ -51,7 +51,6 @@
     party
     | shop
     | wallet
-    | identity
     | payment_tool
     | provider
     | terminal
@@ -675,7 +674,6 @@ enumerate_context_bits(Types) ->
         [
             party,
             shop,
-            identity,
             wallet,
             payment_tool,
             provider,
@@ -707,13 +705,13 @@ squash_scope_types([party, shop | Rest]) ->
     % NOTE
     % Shop scope implies party scope.
     [shop | squash_scope_types(Rest)];
-squash_scope_types([identity, wallet | Rest]) ->
+squash_scope_types([party, wallet | Rest]) ->
     % NOTE
-    % Wallet scope implies identity scope.
+    % Wallet scope implies party scope.
     [wallet | squash_scope_types(Rest)];
 squash_scope_types([provider, terminal | Rest]) ->
     % NOTE
-    % Provider scope implies identity scope.
+    % Provider scope implies provider scope.
     [terminal | squash_scope_types(Rest)];
 squash_scope_types([Type | Rest]) ->
     [Type | squash_scope_types(Rest)];
@@ -729,10 +727,8 @@ get_context_bits(shop) ->
     [{from, owner_id}, {from, shop_id}];
 get_context_bits(payment_tool) ->
     [{from, payment_tool}];
-get_context_bits(identity) ->
-    [{prefix, <<"identity">>}, {from, identity_id}];
 get_context_bits(wallet) ->
-    [{prefix, <<"wallet">>}, {from, identity_id}, {from, wallet_id}];
+    [{prefix, <<"wallet">>}, {from, owner_id}, {from, wallet_id}];
 get_context_bits(provider) ->
     [{prefix, <<"provider">>}, {from, provider_id}];
 get_context_bits(terminal) ->
@@ -1066,9 +1062,9 @@ check_calculate_year_shard_id_test() ->
     }
 }).
 
--define(WITHDRAWAL(OwnerID, IdentityID, PaymentTool), #wthd_domain_Withdrawal{
+-define(WITHDRAWAL(OwnerID, PaymentTool), #wthd_domain_Withdrawal{
     destination = PaymentTool,
-    sender = #wthd_domain_Identity{id = IdentityID, owner_id = OwnerID},
+    sender = OwnerID,
     created_at = <<"2000-02-02T12:12:12Z">>,
     body = #domain_Cash{amount = 42, currency = #domain_CurrencyRef{symbolic_code = <<"CNY">>}}
 }).
@@ -1112,7 +1108,7 @@ prefix_content_test_() ->
     },
     WithdrawalContext = #{
         context => ?WITHDRAWAL_CTX(
-            ?WITHDRAWAL(<<"OWNER">>, <<"IDENTITY">>, ?PAYMENT_TOOL),
+            ?WITHDRAWAL(<<"OWNER">>, ?PAYMENT_TOOL),
             <<"WALLET">>,
             ?ROUTE(22, 2)
         )
@@ -1138,13 +1134,12 @@ prefix_content_test_() ->
         ),
         ?_assertEqual(
             {ok,
-                {<<"/OWNER/wallet/IDENTITY/WALLET">>, #{
-                    <<"Scope.identity_id">> => <<"IDENTITY">>,
+                {<<"/wallet/OWNER/WALLET">>, #{
                     <<"Scope.owner_id">> => <<"OWNER">>,
                     <<"Scope.prefix">> => <<"wallet">>,
                     <<"Scope.wallet_id">> => <<"WALLET">>
                 }}},
-            mk_scope_prefix_impl(ordsets:from_list([wallet, identity, party]), withdrawal_processing, WithdrawalContext)
+            mk_scope_prefix_impl(ordsets:from_list([wallet, party]), withdrawal_processing, WithdrawalContext)
         ),
         ?_assertEqual(
             {ok,

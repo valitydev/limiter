@@ -716,7 +716,7 @@ commit_with_email_scope_ok(C) ->
 
 -spec commit_with_wallet_scope_ok(config()) -> _.
 commit_with_wallet_scope_ok(C) ->
-    {ID, Version} = configure_limit(?time_range_month(), ?scope([?scope_wallet()]), C),
+    {ID, Version} = configure_limit(?time_range_month(), ?scope([?scope_party(), ?scope_wallet()]), C),
     Context = ?wthdproc_ctx_withdrawal(?cash(10, <<"RUB">>)),
     {ok, {vector, _}} = hold_and_commit(?LIMIT_CHANGE(ID, ?CHANGE_ID, Version), Context, ?config(client, C)),
     {ok, #limiter_Limit{}} = lim_client:get(ID, Version, Context, ?config(client, C)).
