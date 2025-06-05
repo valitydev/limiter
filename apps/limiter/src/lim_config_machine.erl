@@ -2,7 +2,7 @@
 
 -include_lib("limiter_proto/include/limproto_limiter_thrift.hrl").
 -include_lib("damsel/include/dmsl_domain_thrift.hrl").
--include_lib("damsel/include/dmsl_domain_conf_thrift.hrl").
+-include_lib("damsel/include/dmsl_domain_conf_v2_thrift.hrl").
 
 %% Accessors
 
@@ -371,11 +371,11 @@ get_config(ID, undefined, LimitContext) ->
 get_config(ID, Version, #{woody_context := WoodyContext}) ->
     LimitConfigRef = {limit_config, #domain_LimitConfigRef{id = ID}},
     try
-        Object = dmt_client:checkout_versioned_object(Version, LimitConfigRef, #{woody_context => WoodyContext}),
-        #domain_conf_VersionedObject{object = {limit_config, ConfigObject}} = Object,
+        #domain_conf_v2_VersionedObject{object = {limit_config, ConfigObject}} =
+            dmt_client:checkout_object(Version, LimitConfigRef, #{woody_context => WoodyContext}),
         {ok, lim_config_codec:unmarshal('LimitConfigObject', ConfigObject)}
     catch
-        throw:#domain_conf_ObjectNotFound{} ->
+        throw:#domain_conf_v2_ObjectNotFound{} ->
             {error, notfound}
     end.
 

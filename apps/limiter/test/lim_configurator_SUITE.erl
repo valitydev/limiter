@@ -69,8 +69,9 @@ init_per_suite(Config) ->
                 }}
             ]},
             {service_urls, #{
-                'Repository' => <<"http://dominant:8022/v1/domain/repository">>,
-                'RepositoryClient' => <<"http://dominant:8022/v1/domain/repository_client">>
+                'AuthorManagement' => <<"http://dmt:8022/v1/domain/author">>,
+                'Repository' => <<"http://dmt:8022/v1/domain/repository">>,
+                'RepositoryClient' => <<"http://dmt:8022/v1/domain/repository_client">>
             }}
         ]) ++
             genlib_app:start_application_with(limiter, [

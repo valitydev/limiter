@@ -14,7 +14,7 @@ services:
     working_dir: $PWD
     command: /sbin/init
     depends_on:
-      dominant:
+      dmt:
         condition: service_healthy
       machinegun:
         condition: service_healthy
@@ -23,17 +23,19 @@ services:
       liminator:
         condition: service_healthy
 
-  dominant:
-    image: ghcr.io/valitydev/dominant:sha-ef03371-epic-party_here
-    command: /opt/dominant/bin/dominant foreground
-    depends_on:
-      machinegun:
-        condition: service_healthy
+  dmt:
+    image: ghcr.io/valitydev/dominant-v2:sha-109d2ea
+    command: /opt/dmt/bin/dmt foreground
     healthcheck:
-      test: "/opt/dominant/bin/dominant ping"
-      interval: 10s
-      timeout: 5s
-      retries: 10
+      test: "/opt/dmt/bin/dmt ping"
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./test/dmt/sys.config:/opt/dmt/releases/0.1/sys.config
 
   machinegun:
     image: ghcr.io/valitydev/machinegun:sha-5c0db56
@@ -55,24 +57,18 @@ services:
       - -Xmx512m
       - -jar
       - /opt/shumway/shumway.jar
-      - --spring.datasource.url=jdbc:postgresql://shumway-db:5432/shumway
-      - --spring.datasource.username=postgres
+      - --spring.datasource.url=jdbc:postgresql://db:5432/shumway
+      - --spring.datasource.username=shumway
       - --spring.datasource.password=postgres
       - --management.metrics.export.statsd.enabled=false
     depends_on:
-      - shumway-db
+      db:
+        condition: service_healthy
     healthcheck:
       test: "curl http://localhost:8022/actuator/health"
       interval: 5s
       timeout: 1s
       retries: 20
-
-  shumway-db:
-    image: docker.io/library/postgres:14.3
-    environment:
-      - POSTGRES_DB=shumway
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
 
   liminator:
     image: ghcr.io/valitydev/liminator:sha-fc6546f
@@ -82,24 +78,31 @@ services:
       - -Xmx512m
       - -jar
       - /opt/liminator/liminator.jar
-      - --spring.datasource.url=jdbc:postgresql://liminator-db:5432/liminator
-      - --spring.datasource.username=vality
+      - --spring.datasource.url=jdbc:postgresql://db:5432/liminator
+      - --spring.datasource.username=liminator
       - --spring.datasource.password=postgres
-      - --spring.flyway.url=jdbc:postgresql://liminator-db:5432/liminator
-      - --spring.flyway.username=vality
-      - --spring.flyway.password=postgres
       - --service.skipExistedHoldOps=false
     depends_on:
-      - liminator-db
+      db:
+        condition: service_healthy
     healthcheck:
       test: "curl http://localhost:8022/actuator/health"
       interval: 5s
       timeout: 1s
       retries: 20
 
-  liminator-db:
-    image: docker.io/library/postgres:14.3
+  db:
+    image: postgres:15-bookworm
+    command: -c 'max_connections=1000'
     environment:
-      - POSTGRES_DB=liminator
-      - POSTGRES_USER=vality
-      - POSTGRES_PASSWORD=postgres
+      POSTGRES_MULTIPLE_DATABASES: "dmt,shumway,liminator"
+      POSTGRES_PASSWORD: "postgres"
+    volumes:
+      - ./test/postgres/docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hellgate"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
