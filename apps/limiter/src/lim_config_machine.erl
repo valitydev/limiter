@@ -1018,6 +1018,7 @@ check_calculate_year_shard_id_test() ->
     id = <<"ID">>,
     owner_id = OwnerID,
     shop_id = ShopID,
+    domain_revision = 1,
     created_at = <<"2000-02-02T12:12:12Z">>,
     status = {unpaid, #domain_InvoiceUnpaid{}},
     details = #domain_InvoiceDetails{product = <<>>},

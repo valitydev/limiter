@@ -132,6 +132,7 @@
     id = ?string,
     owner_id = OwnerID,
     shop_id = ShopID,
+    domain_revision = 1,
     created_at = ?timestamp,
     status = {unpaid, #domain_InvoiceUnpaid{}},
     details = #domain_InvoiceDetails{product = ?string},
