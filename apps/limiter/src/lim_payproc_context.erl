@@ -186,8 +186,6 @@ get_payment_tool(_, _CtxInvoice) ->
 
 get_payer_payment_tool(#domain_PaymentResourcePayer{resource = #domain_DisposablePaymentResource{payment_tool = PT}}) ->
     lim_payproc_utils:payment_tool(PT);
-get_payer_payment_tool(#domain_CustomerPayer{payment_tool = PT}) ->
-    lim_payproc_utils:payment_tool(PT);
 get_payer_payment_tool(#domain_RecurrentPayer{payment_tool = PT}) ->
     lim_payproc_utils:payment_tool(PT).
 
@@ -224,8 +222,6 @@ get_payer_contact_email(_, _CtxInvoice) ->
     {error, notfound}.
 
 get_payer_contact_info(#domain_PaymentResourcePayer{contact_info = CI}) ->
-    CI;
-get_payer_contact_info(#domain_CustomerPayer{contact_info = CI}) ->
     CI;
 get_payer_contact_info(#domain_RecurrentPayer{contact_info = CI}) ->
     CI.
@@ -277,14 +273,6 @@ get_payment_tool_test_() ->
             resource = #domain_DisposablePaymentResource{payment_tool = PaymentTool},
             contact_info = #domain_ContactInfo{}
         }},
-    CustomerPayer =
-        {customer, #domain_CustomerPayer{
-            customer_id = <<"customer_id">>,
-            customer_binding_id = <<"customer_binding_id">>,
-            rec_payment_tool_id = <<"rec_payment_tool_id">>,
-            payment_tool = PaymentTool,
-            contact_info = #domain_ContactInfo{}
-        }},
     RecurrentPayer =
         {recurrent, #domain_RecurrentPayer{
             payment_tool = PaymentTool,
@@ -299,10 +287,6 @@ get_payment_tool_test_() ->
         ?_assertEqual(
             {ok, ExpectedValue},
             get_value(payment_tool, ?CONTEXT_PAYMENT(?PAYMENT_W_PAYER(PaymentResourcePayer)))
-        ),
-        ?_assertEqual(
-            {ok, ExpectedValue},
-            get_value(payment_tool, ?CONTEXT_PAYMENT(?PAYMENT_W_PAYER(CustomerPayer)))
         ),
         ?_assertEqual(
             {ok, ExpectedValue},
