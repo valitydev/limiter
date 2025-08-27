@@ -3,6 +3,7 @@
 -include_lib("limiter_proto/include/limproto_context_withdrawal_thrift.hrl").
 -include_lib("limiter_proto/include/limproto_base_thrift.hrl").
 -include_lib("damsel/include/dmsl_wthd_domain_thrift.hrl").
+-include_lib("damsel/include/dmsl_domain_thrift.hrl").
 
 -behaviour(lim_context).
 -export([get_operation/1]).
@@ -110,7 +111,7 @@ get_value(ValueName, _Operation, _Context) ->
 -define(SENDER_RECEIVER(V), ?AUTH_DATA({sender_receiver, V})).
 
 get_owner_id(?WITHDRAWAL(Wthd)) ->
-    {ok, Wthd#wthd_domain_Withdrawal.sender};
+    {ok, Wthd#wthd_domain_Withdrawal.sender#domain_PartyConfigRef.id};
 get_owner_id(_CtxWithdrawal) ->
     {error, notfound}.
 

@@ -130,12 +130,12 @@ get_value(ValueName, _Operation, _Context) ->
 }).
 
 get_owner_id(?INVOICE(Invoice)) ->
-    {ok, Invoice#domain_Invoice.owner_id};
+    {ok, Invoice#domain_Invoice.party_ref#domain_PartyConfigRef.id};
 get_owner_id(_) ->
     {error, notfound}.
 
 get_shop_id(?INVOICE(Invoice)) ->
-    {ok, Invoice#domain_Invoice.shop_id};
+    {ok, Invoice#domain_Invoice.shop_ref#domain_ShopConfigRef.id};
 get_shop_id(_) ->
     {error, notfound}.
 
