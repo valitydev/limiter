@@ -1016,8 +1016,8 @@ check_calculate_year_shard_id_test() ->
 
 -define(INVOICE(OwnerID, ShopID), #domain_Invoice{
     id = <<"ID">>,
-    owner_id = OwnerID,
-    shop_id = ShopID,
+    party_ref = #domain_PartyConfigRef{id = OwnerID},
+    shop_ref = #domain_ShopConfigRef{id = ShopID},
     domain_revision = 1,
     created_at = <<"2000-02-02T12:12:12Z">>,
     status = {unpaid, #domain_InvoiceUnpaid{}},
@@ -1065,7 +1065,7 @@ check_calculate_year_shard_id_test() ->
 
 -define(WITHDRAWAL(OwnerID, PaymentTool), #wthd_domain_Withdrawal{
     destination = PaymentTool,
-    sender = OwnerID,
+    sender = #domain_PartyConfigRef{id = OwnerID},
     created_at = <<"2000-02-02T12:12:12Z">>,
     body = #domain_Cash{amount = 42, currency = #domain_CurrencyRef{symbolic_code = <<"CNY">>}}
 }).

@@ -130,8 +130,8 @@
 
 -define(invoice(OwnerID, ShopID, Cost), #domain_Invoice{
     id = ?string,
-    owner_id = OwnerID,
-    shop_id = ShopID,
+    party_ref = #domain_PartyConfigRef{id = OwnerID},
+    shop_ref = #domain_ShopConfigRef{id = ShopID},
     domain_revision = 1,
     created_at = ?timestamp,
     status = {unpaid, #domain_InvoiceUnpaid{}},
@@ -243,7 +243,7 @@
     body = Body,
     created_at = ?timestamp,
     destination = Destination,
-    sender = OwnerID,
+    sender = #domain_PartyConfigRef{id = OwnerID},
     auth_data = AuthData
 }).
 
