@@ -356,10 +356,13 @@ commit_batch(OperationID, LimitChanges, LimitContext) ->
     ok | {error, config_error() | {processor(), hold_error()}}.
 rollback_batch(OperationID, LimitChanges, LimitContext) ->
     do(fun() ->
-        Changes = unwrap(collect_changes(hold, LimitChanges, LimitContext, lenient)),
         unwrap(
             OperationID,
-            lim_liminator:rollback(OperationID, Changes, LimitContext)
+            lim_liminator:rollback(
+                OperationID,
+                unwrap(collect_changes(hold, LimitChanges, LimitContext, lenient)),
+                LimitContext
+            )
         )
     end).
 
