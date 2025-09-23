@@ -305,7 +305,7 @@ rollback(#limiter_LimitChange{id = ID, version = Version} = LimitChange, LimitCo
     {ok, [lim_liminator:limit_response()]} | {error, config_error() | {processor(), get_limit_error()}}.
 get_values(LimitChanges, LimitContext) ->
     do(fun() ->
-        Changes = unwrap(collect_changes(hold, LimitChanges, LimitContext)),
+        Changes = unwrap(collect_changes(hold, LimitChanges, LimitContext, strict)),
         Names = lists:map(fun lim_liminator:get_name/1, Changes),
         unwrap(lim_liminator:get_values(Names, LimitContext))
     end).
@@ -316,7 +316,11 @@ get_batch(OperationID, LimitChanges, LimitContext) ->
     do(fun() ->
         unwrap(
             OperationID,
-            lim_liminator:get(OperationID, unwrap(collect_changes(hold, LimitChanges, LimitContext)), LimitContext)
+            lim_liminator:get(
+                OperationID,
+                unwrap(collect_changes(hold, LimitChanges, LimitContext, strict)),
+                LimitContext
+            )
         )
     end).
 
@@ -326,7 +330,11 @@ hold_batch(OperationID, LimitChanges, LimitContext) ->
     do(fun() ->
         unwrap(
             OperationID,
-            lim_liminator:hold(OperationID, unwrap(collect_changes(hold, LimitChanges, LimitContext)), LimitContext)
+            lim_liminator:hold(
+                OperationID,
+                unwrap(collect_changes(hold, LimitChanges, LimitContext, strict)),
+                LimitContext
+            )
         )
     end).
 
@@ -336,7 +344,11 @@ commit_batch(OperationID, LimitChanges, LimitContext) ->
     do(fun() ->
         unwrap(
             OperationID,
-            lim_liminator:commit(OperationID, unwrap(collect_changes(commit, LimitChanges, LimitContext)), LimitContext)
+            lim_liminator:commit(
+                OperationID,
+                unwrap(collect_changes(commit, LimitChanges, LimitContext, strict)),
+                LimitContext
+            )
         )
     end).
 
@@ -344,19 +356,27 @@ commit_batch(OperationID, LimitChanges, LimitContext) ->
     ok | {error, config_error() | {processor(), hold_error()}}.
 rollback_batch(OperationID, LimitChanges, LimitContext) ->
     do(fun() ->
+        Changes = unwrap(collect_changes(hold, LimitChanges, LimitContext, lenient)),
         unwrap(
             OperationID,
-            lim_liminator:rollback(OperationID, unwrap(collect_changes(hold, LimitChanges, LimitContext)), LimitContext)
+            lim_liminator:rollback(OperationID, Changes, LimitContext)
         )
     end).
 
-collect_changes(_Stage, [], _LimitContext) ->
+collect_changes(_Stage, [], _LimitContext, _Mode) ->
     {ok, []};
-collect_changes(Stage, [LimitChange = #limiter_LimitChange{id = ID, version = Version} | Other], LimitContext) ->
+collect_changes(Stage, [LimitChange = #limiter_LimitChange{id = ID, version = Version} | Other], LimitContext, Mode) ->
     do(fun() ->
-        {Handler, Config} = unwrap(get_handler(ID, Version, LimitContext)),
-        Change = unwrap(Handler, Handler:make_change(Stage, LimitChange, Config, LimitContext)),
-        [Change | unwrap(collect_changes(Stage, Other, LimitContext))]
+        case {Mode, get_handler(ID, Version, LimitContext)} of
+            {lenient, {error, {config, notfound}}} ->
+                %% TODO Log that this limit-change was ignored because the
+                %% mentioned limit-config was not found.
+                unwrap(collect_changes(Stage, Other, LimitContext, Mode));
+            {_, Result} ->
+                {Handler, Config} = unwrap(Result),
+                Change = unwrap(Handler, Handler:make_change(Stage, LimitChange, Config, LimitContext)),
+                [Change | unwrap(collect_changes(Stage, Other, LimitContext, Mode))]
+        end
     end).
 
 get_handler(ID, Version, LimitContext) ->
