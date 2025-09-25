@@ -305,7 +305,7 @@ rollback(#limiter_LimitChange{id = ID, version = Version} = LimitChange, LimitCo
     {ok, [lim_liminator:limit_response()]} | {error, config_error() | {processor(), get_limit_error()}}.
 get_values(LimitChanges, LimitContext) ->
     do(fun() ->
-        Changes = unwrap(collect_changes(hold, LimitChanges, LimitContext, strict)),
+        Changes = unwrap(collect_changes(hold, LimitChanges, LimitContext, lenient)),
         Names = lists:map(fun lim_liminator:get_name/1, Changes),
         unwrap(lim_liminator:get_values(Names, LimitContext))
     end).
@@ -318,7 +318,7 @@ get_batch(OperationID, LimitChanges, LimitContext) ->
             OperationID,
             lim_liminator:get(
                 OperationID,
-                unwrap(collect_changes(hold, LimitChanges, LimitContext, strict)),
+                unwrap(collect_changes(hold, LimitChanges, LimitContext, lenient)),
                 LimitContext
             )
         )
