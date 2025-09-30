@@ -7,9 +7,6 @@ services:
       OTEL_EXPORTER_OTLP_PROTOCOL: http_protobuf
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
 
-  machinegun:
-    environment: *otlp_enabled
-
   testrunner:
     environment:
       <<: *otlp_enabled

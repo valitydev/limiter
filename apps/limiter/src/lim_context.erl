@@ -10,18 +10,13 @@
 -export([get_value/3]).
 
 -export([set_context/2]).
--export([set_clock/2]).
-
--export([clock/1]).
 
 -type woody_context() :: woody_context:ctx().
 -type limit_context() :: limproto_limiter_thrift:'LimitContext'().
--type clock() :: limproto_limiter_thrift:'Clock'().
 
 -type t() :: #{
     woody_context => woody_context(),
-    context => limit_context(),
-    clock => clock()
+    context => limit_context()
 }.
 
 -type context_type() :: payment_processing | withdrawal_processing.
@@ -54,19 +49,9 @@ create(WoodyContext) ->
 woody_context(Context) ->
     maps:get(woody_context, Context).
 
--spec clock(t()) -> {ok, clock()} | {error, notfound}.
-clock(#{clock := Clock}) ->
-    {ok, Clock};
-clock(_) ->
-    {error, notfound}.
-
 -spec set_context(limit_context(), t()) -> t().
 set_context(Context, LimContext) ->
     LimContext#{context => Context}.
-
--spec set_clock(clock(), t()) -> t().
-set_clock(Clock, LimContext) ->
-    LimContext#{clock => Clock}.
 
 -spec get_operation(context_type(), t()) ->
     {ok, context_operation()} | {error, notfound | operation_context_not_supported_error()}.

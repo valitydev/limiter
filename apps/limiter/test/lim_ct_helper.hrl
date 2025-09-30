@@ -2,11 +2,10 @@
 -define(__limiter_ct_helper__, 42).
 
 -include_lib("limiter_proto/include/limproto_base_thrift.hrl").
--include_lib("limiter_proto/include/limproto_config_thrift.hrl").
--include_lib("limiter_proto/include/limproto_timerange_thrift.hrl").
 -include_lib("limiter_proto/include/limproto_limiter_thrift.hrl").
 -include_lib("limiter_proto/include/limproto_context_payproc_thrift.hrl").
 -include_lib("limiter_proto/include/limproto_context_withdrawal_thrift.hrl").
+-include_lib("damsel/include/dmsl_limiter_config_thrift.hrl").
 -include_lib("damsel/include/dmsl_base_thrift.hrl").
 -include_lib("damsel/include/dmsl_domain_thrift.hrl").
 -include_lib("damsel/include/dmsl_wthd_domain_thrift.hrl").
@@ -29,62 +28,62 @@
     terminal = #domain_TerminalRef{id = TerminalID}
 }).
 
--define(scope(Types), {multi, ordsets:from_list(Types)}).
--define(global(), ?scope([])).
+-define(scopes(Types), ordsets:from_list(Types)).
+-define(global(), ?scopes([])).
 
--define(scope_party(), {party, #config_LimitScopeEmptyDetails{}}).
--define(scope_shop(), {shop, #config_LimitScopeEmptyDetails{}}).
--define(scope_payment_tool(), {payment_tool, #config_LimitScopeEmptyDetails{}}).
--define(scope_provider(), {provider, #config_LimitScopeEmptyDetails{}}).
--define(scope_terminal(), {terminal, #config_LimitScopeEmptyDetails{}}).
--define(scope_payer_contact_email(), {payer_contact_email, #config_LimitScopeEmptyDetails{}}).
--define(scope_wallet(), {wallet, #config_LimitScopeEmptyDetails{}}).
--define(scope_sender(), {sender, #config_LimitScopeEmptyDetails{}}).
--define(scope_receiver(), {receiver, #config_LimitScopeEmptyDetails{}}).
+-define(scope_party(), {party, #limiter_config_LimitScopeEmptyDetails{}}).
+-define(scope_shop(), {shop, #limiter_config_LimitScopeEmptyDetails{}}).
+-define(scope_payment_tool(), {payment_tool, #limiter_config_LimitScopeEmptyDetails{}}).
+-define(scope_provider(), {provider, #limiter_config_LimitScopeEmptyDetails{}}).
+-define(scope_terminal(), {terminal, #limiter_config_LimitScopeEmptyDetails{}}).
+-define(scope_payer_contact_email(), {payer_contact_email, #limiter_config_LimitScopeEmptyDetails{}}).
+-define(scope_wallet(), {wallet, #limiter_config_LimitScopeEmptyDetails{}}).
+-define(scope_sender(), {sender, #limiter_config_LimitScopeEmptyDetails{}}).
+-define(scope_receiver(), {receiver, #limiter_config_LimitScopeEmptyDetails{}}).
 -define(scope_destination_field(FieldPath),
-    {destination_field, #config_LimitScopeDestinationFieldDetails{field_path = FieldPath}}
+    {destination_field, #limiter_config_LimitScopeDestinationFieldDetails{field_path = FieldPath}}
 ).
 
 -define(lim_type_turnover(), ?lim_type_turnover(?turnover_metric_number())).
 -define(lim_type_turnover(Metric),
-    {turnover, #config_LimitTypeTurnover{metric = Metric}}
+    {turnover, #limiter_config_LimitTypeTurnover{metric = Metric}}
 ).
 
--define(turnover_metric_number(), {number, #config_LimitTurnoverNumber{}}).
+-define(turnover_metric_number(), {number, #limiter_config_LimitTurnoverNumber{}}).
 -define(turnover_metric_amount(), ?turnover_metric_amount(?currency)).
 -define(turnover_metric_amount(Currency),
-    {amount, #config_LimitTurnoverAmount{currency = Currency}}
+    {amount, #limiter_config_LimitTurnoverAmount{currency = Currency}}
 ).
 
 -define(time_range_day(),
-    {calendar, {day, #timerange_TimeRangeTypeCalendarDay{}}}
+    {calendar, {day, #limiter_config_TimeRangeTypeCalendarDay{}}}
 ).
 -define(time_range_week(),
-    {calendar, {week, #timerange_TimeRangeTypeCalendarWeek{}}}
+    {calendar, {week, #limiter_config_TimeRangeTypeCalendarWeek{}}}
 ).
 -define(time_range_month(),
-    {calendar, {month, #timerange_TimeRangeTypeCalendarMonth{}}}
+    {calendar, {month, #limiter_config_TimeRangeTypeCalendarMonth{}}}
 ).
 -define(time_range_year(),
-    {calendar, {year, #timerange_TimeRangeTypeCalendarYear{}}}
+    {calendar, {year, #limiter_config_TimeRangeTypeCalendarYear{}}}
 ).
 
 -define(op_behaviour(), ?op_behaviour(?op_addition())).
--define(op_behaviour(Refund), #config_OperationLimitBehaviour{
+-define(op_behaviour(Refund), #limiter_config_OperationLimitBehaviour{
     invoice_payment_refund = Refund
 }).
 
--define(currency_conversion(), #config_CurrencyConversion{}).
+-define(currency_conversion(), #limiter_config_CurrencyConversion{}).
 
--define(op_addition(), {addition, #config_Addition{}}).
--define(op_subtraction(), {subtraction, #config_Subtraction{}}).
+-define(op_addition(), {addition, #limiter_config_Addition{}}).
+-define(op_subtraction(), {subtraction, #limiter_config_Subtraction{}}).
 
 -define(ctx_type_payproc(),
-    {payment_processing, #config_LimitContextTypePaymentProcessing{}}
+    {payment_processing, #limiter_config_LimitContextTypePaymentProcessing{}}
 ).
 
 -define(ctx_type_wthdproc(),
-    {withdrawal_processing, #config_LimitContextTypeWithdrawalProcessing{}}
+    {withdrawal_processing, #limiter_config_LimitContextTypeWithdrawalProcessing{}}
 ).
 
 %% Payproc

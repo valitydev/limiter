@@ -14,20 +14,14 @@
 -export([commit_batch/3]).
 -export([rollback_batch/3]).
 
--export([legacy_create_config/2]).
--export([create_config/2]).
--export([get_config/2]).
-
 -type client() :: woody_context:ctx().
 
 -type limit_id() :: limproto_limiter_thrift:'LimitID'().
--type limit_version() :: limproto_limiter_thrift:'Version'() | undefined.
+-type limit() :: limproto_limiter_thrift:'Limit'().
+-type limit_version() :: limproto_limiter_thrift:'Version'().
 -type limit_change() :: limproto_limiter_thrift:'LimitChange'().
 -type limit_request() :: limproto_limiter_thrift:'LimitRequest'().
 -type limit_context() :: limproto_limiter_thrift:'LimitContext'().
--type clock() :: limproto_limiter_thrift:'Clock'().
--type legacy_create_params() :: limproto_configurator_thrift:'LimitCreateParams'().
--type limit_config_params() :: limproto_config_thrift:'LimitConfigParams'().
 
 %%% API
 
@@ -35,59 +29,72 @@
 new() ->
     woody_context:new().
 
--spec get(limit_id(), limit_version(), limit_context(), client()) -> woody:result() | no_return().
-get(LimitID, undefined, Context, Client) ->
-    call('Get', {LimitID, clock(), Context}, Client);
+-spec get(limit_id(), limit_version(), limit_context(), client()) ->
+    {ok, limit()} | {exception, woody_error:business_error()} | no_return().
 get(LimitID, Version, Context, Client) ->
-    call('GetVersioned', {LimitID, Version, clock(), Context}, Client).
+    LimitRequest = construct_request(#limiter_LimitChange{id = LimitID, version = Version}),
+    case call('GetValues', {LimitRequest, Context}, Client) of
+        {ok, [Limit]} ->
+            {ok, Limit};
+        {ok, _} ->
+            {exception, #limiter_LimitNotFound{}};
+        {exception, _} = Exception ->
+            Exception
+    end.
 
--spec hold(limit_change(), limit_context(), client()) -> woody:result() | no_return().
-hold(LimitChange, Context, Client) ->
-    call('Hold', {LimitChange, clock(), Context}, Client).
+-spec hold(limit_change(), limit_context(), client()) -> ok | {exception, woody_error:business_error()} | no_return().
+hold(#limiter_LimitChange{} = LimitChange, Context, Client) ->
+    LimitRequest = construct_request(LimitChange),
+    case call('HoldBatch', {LimitRequest, Context}, Client) of
+        {ok, _} ->
+            ok;
+        {exception, _} = Exception ->
+            Exception
+    end.
 
--spec commit(limit_change(), limit_context(), client()) -> woody:result() | no_return().
-commit(LimitChange, Context, Client) ->
-    call('Commit', {LimitChange, clock(), Context}, Client).
+-spec commit(limit_change(), limit_context(), client()) -> ok | {exception, woody_error:business_error()} | no_return().
+commit(#limiter_LimitChange{} = LimitChange, Context, Client) ->
+    LimitRequest = construct_request(LimitChange),
+    unwrap_ok(call('CommitBatch', {LimitRequest, Context}, Client)).
 
--spec rollback(limit_change(), limit_context(), client()) -> woody:result() | no_return().
-rollback(LimitChange, Context, Client) ->
-    call('Rollback', {LimitChange, clock(), Context}, Client).
+-spec rollback(limit_change(), limit_context(), client()) ->
+    ok | {exception, woody_error:business_error()} | no_return().
+rollback(#limiter_LimitChange{} = LimitChange, Context, Client) ->
+    LimitRequest = construct_request(LimitChange),
+    unwrap_ok(call('RollbackBatch', {LimitRequest, Context}, Client)).
 
--spec get_values(limit_request(), limit_context(), client()) -> woody:result() | no_return().
+-spec get_values(limit_request(), limit_context(), client()) ->
+    {ok, [limit()]} | {exception, woody_error:business_error()} | no_return().
 get_values(LimitRequest, Context, Client) ->
     call('GetValues', {LimitRequest, Context}, Client).
 
--spec get_batch(limit_request(), limit_context(), client()) -> woody:result() | no_return().
+-spec get_batch(limit_request(), limit_context(), client()) ->
+    {ok, [limit()]} | {exception, woody_error:business_error()} | no_return().
 get_batch(LimitRequest, Context, Client) ->
     call('GetBatch', {LimitRequest, Context}, Client).
 
--spec hold_batch(limit_request(), limit_context(), client()) -> woody:result() | no_return().
+-spec hold_batch(limit_request(), limit_context(), client()) ->
+    {ok, [limit()]} | {exception, woody_error:business_error()} | no_return().
 hold_batch(LimitRequest, Context, Client) ->
     call('HoldBatch', {LimitRequest, Context}, Client).
 
--spec commit_batch(limit_request(), limit_context(), client()) -> woody:result() | no_return().
+-spec commit_batch(limit_request(), limit_context(), client()) ->
+    ok | {exception, woody_error:business_error()} | no_return().
 commit_batch(LimitRequest, Context, Client) ->
-    call('CommitBatch', {LimitRequest, Context}, Client).
+    unwrap_ok(call('CommitBatch', {LimitRequest, Context}, Client)).
 
--spec rollback_batch(limit_request(), limit_context(), client()) -> woody:result() | no_return().
+-spec rollback_batch(limit_request(), limit_context(), client()) ->
+    ok | {exception, woody_error:business_error()} | no_return().
 rollback_batch(LimitRequest, Context, Client) ->
-    call('RollbackBatch', {LimitRequest, Context}, Client).
-
-%%
-
--spec legacy_create_config(legacy_create_params(), client()) -> woody:result() | no_return().
-legacy_create_config(LimitCreateParams, Client) ->
-    call_configurator('CreateLegacy', {LimitCreateParams}, Client).
-
--spec create_config(limit_config_params(), client()) -> woody:result() | no_return().
-create_config(LimitCreateParams, Client) ->
-    call_configurator('Create', {LimitCreateParams}, Client).
-
--spec get_config(limit_id(), client()) -> woody:result() | no_return().
-get_config(LimitConfigID, Client) ->
-    call_configurator('Get', {LimitConfigID}, Client).
+    unwrap_ok(call('RollbackBatch', {LimitRequest, Context}, Client)).
 
 %%% Internal functions
+
+construct_request(#limiter_LimitChange{id = LimitID} = LimitChange) ->
+    #limiter_LimitRequest{
+        operation_id = <<"operation.single-change.", LimitID/binary>>,
+        limit_changes = [LimitChange]
+    }.
 
 -spec call(atom(), tuple(), client()) -> woody:result() | no_return().
 call(Function, Args, Client) ->
@@ -101,18 +108,5 @@ call(Function, Args, Client) ->
     },
     woody_client:call(Call, Opts, Client).
 
--spec call_configurator(atom(), tuple(), client()) -> woody:result() | no_return().
-call_configurator(Function, Args, Client) ->
-    Call = {{limproto_configurator_thrift, 'Configurator'}, Function, Args},
-    Opts = #{
-        url => <<"http://limiter:8022/v1/configurator">>,
-        event_handler => {scoper_woody_event_handler, #{}},
-        transport_opts => #{
-            max_connections => 10000
-        }
-    },
-    woody_client:call(Call, Opts, Client).
-
--spec clock() -> clock().
-clock() ->
-    {vector, #limiter_VectorClock{state = <<>>}}.
+unwrap_ok({ok, ok}) -> ok;
+unwrap_ok(ResultOrException) -> ResultOrException.

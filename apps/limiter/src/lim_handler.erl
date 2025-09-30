@@ -15,7 +15,6 @@
 
 -type lim_context() :: lim_context:t().
 
--define(LIMIT_CHANGE(ID), #limiter_LimitChange{id = ID}).
 -define(LIMIT_REQUEST(ID, Changes), #limiter_LimitRequest{operation_id = ID, limit_changes = Changes}).
 
 %%
@@ -29,61 +28,6 @@ handle_function(Fn, Args, WoodyCtx, Opts) ->
     ).
 
 -spec handle_function_(woody:func(), woody:args(), lim_context(), woody:options()) -> {ok, woody:result()}.
-handle_function_('Get', {LimitID, Clock, Context}, LimitContext, Opts) ->
-    handle_function_('GetVersioned', {LimitID, undefined, Clock, Context}, LimitContext, Opts);
-handle_function_('GetVersioned', {LimitID, Version, Clock, Context}, LimitContext, _Opts) ->
-    scoper:add_meta(#{limit_id => LimitID}),
-    case
-        lim_config_machine:get_limit(
-            LimitID,
-            Version,
-            lim_context:set_context(Context, lim_context:set_clock(Clock, LimitContext))
-        )
-    of
-        {ok, Limit} ->
-            {ok, Limit};
-        {error, Error} ->
-            handle_get_error(Error)
-    end;
-handle_function_('Hold', {LimitChange = ?LIMIT_CHANGE(LimitID), Clock, Context}, LimitContext, _Opts) ->
-    scoper:add_meta(#{limit_id => LimitID}),
-    case
-        lim_config_machine:hold(
-            LimitChange,
-            lim_context:set_context(Context, lim_context:set_clock(Clock, LimitContext))
-        )
-    of
-        ok ->
-            {ok, {vector, #limiter_VectorClock{state = <<>>}}};
-        {error, Error} ->
-            handle_hold_error(Error)
-    end;
-handle_function_('Commit', {LimitChange = ?LIMIT_CHANGE(LimitID), Clock, Context}, LimitContext, _Opts) ->
-    scoper:add_meta(#{limit_id => LimitID}),
-    case
-        lim_config_machine:commit(
-            LimitChange,
-            lim_context:set_context(Context, lim_context:set_clock(Clock, LimitContext))
-        )
-    of
-        ok ->
-            {ok, {vector, #limiter_VectorClock{state = <<>>}}};
-        {error, Error} ->
-            handle_commit_error(Error)
-    end;
-handle_function_('Rollback', {LimitChange = ?LIMIT_CHANGE(LimitID), Clock, Context}, LimitContext, _Opts) ->
-    scoper:add_meta(#{limit_id => LimitID}),
-    case
-        lim_config_machine:rollback(
-            LimitChange,
-            lim_context:set_context(Context, lim_context:set_clock(Clock, LimitContext))
-        )
-    of
-        ok ->
-            {ok, {vector, #limiter_VectorClock{state = <<>>}}};
-        {error, Error} ->
-            handle_rollback_error(Error)
-    end;
 handle_function_('GetValues', {?LIMIT_REQUEST(OperationID, Changes), Context}, LimitContext, _Opts) ->
     scoper:add_meta(#{operation_id => OperationID}),
     case
