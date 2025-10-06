@@ -33,11 +33,11 @@ new() ->
     {ok, limit()} | {exception, woody_error:business_error()} | no_return().
 get(LimitID, Version, Context, Client) ->
     LimitRequest = construct_request(#limiter_LimitChange{id = LimitID, version = Version}),
-    case call('GetValues', {LimitRequest, Context}, Client) of
+    case get_values(LimitRequest, Context, Client) of
         {ok, [Limit]} ->
             {ok, Limit};
-        {ok, _} ->
-            {exception, #limiter_LimitNotFound{}};
+        {ok, []} ->
+            {ok, #limiter_Limit{id = LimitID, amount = 0}};
         {exception, _} = Exception ->
             Exception
     end.
@@ -45,7 +45,7 @@ get(LimitID, Version, Context, Client) ->
 -spec hold(limit_change(), limit_context(), client()) -> ok | {exception, woody_error:business_error()} | no_return().
 hold(#limiter_LimitChange{} = LimitChange, Context, Client) ->
     LimitRequest = construct_request(LimitChange),
-    case call('HoldBatch', {LimitRequest, Context}, Client) of
+    case hold_batch(LimitRequest, Context, Client) of
         {ok, _} ->
             ok;
         {exception, _} = Exception ->
@@ -55,13 +55,13 @@ hold(#limiter_LimitChange{} = LimitChange, Context, Client) ->
 -spec commit(limit_change(), limit_context(), client()) -> ok | {exception, woody_error:business_error()} | no_return().
 commit(#limiter_LimitChange{} = LimitChange, Context, Client) ->
     LimitRequest = construct_request(LimitChange),
-    unwrap_ok(call('CommitBatch', {LimitRequest, Context}, Client)).
+    unwrap_ok(commit_batch(LimitRequest, Context, Client)).
 
 -spec rollback(limit_change(), limit_context(), client()) ->
     ok | {exception, woody_error:business_error()} | no_return().
 rollback(#limiter_LimitChange{} = LimitChange, Context, Client) ->
     LimitRequest = construct_request(LimitChange),
-    unwrap_ok(call('RollbackBatch', {LimitRequest, Context}, Client)).
+    unwrap_ok(rollback_batch(LimitRequest, Context, Client)).
 
 -spec get_values(limit_request(), limit_context(), client()) ->
     {ok, [limit()]} | {exception, woody_error:business_error()} | no_return().

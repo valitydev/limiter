@@ -42,6 +42,16 @@ DOCKER_RUN = $(DOCKER) run -t $(DOCKER_WC_OPTIONS) $(DOCKER_WC_EXTRA_OPTIONS)
 
 DOCKERCOMPOSE_RUN = $(DOCKERCOMPOSE_W_ENV) run --rm $(DOCKER_WC_OPTIONS)
 
+# Database tasks
+
+ifeq (db,$(firstword $(MAKECMDGOALS)))
+  DATABASE_NAME := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
+  $(eval $(DATABASE_NAME):;@:)
+endif
+
+db:
+	$(DOCKERCOMPOSE_W_ENV) exec db bash -c "PGPASSWORD=postgres psql -U $(DATABASE_NAME) -d $(DATABASE_NAME)"
+
 # Utility tasks
 
 wc-shell: dev-image

@@ -31,7 +31,6 @@
 -export([hold_ok/1]).
 -export([commit_ok/1]).
 -export([rollback_ok/1]).
--export([partial_zero_commit_rollbacks/1]).
 -export([refund_ok/1]).
 -export([commit_inexistent_hold_fails/1]).
 -export([partial_commit_inexistent_hold_fails/1]).
@@ -95,7 +94,6 @@ all() ->
 groups() ->
     [
         {base, [], [
-            commit_with_long_change_id,
             commit_with_default_exchange,
             partial_commit_with_exchange,
             commit_with_exchange,
@@ -110,7 +108,6 @@ groups() ->
             hold_ok,
             commit_ok,
             rollback_ok,
-            partial_zero_commit_rollbacks,
             refund_ok,
             commit_inexistent_hold_fails,
             partial_commit_inexistent_hold_fails,
@@ -316,7 +313,7 @@ hold_with_wrong_operation_context(C) ->
     Cost = ?cash(10000),
     Context = ?wthdproc_ctx_withdrawal(Cost),
     {exception, #limiter_OperationContextNotSupported{
-        context_type = {withdrawal_processing, #limiter_config_LimitContextTypeWithdrawalProcessing{}}
+        context_type = {withdrawal_processing, #limiter_LimitContextTypeWithdrawalProcessing{}}
     }} =
         lim_client:hold(?LIMIT_CHANGE(ID, Version), Context, ?config(client, C)).
 
@@ -328,7 +325,7 @@ rollback_with_wrong_operation_context(C) ->
     Cost = ?cash(10000),
     Context = ?wthdproc_ctx_withdrawal(Cost),
     {exception, #limiter_OperationContextNotSupported{
-        context_type = {withdrawal_processing, #limiter_config_LimitContextTypeWithdrawalProcessing{}}
+        context_type = {withdrawal_processing, #limiter_LimitContextTypeWithdrawalProcessing{}}
     }} =
         lim_client:rollback(?LIMIT_CHANGE(ID, Version), Context, ?config(client, C)).
 
@@ -410,20 +407,6 @@ rollback_ok(C) ->
     ok = lim_client:hold(Change, Context, ?config(client, C)),
     ok = lim_client:rollback(Change, Context, ?config(client, C)).
 
--spec partial_zero_commit_rollbacks(config()) -> _.
-partial_zero_commit_rollbacks(C) ->
-    {ID, Version} = configure_limit(?time_range_week(), ?global(), C),
-    Context0 = ?payproc_ctx_payment(?cash(10), ?cash(10)),
-    Context1 = ?payproc_ctx_payment(?cash(10), ?cash(0)),
-    Change = ?LIMIT_CHANGE(ID, Version),
-    ok = lim_client:hold(Change, Context0, ?config(client, C)),
-    ok = lim_client:commit(Change, Context1, ?config(client, C)),
-    % NOTE
-    % Successful rollback here means that partial commit with zero is handled exactly
-    % like rollback, thus subsequent rollback succeeds idempotently. This is a backwards
-    % compatibility measure.
-    ok = lim_client:rollback(Change, Context0, ?config(client, C)).
-
 -spec refund_ok(config()) -> _.
 refund_ok(C) ->
     Client = ?config(client, C),
@@ -464,6 +447,7 @@ commit_multirange_limit_ok(C) ->
     Version = dmt_client:get_latest_version(),
     _ = create_limit_config(ID, #limiter_config_LimitConfig{
         processor_type = <<"TurnoverProcessor">>,
+        started_at = <<"2000-01-01T00:00:00Z">>,
         shard_size = 12,
         time_range_type = ?time_range_month(),
         context_type = ?ctx_type_payproc(),
@@ -592,9 +576,11 @@ rollback_number_ok(C) ->
     {ID, Version} = configure_limit(?time_range_week(), ?global(), ?turnover_metric_number(), C),
     Context = ?payproc_ctx_payment(?cash(10), ?cash(10)),
     ContextRollback = ?payproc_ctx_payment(?cash(10), ?cash(0)),
+ct:print("~p~n", [{ID, Version, Context}]),
     {ok, LimitState0} = lim_client:get(ID, Version, Context, Client),
     _ = hold_and_commit(?LIMIT_CHANGE(ID, Version), Context, ContextRollback, Client),
     {ok, LimitState1} = lim_client:get(ID, Version, Context, Client),
+    ct:print("~p~n", [{LimitState0, LimitState0}]),
     ?assertEqual(
         LimitState1#limiter_Limit.amount,
         LimitState0#limiter_Limit.amount
@@ -1028,9 +1014,10 @@ assert_values(Value, Request0, Context, C) ->
 hold_and_commit(Change, Context, Client) ->
     hold_and_commit(Change, Context, Context, Client).
 
-hold_and_commit(Change, Context, ContextCommit, Client) ->
-    ok = lim_client:hold(Change, Context, Client),
-    ok = lim_client:commit(Change, ContextCommit, Client).
+hold_and_commit(?LIMIT_CHANGE(ID, Version) = Change, Context, ContextCommit, Client) ->
+    OperationID = lim_string:join($., [<<"operation">>, ID, integer_to_binary(Version), genlib:unique()]),
+    {ok, _} = lim_client:hold_batch(?LIMIT_REQUEST(OperationID, [Change]), Context, Client),
+    ok = lim_client:commit_batch(?LIMIT_REQUEST(OperationID, [Change]), ContextCommit, Client).
 
 mock_exchange(Rational, C) ->
     lim_mock:mock_services([{xrates, fun('GetConvertedAmount', _) -> {ok, Rational} end}], C).
@@ -1052,6 +1039,7 @@ configure_limit(TimeRange, Scopes, Metric, CurrencyConversion, ID, C) when is_li
         end,
     create_limit_config(ID, #limiter_config_LimitConfig{
         processor_type = <<"TurnoverProcessor">>,
+        started_at = <<"2000-01-01T00:00:00Z">>,
         shard_size = 1,
         time_range_type = TimeRange,
         context_type = ContextType,

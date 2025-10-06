@@ -51,7 +51,6 @@
 -type config() :: #{
     id := lim_id(),
     processor_type := processor_type(),
-    created_at := lim_time:timestamp_ms(),
     started_at := timestamp(),
     shard_size := shard_size(),
     time_range_type := time_range_type(),
@@ -61,19 +60,6 @@
     description => description(),
     op_behaviour => op_behaviour(),
     currency_conversion => currency_conversion()
-}.
-
--type create_params() :: #{
-    processor_type := processor_type(),
-    started_at := timestamp(),
-    shard_size := shard_size(),
-    time_range_type := time_range_type(),
-    context_type := context_type(),
-    type => limit_type(),
-    scope => limit_scope(),
-    description => description(),
-    op_behaviour => op_behaviour(),
-    current_function => currency_conversion()
 }.
 
 -type op_behaviour() :: #{operation_type() := addition | subtraction}.
@@ -93,7 +79,6 @@
 -export_type([limit_scope/0]).
 -export_type([time_range_type/0]).
 -export_type([time_range/0]).
--export_type([create_params/0]).
 -export_type([lim_id/0]).
 -export_type([lim_change/0]).
 -export_type([limit/0]).

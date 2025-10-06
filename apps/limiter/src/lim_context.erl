@@ -1,7 +1,6 @@
 -module(lim_context).
 
 -include_lib("limiter_proto/include/limproto_limiter_thrift.hrl").
--include_lib("damsel/include/dmsl_limiter_config_thrift.hrl").
 
 -export([create/1]).
 -export([woody_context/1]).
@@ -79,7 +78,7 @@ get_value(Type, ValueName, Context) ->
 get_operation_context(payment_processing, #{context := #limiter_LimitContext{payment_processing = undefined}}) ->
     {error,
         {operation_context_not_supported,
-            {withdrawal_processing, #limiter_config_LimitContextTypeWithdrawalProcessing{}}}};
+            {withdrawal_processing, #limiter_LimitContextTypeWithdrawalProcessing{}}}};
 get_operation_context(
     payment_processing,
     #{context := #limiter_LimitContext{payment_processing = PayprocContext}}
@@ -87,7 +86,7 @@ get_operation_context(
     {ok, lim_payproc_context, PayprocContext};
 get_operation_context(withdrawal_processing, #{context := #limiter_LimitContext{withdrawal_processing = undefined}}) ->
     {error,
-        {operation_context_not_supported, {payment_processing, #limiter_config_LimitContextTypePaymentProcessing{}}}};
+        {operation_context_not_supported, {payment_processing, #limiter_LimitContextTypePaymentProcessing{}}}};
 get_operation_context(
     withdrawal_processing,
     #{context := #limiter_LimitContext{withdrawal_processing = WithdrawalContext}}

@@ -34,6 +34,7 @@ unmarshal('LimitConfigObject', #domain_LimitConfigObject{
     ref = #domain_LimitConfigRef{id = ID},
     data = #limiter_config_LimitConfig{
         processor_type = ProcessorType,
+        started_at = StartedAt,
         shard_size = ShardSize,
         time_range_type = TimeRangeType,
         context_type = ContextType,
@@ -47,6 +48,7 @@ unmarshal('LimitConfigObject', #domain_LimitConfigObject{
     genlib_map:compact(#{
         id => ID,
         processor_type => ProcessorType,
+        started_at => StartedAt,
         shard_size => ShardSize,
         time_range_type => unmarshal_time_range_type(TimeRangeType),
         context_type => unmarshal_context_type(ContextType),
@@ -139,6 +141,7 @@ unmarshal_config_object_test() ->
     Config = #{
         id => <<"id">>,
         processor_type => <<"type">>,
+        started_at => <<"2000-01-01T00:00:00Z">>,
         shard_size => 7,
         time_range_type => {calendar, day},
         context_type => payment_processing,
@@ -151,6 +154,7 @@ unmarshal_config_object_test() ->
         ref = #domain_LimitConfigRef{id = <<"id">>},
         data = #limiter_config_LimitConfig{
             processor_type = <<"type">>,
+            started_at = <<"2000-01-01T00:00:00Z">>,
             shard_size = 7,
             time_range_type = {calendar, {day, #limiter_config_TimeRangeTypeCalendarDay{}}},
             context_type = {payment_processing, #limiter_config_LimitContextTypePaymentProcessing{}},
