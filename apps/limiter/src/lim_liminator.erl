@@ -43,15 +43,11 @@ get_name(#liminator_LimitChange{limit_name = Name}) ->
 
 -spec get_values([limit_name()], lim_context()) ->
     {ok, [limit_response()]} | {error, invalid_request_error()}.
-get_values([], _LimitContext) ->
-    {ok, []};
 get_values(Names, LimitContext) ->
     do('GetLastLimitsValues', Names, LimitContext).
 
 -spec get(operation_id(), [limit_change()], lim_context()) ->
     {ok, [limit_response()]} | {error, invalid_request_error()}.
-get(_OperationID, [], _LimitContext) ->
-    {ok, []};
 get(OperationID, Changes, LimitContext) ->
     do('Get', #liminator_LimitRequest{operation_id = OperationID, limit_changes = Changes}, LimitContext).
 
@@ -65,8 +61,6 @@ commit(OperationID, Changes, LimitContext) ->
     do('Commit', #liminator_LimitRequest{operation_id = OperationID, limit_changes = Changes}, LimitContext).
 
 -spec rollback(operation_id(), [limit_change()], lim_context()) -> {ok, ok} | {error, invalid_request_error()}.
-rollback(_OperationID, [], _LimitContext) ->
-    {ok, ok};
 rollback(OperationID, Changes, LimitContext) ->
     do('Rollback', #liminator_LimitRequest{operation_id = OperationID, limit_changes = Changes}, LimitContext).
 
