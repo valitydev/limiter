@@ -69,7 +69,6 @@
 -export([batch_hold_ok/1]).
 -export([batch_commit_ok/1]).
 -export([batch_rollback_ok/1]).
--export([batch_rollback_lenient_to_config_notfound_ok/1]).
 -export([two_batch_hold_ok/1]).
 -export([two_batch_commit_ok/1]).
 -export([two_batch_rollback_ok/1]).
@@ -139,7 +138,6 @@ groups() ->
             batch_hold_ok,
             batch_commit_ok,
             batch_rollback_ok,
-            batch_rollback_lenient_to_config_notfound_ok,
             two_batch_hold_ok,
             two_batch_commit_ok,
             two_batch_rollback_ok,
@@ -912,24 +910,6 @@ batch_rollback_ok(C) ->
     ok = hold_and_assert_batch(10, Request, Context, C),
     {ok, ok} = lim_client:rollback_batch(Request, Context, ?config(client, C)),
     ok = assert_values(0, Request, Context, C).
-
--spec batch_rollback_lenient_to_config_notfound_ok(config()) -> _.
-batch_rollback_lenient_to_config_notfound_ok(C) ->
-    Context =
-        case get_group_name(C) of
-            withdrawals -> ?wthdproc_ctx_withdrawal(?cash(10));
-            _Default -> ?payproc_ctx_payment(?cash(10), ?cash(10))
-        end,
-    Request0 = construct_request(C),
-    ok = hold_and_assert_batch(10, Request0, Context, C),
-    Request1 = Request0#limiter_LimitRequest{
-        limit_changes = [
-            ?LIMIT_CHANGE(<<"this-does-not-exist">>, 0, dmt_client:get_last_version())
-            | Request0#limiter_LimitRequest.limit_changes
-        ]
-    },
-    {ok, ok} = lim_client:rollback_batch(Request1, Context, ?config(client, C)),
-    ok = assert_values(0, Request0, Context, C).
 
 -spec two_batch_hold_ok(config()) -> _.
 two_batch_hold_ok(C) ->

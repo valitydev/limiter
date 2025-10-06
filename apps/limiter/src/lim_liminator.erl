@@ -61,8 +61,6 @@ commit(OperationID, Changes, LimitContext) ->
     do('Commit', #liminator_LimitRequest{operation_id = OperationID, limit_changes = Changes}, LimitContext).
 
 -spec rollback(operation_id(), [limit_change()], lim_context()) -> {ok, ok} | {error, invalid_request_error()}.
-rollback(_OperationID, [], _LimitContext) ->
-    {ok, ok};
 rollback(OperationID, Changes, LimitContext) ->
     do('Rollback', #liminator_LimitRequest{operation_id = OperationID, limit_changes = Changes}, LimitContext).
 
