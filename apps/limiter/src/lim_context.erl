@@ -77,16 +77,14 @@ get_value(Type, ValueName, Context) ->
 
 get_operation_context(payment_processing, #{context := #limiter_LimitContext{payment_processing = undefined}}) ->
     {error,
-        {operation_context_not_supported,
-            {withdrawal_processing, #limiter_LimitContextTypeWithdrawalProcessing{}}}};
+        {operation_context_not_supported, {withdrawal_processing, #limiter_LimitContextTypeWithdrawalProcessing{}}}};
 get_operation_context(
     payment_processing,
     #{context := #limiter_LimitContext{payment_processing = PayprocContext}}
 ) ->
     {ok, lim_payproc_context, PayprocContext};
 get_operation_context(withdrawal_processing, #{context := #limiter_LimitContext{withdrawal_processing = undefined}}) ->
-    {error,
-        {operation_context_not_supported, {payment_processing, #limiter_LimitContextTypePaymentProcessing{}}}};
+    {error, {operation_context_not_supported, {payment_processing, #limiter_LimitContextTypePaymentProcessing{}}}};
 get_operation_context(
     withdrawal_processing,
     #{context := #limiter_LimitContext{withdrawal_processing = WithdrawalContext}}
