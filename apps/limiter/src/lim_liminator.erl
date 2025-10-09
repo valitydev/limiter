@@ -73,6 +73,7 @@ do(Op, Arg, LimitContext) ->
     end.
 
 %%
+
 -spec call(woody:func(), woody:args(), lim_context()) -> woody:result().
 call(Function, Args, LimitContext) ->
     WoodyContext = lim_context:woody_context(LimitContext),

@@ -1,7 +1,6 @@
 -module(lim_context).
 
 -include_lib("limiter_proto/include/limproto_limiter_thrift.hrl").
--include_lib("damsel/include/dmsl_limiter_config_thrift.hrl").
 
 -export([create/1]).
 -export([woody_context/1]).
@@ -10,18 +9,13 @@
 -export([get_value/3]).
 
 -export([set_context/2]).
--export([set_clock/2]).
-
--export([clock/1]).
 
 -type woody_context() :: woody_context:ctx().
 -type limit_context() :: limproto_limiter_thrift:'LimitContext'().
--type clock() :: limproto_limiter_thrift:'Clock'().
 
 -type t() :: #{
     woody_context => woody_context(),
-    context => limit_context(),
-    clock => clock()
+    context => limit_context()
 }.
 
 -type context_type() :: payment_processing | withdrawal_processing.
@@ -54,19 +48,9 @@ create(WoodyContext) ->
 woody_context(Context) ->
     maps:get(woody_context, Context).
 
--spec clock(t()) -> {ok, clock()} | {error, notfound}.
-clock(#{clock := Clock}) ->
-    {ok, Clock};
-clock(_) ->
-    {error, notfound}.
-
 -spec set_context(limit_context(), t()) -> t().
 set_context(Context, LimContext) ->
     LimContext#{context => Context}.
-
--spec set_clock(clock(), t()) -> t().
-set_clock(Clock, LimContext) ->
-    LimContext#{clock => Clock}.
 
 -spec get_operation(context_type(), t()) ->
     {ok, context_operation()} | {error, notfound | operation_context_not_supported_error()}.
@@ -93,16 +77,14 @@ get_value(Type, ValueName, Context) ->
 
 get_operation_context(payment_processing, #{context := #limiter_LimitContext{payment_processing = undefined}}) ->
     {error,
-        {operation_context_not_supported,
-            {withdrawal_processing, #limiter_config_LimitContextTypeWithdrawalProcessing{}}}};
+        {operation_context_not_supported, {withdrawal_processing, #limiter_LimitContextTypeWithdrawalProcessing{}}}};
 get_operation_context(
     payment_processing,
     #{context := #limiter_LimitContext{payment_processing = PayprocContext}}
 ) ->
     {ok, lim_payproc_context, PayprocContext};
 get_operation_context(withdrawal_processing, #{context := #limiter_LimitContext{withdrawal_processing = undefined}}) ->
-    {error,
-        {operation_context_not_supported, {payment_processing, #limiter_config_LimitContextTypePaymentProcessing{}}}};
+    {error, {operation_context_not_supported, {payment_processing, #limiter_LimitContextTypePaymentProcessing{}}}};
 get_operation_context(
     withdrawal_processing,
     #{context := #limiter_LimitContext{withdrawal_processing = WithdrawalContext}}

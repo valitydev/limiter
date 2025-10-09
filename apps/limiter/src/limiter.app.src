@@ -12,7 +12,6 @@
         limiter_proto,
         liminator_proto,
         xrates_proto,
-        machinery,
         erl_health,
         dmt_client,
         opentelemetry_api,

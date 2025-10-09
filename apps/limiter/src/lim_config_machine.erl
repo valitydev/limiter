@@ -2,32 +2,16 @@
 
 -include_lib("limiter_proto/include/limproto_limiter_thrift.hrl").
 -include_lib("damsel/include/dmsl_domain_thrift.hrl").
+-include_lib("damsel/include/dmsl_limiter_config_thrift.hrl").
 -include_lib("damsel/include/dmsl_domain_conf_v2_thrift.hrl").
 
 %% Accessors
 
--export([created_at/1]).
--export([id/1]).
--export([description/1]).
--export([started_at/1]).
--export([shard_size/1]).
--export([time_range_type/1]).
--export([processor_type/1]).
 -export([type/1]).
--export([scope/1]).
 -export([context_type/1]).
--export([op_behaviour/1]).
 -export([currency_conversion/1]).
 
 %% API
-
--export([start/3]).
--export([get/2]).
-
--export([get_limit/3]).
--export([hold/2]).
--export([commit/2]).
--export([rollback/2]).
 
 -export([get_values/2]).
 -export([get_batch/3]).
@@ -36,10 +20,8 @@
 -export([rollback_batch/3]).
 
 -export([calculate_shard_id/2]).
--export([calculate_time_range/2]).
 -export([mk_scope_prefix/2]).
 
--type woody_context() :: woody_context:ctx().
 -type lim_context() :: lim_context:t().
 -type processor_type() :: lim_router:processor_type().
 -type processor() :: lim_router:processor().
@@ -70,7 +52,6 @@
 -type config() :: #{
     id := lim_id(),
     processor_type := processor_type(),
-    created_at := lim_time:timestamp_ms(),
     started_at := timestamp(),
     shard_size := shard_size(),
     time_range_type := time_range_type(),
@@ -82,25 +63,12 @@
     currency_conversion => currency_conversion()
 }.
 
--type create_params() :: #{
-    processor_type := processor_type(),
-    started_at := timestamp(),
-    shard_size := shard_size(),
-    time_range_type := time_range_type(),
-    context_type := context_type(),
-    type => limit_type(),
-    scope => limit_scope(),
-    description => description(),
-    op_behaviour => op_behaviour(),
-    current_function => currency_conversion()
-}.
-
 -type op_behaviour() :: #{operation_type() := addition | subtraction}.
 -type operation_type() :: invoice_payment_refund.
 -type currency_conversion() :: boolean().
 
 -type lim_id() :: limproto_limiter_thrift:'LimitID'().
--type lim_version() :: dmsl_domain_thrift:'DataRevision'() | undefined.
+-type lim_version() :: dmsl_domain_thrift:'DataRevision'().
 -type lim_change() :: limproto_limiter_thrift:'LimitChange'().
 -type limit() :: limproto_limiter_thrift:'Limit'().
 -type timestamp() :: dmsl_base_thrift:'Timestamp'().
@@ -112,38 +80,10 @@
 -export_type([limit_scope/0]).
 -export_type([time_range_type/0]).
 -export_type([time_range/0]).
--export_type([create_params/0]).
 -export_type([lim_id/0]).
 -export_type([lim_change/0]).
 -export_type([limit/0]).
 -export_type([timestamp/0]).
-
-%% Machinery callbacks
-
--behaviour(machinery).
-
--export([init/4]).
--export([process_call/4]).
--export([process_timeout/3]).
--export([process_repair/4]).
--export([process_notification/4]).
-
--type timestamped_event(T) ::
-    {ev, machinery:timestamp(), T}.
-
--type event() ::
-    {created, config()}.
-
--type args(T) :: machinery:args(T).
--type machine() :: machinery:machine(event(), _).
--type handler_args() :: machinery:handler_args(_).
--type handler_opts() :: machinery:handler_opts(_).
--type result() :: machinery:result(timestamped_event(event()), none()).
-
--export_type([timestamped_event/1]).
--export_type([event/0]).
-
--define(NS, 'lim/config_v1').
 
 %% Handler behaviour
 
@@ -153,31 +93,6 @@
     Config :: config(),
     LimitContext :: lim_context()
 ) -> {ok, lim_liminator:limit_change()} | {error, make_change_error()}.
-
--callback get_limit(
-    ID :: lim_id(),
-    Version :: lim_version(),
-    Config :: config(),
-    LimitContext :: lim_context()
-) -> {ok, limit()} | {error, get_limit_error()}.
-
--callback hold(
-    LimitChange :: lim_change(),
-    Config :: config(),
-    LimitContext :: lim_context()
-) -> ok | {error, hold_error()}.
-
--callback commit(
-    LimitChange :: lim_change(),
-    Config :: config(),
-    LimitContext :: lim_context()
-) -> ok | {error, commit_error()}.
-
--callback rollback(
-    LimitChange :: lim_change(),
-    Config :: config(),
-    LimitContext :: lim_context()
-) -> ok | {error, rollback_error()}.
 
 -type make_change_error() :: lim_turnover_processor:make_change_error().
 -type get_limit_error() :: lim_turnover_processor:get_limit_error().
@@ -191,20 +106,6 @@
 
 %% Accessors
 
--spec created_at(config()) -> timestamp().
-created_at(#{created_at := CreatedAt}) ->
-    lim_time:to_rfc3339(CreatedAt).
-
--spec id(config()) -> lim_id().
-id(#{id := ID}) ->
-    ID.
-
--spec description(config()) -> lim_maybe:'maybe'(description()).
-description(#{description := ID}) ->
-    ID;
-description(_) ->
-    undefined.
-
 -spec started_at(config()) -> timestamp().
 started_at(#{started_at := Value}) ->
     Value.
@@ -215,10 +116,6 @@ shard_size(#{shard_size := Value}) ->
 
 -spec time_range_type(config()) -> time_range_type().
 time_range_type(#{time_range_type := Value}) ->
-    Value.
-
--spec processor_type(config()) -> processor_type().
-processor_type(#{processor_type := Value}) ->
     Value.
 
 -spec type(config()) -> limit_type().
@@ -237,12 +134,6 @@ scope(_) ->
 context_type(#{context_type := Value}) ->
     Value.
 
--spec op_behaviour(config()) -> lim_maybe:'maybe'(op_behaviour()).
-op_behaviour(#{op_behaviour := Value}) ->
-    Value;
-op_behaviour(_) ->
-    undefined.
-
 -spec currency_conversion(config()) -> currency_conversion().
 currency_conversion(#{currency_conversion := Value}) ->
     Value;
@@ -250,55 +141,6 @@ currency_conversion(_) ->
     false.
 
 %%
-
--spec start(lim_id(), create_params(), lim_context()) -> {ok, config()}.
-start(ID, Params, LimitContext) ->
-    WoodyCtx = lim_context:woody_context(LimitContext),
-    Config = genlib_map:compact(Params#{id => ID, created_at => lim_time:now()}),
-    case machinery:start(?NS, ID, [{created, Config}], get_backend(WoodyCtx)) of
-        ok ->
-            {ok, Config};
-        {error, exists} ->
-            {ok, Machine} = machinery:get(?NS, ID, get_backend(WoodyCtx)),
-            {ok, collapse(Machine)}
-    end.
-
--spec get(lim_id(), lim_context()) -> {ok, config()} | {error, notfound}.
-get(ID, LimitContext) ->
-    do(fun() ->
-        WoodyCtx = lim_context:woody_context(LimitContext),
-        Machine = unwrap(machinery:get(?NS, ID, get_backend(WoodyCtx))),
-        collapse(Machine)
-    end).
-
--spec get_limit(lim_id(), lim_version(), lim_context()) ->
-    {ok, limit()} | {error, config_error() | {processor(), get_limit_error()}}.
-get_limit(ID, Version, LimitContext) ->
-    do(fun() ->
-        {Handler, Config} = unwrap(get_handler(ID, Version, LimitContext)),
-        unwrap(Handler, Handler:get_limit(ID, Version, Config, LimitContext))
-    end).
-
--spec hold(lim_change(), lim_context()) -> ok | {error, config_error() | {processor(), hold_error()}}.
-hold(#limiter_LimitChange{id = ID, version = Version} = LimitChange, LimitContext) ->
-    do(fun() ->
-        {Handler, Config} = unwrap(get_handler(ID, Version, LimitContext)),
-        unwrap(Handler, Handler:hold(LimitChange, Config, LimitContext))
-    end).
-
--spec commit(lim_change(), lim_context()) -> ok | {error, config_error() | {processor(), commit_error()}}.
-commit(#limiter_LimitChange{id = ID, version = Version} = LimitChange, LimitContext) ->
-    do(fun() ->
-        {Handler, Config} = unwrap(get_handler(ID, Version, LimitContext)),
-        unwrap(Handler, Handler:commit(LimitChange, Config, LimitContext))
-    end).
-
--spec rollback(lim_change(), lim_context()) -> ok | {error, config_error() | {processor(), rollback_error()}}.
-rollback(#limiter_LimitChange{id = ID, version = Version} = LimitChange, LimitContext) ->
-    do(fun() ->
-        {Handler, Config} = unwrap(get_handler(ID, Version, LimitContext)),
-        unwrap(Handler, Handler:rollback(LimitChange, Config, LimitContext))
-    end).
 
 -spec get_values(lim_changes(), lim_context()) ->
     {ok, [lim_liminator:limit_response()]} | {error, config_error() | {processor(), get_limit_error()}}.
@@ -330,7 +172,7 @@ hold_batch(OperationID, LimitChanges, LimitContext) ->
     end).
 
 -spec commit_batch(operation_id(), lim_changes(), lim_context()) ->
-    ok | {error, config_error() | {processor(), hold_error()}}.
+    ok | {error, config_error() | {processor(), commit_error()}}.
 commit_batch(OperationID, LimitChanges, LimitContext) ->
     do(fun() ->
         unwrap(
@@ -340,7 +182,7 @@ commit_batch(OperationID, LimitChanges, LimitContext) ->
     end).
 
 -spec rollback_batch(operation_id(), lim_changes(), lim_context()) ->
-    ok | {error, config_error() | {processor(), hold_error()}}.
+    ok | {error, config_error() | {processor(), rollback_error()}}.
 rollback_batch(OperationID, LimitChanges, LimitContext) ->
     do(fun() ->
         unwrap(
@@ -366,166 +208,16 @@ get_handler(ID, Version, LimitContext) ->
     end).
 
 -spec get_config(lim_id(), lim_version(), lim_context()) -> {ok, config()} | {error, notfound}.
-get_config(ID, undefined, LimitContext) ->
-    get(ID, LimitContext);
 get_config(ID, Version, #{woody_context := WoodyContext}) ->
     LimitConfigRef = {limit_config, #domain_LimitConfigRef{id = ID}},
     try
         #domain_conf_v2_VersionedObject{object = {limit_config, ConfigObject}} =
             dmt_client:checkout_object(Version, LimitConfigRef, #{woody_context => WoodyContext}),
-        {ok, lim_config_codec:unmarshal('LimitConfigObject', ConfigObject)}
+        {ok, unmarshal_limit_config(ConfigObject)}
     catch
         throw:#domain_conf_v2_ObjectNotFound{} ->
             {error, notfound}
     end.
-
--spec calculate_time_range(timestamp(), config()) -> time_range().
-calculate_time_range(Timestamp, Config) ->
-    StartedAt = started_at(Config),
-    case time_range_type(Config) of
-        {calendar, Range} ->
-            calculate_calendar_time_range(Range, Timestamp, StartedAt);
-        {interval, _Interval} ->
-            erlang:error({interval_time_range_not_implemented, Config})
-    end.
-
-calculate_calendar_time_range(Range, Timestamp, StartedAt) ->
-    {StartDatetime, _USec0} = lim_range_codec:parse_timestamp(StartedAt),
-    {CurrentDatetime, _USec1} = lim_range_codec:parse_timestamp(Timestamp),
-    CurrentSec = calendar:datetime_to_gregorian_seconds(CurrentDatetime),
-    calculate_calendar_time_range(Range, CurrentSec, CurrentDatetime, StartDatetime).
-
-calculate_calendar_time_range(year, CurrentSec, {CurrentDate, _CurrentTime}, {StartDate, StartTime}) ->
-    {_StartYear, StartMonth, StartDay} = StartDate,
-    {CurrentYear, _CurrentMonth, _} = CurrentDate,
-    ClampedStartDay = clamp_month_start_day(CurrentYear, StartMonth, StartDay),
-    LowerSec = calendar:datetime_to_gregorian_seconds(
-        {{CurrentYear, StartMonth, ClampedStartDay}, StartTime}
-    ),
-    NextYearDay = clamp_month_start_day(CurrentYear + 1, StartMonth, StartDay),
-    UpperSec = calendar:datetime_to_gregorian_seconds(
-        {{CurrentYear + 1, StartMonth, NextYearDay}, StartTime}
-    ),
-    calculate_year_time_range(CurrentSec, LowerSec, UpperSec);
-calculate_calendar_time_range(month, CurrentSec, {CurrentDate, _CurrentTime}, {StartDate, StartTime}) ->
-    {_StartYear, _StartMonth, StartDay} = StartDate,
-    {CurrentYear, CurrentMonth, _} = CurrentDate,
-    ClampedStartDay = clamp_month_start_day(CurrentYear, CurrentMonth, StartDay),
-    LowerSec = calendar:datetime_to_gregorian_seconds(
-        {{CurrentYear, CurrentMonth, ClampedStartDay}, StartTime}
-    ),
-    UpperSec =
-        case CurrentMonth < 12 of
-            true ->
-                NextMonthDay = clamp_month_start_day(CurrentYear, CurrentMonth + 1, StartDay),
-                calendar:datetime_to_gregorian_seconds(
-                    {{CurrentYear, CurrentMonth + 1, NextMonthDay}, StartTime}
-                );
-            false ->
-                NextYearDay = clamp_month_start_day(CurrentYear + 1, CurrentMonth, StartDay),
-                calendar:datetime_to_gregorian_seconds(
-                    {{CurrentYear + 1, 1, NextYearDay}, StartTime}
-                )
-        end,
-    calculate_month_time_range(CurrentSec, LowerSec, UpperSec);
-calculate_calendar_time_range(week, CurrentSec, {CurrentDate, _CurrentTime}, {StartDate, StartTime}) ->
-    StartWeekRem = calendar:date_to_gregorian_days(StartDate) rem 7,
-    LowerWeek = (calendar:date_to_gregorian_days(CurrentDate) div 7) * 7 + StartWeekRem,
-    UpperWeek = LowerWeek + 7,
-    LowerSec = calendar:datetime_to_gregorian_seconds(
-        {calendar:gregorian_days_to_date(LowerWeek), StartTime}
-    ),
-    UpperSec = calendar:datetime_to_gregorian_seconds(
-        {calendar:gregorian_days_to_date(UpperWeek), StartTime}
-    ),
-    calculate_week_time_range(CurrentSec, LowerSec, UpperSec);
-calculate_calendar_time_range(day, CurrentSec, {CurrentDate, _CurrentTime}, {_StartDate, StartTime}) ->
-    Lower = calendar:date_to_gregorian_days(CurrentDate),
-    UpperDate = calendar:gregorian_days_to_date(Lower + 1),
-    LowerSec = calendar:datetime_to_gregorian_seconds({CurrentDate, StartTime}),
-    UpperSec = calendar:datetime_to_gregorian_seconds({UpperDate, StartTime}),
-    calculate_day_time_range(CurrentSec, LowerSec, UpperSec).
-
-clamp_month_start_day(Year, Month, StartDay) ->
-    Last = calendar:last_day_of_the_month(Year, Month),
-    case StartDay > Last of
-        true ->
-            Last;
-        false ->
-            StartDay
-    end.
-
-calculate_year_time_range(CurrentSec, LowerSec, UpperSec) when
-    CurrentSec >= LowerSec andalso
-        CurrentSec < UpperSec
-->
-    mk_time_range(LowerSec, UpperSec);
-calculate_year_time_range(CurrentSec, LowerSec, _UpperSec) when CurrentSec < LowerSec ->
-    {{Year, Month, Day}, Time} = calendar:gregorian_seconds_to_datetime(LowerSec),
-    PrevYearDay = clamp_month_start_day(Year - 1, Month, Day),
-    LowerDate = {Year - 1, Month, PrevYearDay},
-    #{
-        lower => marshal_timestamp({LowerDate, Time}),
-        upper => marshal_timestamp(calendar:gregorian_seconds_to_datetime(LowerSec))
-    }.
-
-calculate_month_time_range(CurrentSec, LowerSec, UpperSec) when
-    CurrentSec >= LowerSec andalso
-        CurrentSec < UpperSec
-->
-    mk_time_range(LowerSec, UpperSec);
-calculate_month_time_range(CurrentSec, LowerSec, _UpperSec) when CurrentSec < LowerSec ->
-    {{Year, Month, Day}, Time} = calendar:gregorian_seconds_to_datetime(LowerSec),
-    LowerDate =
-        case Month =:= 1 of
-            true ->
-                PrevYearDay = clamp_month_start_day(Year - 1, 12, Day),
-                {Year - 1, 12, PrevYearDay};
-            false ->
-                PrevMonthDay = clamp_month_start_day(Year, Month - 1, Day),
-                {Year, Month - 1, PrevMonthDay}
-        end,
-    #{
-        lower => marshal_timestamp({LowerDate, Time}),
-        upper => marshal_timestamp(calendar:gregorian_seconds_to_datetime(LowerSec))
-    }.
-
-calculate_week_time_range(CurrentSec, LowerSec, UpperSec) when
-    CurrentSec >= LowerSec andalso
-        CurrentSec < UpperSec
-->
-    mk_time_range(LowerSec, UpperSec);
-calculate_week_time_range(CurrentSec, LowerSec, _UpperSec) when CurrentSec < LowerSec ->
-    {Date, Time} = calendar:gregorian_seconds_to_datetime(LowerSec),
-    Days = calendar:date_to_gregorian_days(Date),
-    LowerDate = calendar:gregorian_days_to_date(Days - 7),
-    #{
-        lower => marshal_timestamp({LowerDate, Time}),
-        upper => marshal_timestamp(calendar:gregorian_seconds_to_datetime(LowerSec))
-    }.
-
-calculate_day_time_range(CurrentSec, LowerSec, UpperSec) when
-    CurrentSec >= LowerSec andalso
-        CurrentSec < UpperSec
-->
-    mk_time_range(LowerSec, UpperSec);
-calculate_day_time_range(CurrentSec, LowerSec, _UpperSec) when CurrentSec < LowerSec ->
-    {Date, Time} = calendar:gregorian_seconds_to_datetime(LowerSec),
-    Days = calendar:date_to_gregorian_days(Date),
-    LowerDate = calendar:gregorian_days_to_date(Days - 1),
-    #{
-        lower => marshal_timestamp({LowerDate, Time}),
-        upper => marshal_timestamp(calendar:gregorian_seconds_to_datetime(LowerSec))
-    }.
-
-mk_time_range(LowerSec, UpperSec) ->
-    #{
-        lower => marshal_timestamp(calendar:gregorian_seconds_to_datetime(LowerSec)),
-        upper => marshal_timestamp(calendar:gregorian_seconds_to_datetime(UpperSec))
-    }.
-
-marshal_timestamp(DateTime) ->
-    lim_range_codec:marshal(timestamp, {DateTime, 0}).
 
 -spec calculate_shard_id(timestamp(), config()) -> shard_id().
 calculate_shard_id(Timestamp, Config) ->
@@ -539,8 +231,8 @@ calculate_shard_id(Timestamp, Config) ->
     end.
 
 calculate_calendar_shard_id(Range, Timestamp, StartedAt, ShardSize) ->
-    {StartDatetime, _USec0} = lim_range_codec:parse_timestamp(StartedAt),
-    {CurrentDatetime, _USec1} = lim_range_codec:parse_timestamp(Timestamp),
+    StartDatetime = parse_timestamp(StartedAt),
+    CurrentDatetime = parse_timestamp(Timestamp),
     Units = calculate_time_units(Range, CurrentDatetime, StartDatetime),
     SignPrefix = mk_sign_prefix(Units),
     RangePrefix = mk_unit_prefix(Range),
@@ -785,62 +477,124 @@ get_generic_payment_tool_resource(ContextType, LimitContext) ->
             Error
     end.
 
-%%% Machinery callbacks
+parse_timestamp(Bin) ->
+    try
+        MicroSeconds = genlib_rfc3339:parse(Bin, microsecond),
+        case genlib_rfc3339:is_utc(Bin) of
+            false ->
+                erlang:error({bad_timestamp, not_utc}, [Bin]);
+            true ->
+                calendar:system_time_to_universal_time(MicroSeconds, microsecond)
+        end
+    catch
+        error:Error:St ->
+            erlang:raise(error, {bad_timestamp, Bin, Error}, St)
+    end.
 
--spec init(args([event()]), machine(), handler_args(), handler_opts()) -> result().
-init(Events, _Machine, _HandlerArgs, _HandlerOpts) ->
-    #{
-        events => emit_events(Events)
-    }.
+unmarshal_limit_config(#domain_LimitConfigObject{
+    ref = #domain_LimitConfigRef{id = ID},
+    data = #limiter_config_LimitConfig{
+        processor_type = ProcessorType,
+        started_at = StartedAt,
+        shard_size = ShardSize,
+        time_range_type = TimeRangeType,
+        context_type = ContextType,
+        type = Type,
+        scopes = Scopes,
+        description = Description,
+        op_behaviour = OpBehaviour,
+        currency_conversion = CurrencyConversion
+    }
+}) ->
+    genlib_map:compact(#{
+        id => ID,
+        processor_type => ProcessorType,
+        started_at => StartedAt,
+        shard_size => ShardSize,
+        time_range_type => unmarshal_time_range_type(TimeRangeType),
+        context_type => unmarshal_context_type(ContextType),
+        type => maybe_apply(Type, fun unmarshal_type/1),
+        scope => maybe_apply(Scopes, fun unmarshal_scope/1),
+        description => Description,
+        op_behaviour => maybe_apply(OpBehaviour, fun unmarshal_op_behaviour/1),
+        currency_conversion => CurrencyConversion =/= undefined
+    }).
 
--spec process_call(args(_), machine(), handler_args(), handler_opts()) -> no_return().
-process_call(_Args, _Machine, _HandlerArgs, _HandlerOpts) ->
-    not_implemented(call).
+unmarshal_time_range_type({calendar, CalendarType}) ->
+    {calendar, unmarshal_calendar_time_range_type(CalendarType)};
+unmarshal_time_range_type({interval, #limiter_config_TimeRangeTypeInterval{amount = Amount}}) ->
+    {interval, Amount}.
 
--spec process_timeout(machine(), handler_args(), handler_opts()) -> no_return().
-process_timeout(_Machine, _HandlerArgs, _HandlerOpts) ->
-    not_implemented(timeout).
+unmarshal_calendar_time_range_type({day, _}) ->
+    day;
+unmarshal_calendar_time_range_type({week, _}) ->
+    week;
+unmarshal_calendar_time_range_type({month, _}) ->
+    month;
+unmarshal_calendar_time_range_type({year, _}) ->
+    year.
 
--spec process_repair(args(_), machine(), handler_args(), handler_opts()) -> no_return().
-process_repair(_Args, _Machine, _HandlerArgs, _HandlerOpts) ->
-    not_implemented(repair).
+unmarshal_context_type({payment_processing, #limiter_config_LimitContextTypePaymentProcessing{}}) ->
+    payment_processing;
+unmarshal_context_type({withdrawal_processing, #limiter_config_LimitContextTypeWithdrawalProcessing{}}) ->
+    withdrawal_processing.
 
--spec process_notification(args(_), machine(), handler_args(), handler_opts()) -> no_return().
-process_notification(_Args, _Machine, _HandlerArgs, _HandlerOpts) ->
-    not_implemented(notification).
+unmarshal_type({turnover, #limiter_config_LimitTypeTurnover{metric = Metric}}) ->
+    {turnover, maybe_apply(Metric, fun unmarshal_turnover_metric/1, number)}.
 
-%%% Internal functions
+unmarshal_turnover_metric({number, _}) ->
+    number;
+unmarshal_turnover_metric({amount, #limiter_config_LimitTurnoverAmount{currency = Currency}}) ->
+    {amount, Currency}.
 
-emit_events(Events) ->
-    emit_timestamped_events(Events, lim_time:machinery_now()).
+unmarshal_scope({single, Type}) ->
+    ordsets:from_list([unmarshal_scope_type(Type)]);
+unmarshal_scope({multi, Types}) ->
+    ordsets:from_list(lists:map(fun unmarshal_scope_type/1, ordsets:to_list(Types)));
+unmarshal_scope(Types) when is_list(Types) ->
+    ordsets:from_list(lists:map(fun unmarshal_scope_type/1, ordsets:to_list(Types))).
 
-emit_timestamped_events(Events, Ts) ->
-    [{ev, Ts, Body} || Body <- Events].
+unmarshal_scope_type({party, _}) ->
+    party;
+unmarshal_scope_type({shop, _}) ->
+    shop;
+unmarshal_scope_type({wallet, _}) ->
+    wallet;
+unmarshal_scope_type({payment_tool, _}) ->
+    payment_tool;
+unmarshal_scope_type({provider, _}) ->
+    provider;
+unmarshal_scope_type({terminal, _}) ->
+    terminal;
+unmarshal_scope_type({payer_contact_email, _}) ->
+    payer_contact_email;
+unmarshal_scope_type({destination_field, #limiter_config_LimitScopeDestinationFieldDetails{field_path = FieldPath}}) ->
+    %% Domain config variant clause
+    {destination_field, FieldPath};
+unmarshal_scope_type({sender, _}) ->
+    sender;
+unmarshal_scope_type({receiver, _}) ->
+    receiver.
 
-collapse(#{history := History}) ->
-    lists:foldl(fun(Ev, St) -> apply_event(Ev, St) end, undefined, History).
+unmarshal_op_behaviour(#limiter_config_OperationLimitBehaviour{invoice_payment_refund = Refund}) ->
+    genlib_map:compact(#{
+        invoice_payment_refund => maybe_apply(Refund, fun unmarshal_behaviour/1)
+    }).
 
--spec get_backend(woody_context()) -> machinery_mg_backend:backend().
-get_backend(WoodyCtx) ->
-    lim_utils:get_backend(?NS, WoodyCtx).
+unmarshal_behaviour({subtraction, #limiter_config_Subtraction{}}) ->
+    subtraction;
+unmarshal_behaviour({addition, #limiter_config_Addition{}}) ->
+    addition.
 
--spec not_implemented(any()) -> no_return().
-not_implemented(What) ->
-    erlang:error({not_implemented, What}).
+maybe_apply(undefined, _) ->
+    undefined;
+maybe_apply(Value, Fun) ->
+    Fun(Value).
 
-%%
-
-%%
-
--spec apply_event(machinery:event(timestamped_event(event())), lim_maybe:'maybe'(config())) -> config().
-apply_event({_ID, _Ts, {ev, _EvTs, Event}}, Config) ->
-    apply_event_(Event, Config).
-
--spec apply_event_(event(), lim_maybe:'maybe'(config())) -> config().
-apply_event_({created, Config}, undefined) ->
-    Config.
-
-%%
+maybe_apply(undefined, _, Default) ->
+    Default;
+maybe_apply(Value, Fun, _Default) ->
+    Fun(Value).
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
@@ -853,92 +607,48 @@ apply_event_({created, Config}, undefined) ->
 
 -spec test() -> _.
 
--spec check_sign_prefix_test() -> _.
+-spec unmarshal_config_object_test() -> _.
+unmarshal_config_object_test() ->
+    Config = #{
+        id => <<"id">>,
+        processor_type => <<"type">>,
+        started_at => <<"2000-01-01T00:00:00Z">>,
+        shard_size => 7,
+        time_range_type => {calendar, day},
+        context_type => payment_processing,
+        type => {turnover, number},
+        scope => ordsets:from_list([party, shop, {destination_field, [<<"path">>, <<"to">>, <<"field">>]}]),
+        description => <<"description">>,
+        currency_conversion => true
+    },
+    Object = #domain_LimitConfigObject{
+        ref = #domain_LimitConfigRef{id = <<"id">>},
+        data = #limiter_config_LimitConfig{
+            processor_type = <<"type">>,
+            started_at = <<"2000-01-01T00:00:00Z">>,
+            shard_size = 7,
+            time_range_type = {calendar, {day, #limiter_config_TimeRangeTypeCalendarDay{}}},
+            context_type = {payment_processing, #limiter_config_LimitContextTypePaymentProcessing{}},
+            type =
+                {turnover, #limiter_config_LimitTypeTurnover{metric = {number, #limiter_config_LimitTurnoverNumber{}}}},
+            scopes = ordsets:from_list([
+                {'party', #limiter_config_LimitScopeEmptyDetails{}},
+                {'shop', #limiter_config_LimitScopeEmptyDetails{}},
+                {'destination_field', #limiter_config_LimitScopeDestinationFieldDetails{
+                    field_path = [<<"path">>, <<"to">>, <<"field">>]
+                }}
+            ]),
+            description = <<"description">>,
+            currency_conversion = #limiter_config_CurrencyConversion{}
+        }
+    },
+    ?assertEqual(Config, unmarshal_limit_config(Object)).
 
+-spec check_sign_prefix_test() -> _.
 check_sign_prefix_test() ->
     ?assertEqual(<<"past">>, mk_sign_prefix(-10)),
     ?assertEqual(<<"future">>, mk_sign_prefix(0)),
     ?assertEqual(<<"future">>, mk_sign_prefix(10)).
-
--spec check_calculate_day_time_range_test() -> _.
-check_calculate_day_time_range_test() ->
-    StartedAt1 = <<"2000-01-01T00:00:00Z">>,
-    ?assertEqual(
-        #{lower => <<"2000-01-01T00:00:00Z">>, upper => <<"2000-01-02T00:00:00Z">>},
-        calculate_calendar_time_range(day, <<"2000-01-01T02:00:00Z">>, StartedAt1)
-    ),
-    ?assertEqual(
-        #{lower => <<"1999-12-31T00:00:00Z">>, upper => <<"2000-01-01T00:00:00Z">>},
-        calculate_calendar_time_range(day, <<"1999-12-31T02:00:00Z">>, StartedAt1)
-    ),
-    ?assertEqual(
-        #{lower => <<"2000-01-10T00:00:00Z">>, upper => <<"2000-01-11T00:00:00Z">>},
-        calculate_calendar_time_range(day, <<"2000-01-10T02:00:00Z">>, StartedAt1)
-    ),
-    ?assertEqual(
-        #{lower => <<"1999-12-31T03:00:00Z">>, upper => <<"2000-01-01T03:00:00Z">>},
-        calculate_calendar_time_range(day, <<"2000-01-01T02:00:00Z">>, <<"2000-01-01T03:00:00Z">>)
-    ).
-
--spec check_calculate_week_time_range_test() -> _.
-check_calculate_week_time_range_test() ->
-    StartedAt = <<"2000-01-01T00:00:00Z">>,
-    ?assertEqual(
-        #{lower => <<"2000-01-01T00:00:00Z">>, upper => <<"2000-01-08T00:00:00Z">>},
-        calculate_calendar_time_range(week, <<"2000-01-01T02:00:00Z">>, StartedAt)
-    ),
-    ?assertEqual(
-        #{lower => <<"1999-12-25T00:00:00Z">>, upper => <<"2000-01-01T00:00:00Z">>},
-        calculate_calendar_time_range(week, <<"1999-12-31T02:00:00Z">>, StartedAt)
-    ),
-    ?assertEqual(
-        #{lower => <<"2000-09-30T00:00:00Z">>, upper => <<"2000-10-07T00:00:00Z">>},
-        calculate_calendar_time_range(week, <<"2000-10-03T02:00:00Z">>, StartedAt)
-    ),
-    ?assertEqual(
-        #{lower => <<"1999-12-25T03:00:00Z">>, upper => <<"2000-01-01T03:00:00Z">>},
-        calculate_calendar_time_range(week, <<"2000-01-01T02:00:00Z">>, <<"2000-01-01T03:00:00Z">>)
-    ).
-
--spec check_calculate_month_time_range_test() -> _.
-check_calculate_month_time_range_test() ->
-    StartedAt = <<"2000-01-01T00:00:00Z">>,
-    ?assertEqual(
-        #{lower => <<"2000-01-01T00:00:00Z">>, upper => <<"2000-02-01T00:00:00Z">>},
-        calculate_calendar_time_range(month, <<"2000-01-01T02:00:00Z">>, StartedAt)
-    ),
-    ?assertEqual(
-        #{lower => <<"1999-12-01T00:00:00Z">>, upper => <<"2000-01-01T00:00:00Z">>},
-        calculate_calendar_time_range(month, <<"1999-12-31T02:00:00Z">>, StartedAt)
-    ),
-    ?assertEqual(
-        #{lower => <<"2000-10-01T00:00:00Z">>, upper => <<"2000-11-01T00:00:00Z">>},
-        calculate_calendar_time_range(month, <<"2000-10-03T02:00:00Z">>, StartedAt)
-    ),
-    ?assertEqual(
-        #{lower => <<"1999-12-01T03:00:00Z">>, upper => <<"2000-01-01T03:00:00Z">>},
-        calculate_calendar_time_range(month, <<"2000-01-01T02:00:00Z">>, <<"2000-01-01T03:00:00Z">>)
-    ).
-
--spec check_calculate_year_time_range_test() -> _.
-check_calculate_year_time_range_test() ->
-    StartedAt = <<"2000-01-01T00:00:00Z">>,
-    ?assertEqual(
-        #{lower => <<"2000-01-01T00:00:00Z">>, upper => <<"2001-01-01T00:00:00Z">>},
-        calculate_calendar_time_range(year, <<"2000-01-01T02:00:00Z">>, StartedAt)
-    ),
-    ?assertEqual(
-        #{lower => <<"1999-01-01T00:00:00Z">>, upper => <<"2000-01-01T00:00:00Z">>},
-        calculate_calendar_time_range(year, <<"1999-12-31T02:00:00Z">>, StartedAt)
-    ),
-    ?assertEqual(
-        #{lower => <<"2010-01-01T00:00:00Z">>, upper => <<"2011-01-01T00:00:00Z">>},
-        calculate_calendar_time_range(year, <<"2010-10-03T02:00:00Z">>, StartedAt)
-    ),
-    ?assertEqual(
-        #{lower => <<"1999-01-01T03:00:00Z">>, upper => <<"2000-01-01T03:00:00Z">>},
-        calculate_calendar_time_range(year, <<"2000-01-01T02:00:00Z">>, <<"2000-01-01T03:00:00Z">>)
-    ).
 
 -spec check_calculate_day_shard_id_test() -> _.
 check_calculate_day_shard_id_test() ->
