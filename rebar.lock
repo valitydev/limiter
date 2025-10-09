@@ -39,7 +39,7 @@
   0},
  {<<"limiter_proto">>,
   {git,"https://github.com/valitydev/limiter-proto.git",
-       {ref,"b2a2a75313c11b677d17b41b5bbb2716d88446b3"}},
+       {ref,"1af3724af24dd8b5ad9ce2ae80cd42318b471397"}},
   0},
  {<<"metrics">>,{pkg,<<"metrics">>,<<"1.0.1">>},2},
  {<<"mimerl">>,{pkg,<<"mimerl">>,<<"1.4.0">>},2},
