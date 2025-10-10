@@ -34,7 +34,7 @@ services:
       - ./test/dmt/sys.config:/opt/dmt/releases/0.1/sys.config
 
   liminator:
-    image: ghcr.io/valitydev/liminator:sha-e284ad2
+    image: ghcr.io/valitydev/liminator:sha-48e1a4a
     restart: unless-stopped
     entrypoint:
       - java

@@ -40,10 +40,10 @@
 -export([commit_processes_idempotently/1]).
 -export([full_commit_processes_idempotently/1]).
 -export([partial_commit_processes_idempotently/1]).
-%% -export([rollback_processes_idempotently/1]).
+-export([rollback_processes_idempotently/1]).
 
 -export([commit_number_ok/1]).
-%% -export([rollback_number_ok/1]).
+-export([rollback_number_ok/1]).
 -export([commit_refund_keep_number_unchanged/1]).
 -export([partial_commit_number_counts_as_single_op/1]).
 
@@ -154,15 +154,15 @@ groups() ->
         ]},
         {cashless, [parallel], [
             commit_number_ok,
-            %% rollback_number_ok,
+            rollback_number_ok,
             commit_refund_keep_number_unchanged,
             partial_commit_number_counts_as_single_op
         ]},
         {idempotency, [parallel], [
             commit_processes_idempotently,
             full_commit_processes_idempotently,
-            partial_commit_processes_idempotently
-            %% rollback_processes_idempotently
+            partial_commit_processes_idempotently,
+            rollback_processes_idempotently
         ]}
     ].
 
@@ -542,20 +542,18 @@ partial_commit_processes_idempotently(C) ->
     ok = lim_client:commit(Change, Context, Client),
     {ok, Limit = #limiter_Limit{amount = 40}} = lim_client:get(ID, Version, Context, Client).
 
-%% NOTE This test case is temporary disabled for same reason as
-%% `rollback_number_ok`.
-%% -spec rollback_processes_idempotently(config()) -> _.
-%% rollback_processes_idempotently(C) ->
-%%     Client = ?config(client, C),
-%%     {ID, Version} = configure_limit(?time_range_week(), ?global(), C),
-%%     Context = ?payproc_ctx_payment(?cash(42), ?cash(0)),
-%%     Change = ?LIMIT_CHANGE(ID, Version),
-%%     ok = lim_client:hold(Change, Context, Client),
-%%     ok = lim_client:hold(Change, Context, Client),
-%%     ok = lim_client:commit(Change, Context, Client),
-%%     {ok, Limit = #limiter_Limit{amount = 0}} = lim_client:get(ID, Version, Context, Client),
-%%     ok = lim_client:commit(Change, Context, Client),
-%%     {ok, Limit = #limiter_Limit{amount = 0}} = lim_client:get(ID, Version, Context, Client).
+-spec rollback_processes_idempotently(config()) -> _.
+rollback_processes_idempotently(C) ->
+    Client = ?config(client, C),
+    {ID, Version} = configure_limit(?time_range_week(), ?global(), C),
+    Context = ?payproc_ctx_payment(?cash(42), ?cash(0)),
+    Change = ?LIMIT_CHANGE(ID, Version),
+    ok = lim_client:hold(Change, Context, Client),
+    ok = lim_client:hold(Change, Context, Client),
+    ok = lim_client:commit(Change, Context, Client),
+    {ok, Limit = #limiter_Limit{amount = 0}} = lim_client:get(ID, Version, Context, Client),
+    ok = lim_client:commit(Change, Context, Client),
+    {ok, Limit = #limiter_Limit{amount = 0}} = lim_client:get(ID, Version, Context, Client).
 
 %%
 
@@ -572,23 +570,19 @@ commit_number_ok(C) ->
         LimitState0#limiter_Limit.amount + 1
     ).
 
-%% NOTE This test case is temporary disabled because of the bug in liminator: it
-%% doesn't respect partial commits with final value of change in operation
-%% distinct from value of initial hold. Somehow value of limit counter is
-%% aggregated with summing changes up of both (!) hold and commit values.
-%% -spec rollback_number_ok(config()) -> _.
-%% rollback_number_ok(C) ->
-%%     Client = ?config(client, C),
-%%     {ID, Version} = configure_limit(?time_range_week(), ?global(), ?turnover_metric_number(), C),
-%%     Context = ?payproc_ctx_payment(?cash(10), ?cash(10)),
-%%     ContextRollback = ?payproc_ctx_payment(?cash(10), ?cash(0)),
-%%     {ok, LimitState0} = lim_client:get(ID, Version, Context, Client),
-%%     _ = hold_and_commit(?LIMIT_CHANGE(ID, Version), Context, ContextRollback, Client),
-%%     {ok, LimitState1} = lim_client:get(ID, Version, Context, Client),
-%%     ?assertEqual(
-%%         LimitState1#limiter_Limit.amount,
-%%         LimitState0#limiter_Limit.amount
-%%     ).
+-spec rollback_number_ok(config()) -> _.
+rollback_number_ok(C) ->
+    Client = ?config(client, C),
+    {ID, Version} = configure_limit(?time_range_week(), ?global(), ?turnover_metric_number(), C),
+    Context = ?payproc_ctx_payment(?cash(10), ?cash(10)),
+    ContextRollback = ?payproc_ctx_payment(?cash(10), ?cash(0)),
+    {ok, LimitState0} = lim_client:get(ID, Version, Context, Client),
+    _ = hold_and_commit(?LIMIT_CHANGE(ID, Version), Context, ContextRollback, Client),
+    {ok, LimitState1} = lim_client:get(ID, Version, Context, Client),
+    ?assertEqual(
+        LimitState1#limiter_Limit.amount,
+        LimitState0#limiter_Limit.amount
+    ).
 
 -spec commit_refund_keep_number_unchanged(config()) -> _.
 commit_refund_keep_number_unchanged(C) ->
