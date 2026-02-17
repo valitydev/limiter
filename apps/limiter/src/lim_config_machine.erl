@@ -70,9 +70,18 @@
 -type op_behaviour() :: #{operation_type() := addition | subtraction}.
 -type operation_type() :: invoice_payment_refund.
 -type currency_conversion() :: boolean().
--type finalization_behaviour_value() :: normal | reverse.
+-type finalization_behaviour_condition() :: {payment_session_route, RouteUsed :: boolean()}.
+-type finalization_behaviour_predicate() ::
+    {constant, finalization_behaviour_predicate()}
+    | {condition, finalization_behaviour_condition()}
+    | {is_not, finalization_behaviour_predicate()}
+    | {all_of, finalization_behaviour_predicate()}
+    | {any_of, finalization_behaviour_predicate()}.
+-type finalization_behaviour_decision() ::
+    {finalization_behaviour_decision, finalization_behaviour_predicate(), finalization_behaviour_selector()}.
+-type finalization_behaviour_selector() :: {value, normal | reverse} | {decision, finalization_behaviour_decision()}.
 -type finalization_behaviour() :: #{
-    invoice_payment := finalization_behaviour_value() | fun((lim_context()) -> finalization_behaviour_value())
+    invoice_payment := finalization_behaviour_selector()
 }.
 
 -type lim_id() :: limproto_limiter_thrift:'LimitID'().
@@ -168,7 +177,7 @@ get_batch(OperationID, LimitChanges, LimitContext) ->
         GroupedResponses =
             with_grouped_changes(GroupedChanges, fun(Group, Changes) ->
                 OperationIDForGroup = operation_id_for_group(OperationID, Group),
-                unwrap(lim_liminator:get(OperationIDForGroup, Changes, LimitContext))
+                unwrap(OperationID, lim_liminator:get(OperationIDForGroup, Changes, LimitContext))
             end),
         flatten_grouped(GroupedResponses)
     end).
@@ -181,7 +190,7 @@ hold_batch(OperationID, LimitChanges, LimitContext) ->
         GroupedResponses =
             with_grouped_changes(GroupedChanges, fun(Group, Changes) ->
                 OperationIDForGroup = operation_id_for_group(OperationID, Group),
-                unwrap(lim_liminator:hold(OperationIDForGroup, Changes, LimitContext))
+                unwrap(OperationID, lim_liminator:hold(OperationIDForGroup, Changes, LimitContext))
             end),
         flatten_grouped(GroupedResponses)
     end).
@@ -190,16 +199,16 @@ hold_batch(OperationID, LimitChanges, LimitContext) ->
     ok | {error, config_error() | {processor(), commit_error()}}.
 commit_batch(OperationID, LimitChanges, LimitContext) ->
     do(fun() ->
-        GroupedChanges = unwrap(collect_grouped_changes(hold, LimitChanges, LimitContext)),
+        GroupedChanges = unwrap(collect_grouped_changes(commit, LimitChanges, LimitContext)),
         _ =
             with_grouped_changes(GroupedChanges, fun(Group, Changes) ->
                 OperationIDForGroup = operation_id_for_group(OperationID, Group),
                 %% FIXME Conditions for conditional must be same for it to be of same group!
                 case Group =:= reverse orelse (Group =:= conditional andalso false) of
                     true ->
-                        unwrap(lim_liminator:rollback(OperationIDForGroup, Changes, LimitContext));
+                        unwrap(OperationID, lim_liminator:rollback(OperationIDForGroup, Changes, LimitContext));
                     false ->
-                        unwrap(lim_liminator:commit(OperationIDForGroup, Changes, LimitContext))
+                        unwrap(OperationID, lim_liminator:commit(OperationIDForGroup, Changes, LimitContext))
                 end
             end),
         ok
@@ -209,28 +218,35 @@ commit_batch(OperationID, LimitChanges, LimitContext) ->
     ok | {error, config_error() | {processor(), rollback_error()}}.
 rollback_batch(OperationID, LimitChanges, LimitContext) ->
     do(fun() ->
-        unwrap(
-            OperationID,
-            lim_liminator:rollback(
-                OperationID, unwrap(collect_grouped_changes(hold, LimitChanges, LimitContext)), LimitContext
-            )
-        )
+        GroupedChanges = unwrap(collect_grouped_changes(hold, LimitChanges, LimitContext)),
+        _ =
+            with_grouped_changes(GroupedChanges, fun(Group, Changes) ->
+                OperationIDForGroup = operation_id_for_group(OperationID, Group),
+                %% FIXME Conditions for conditional must be same for it to be of same group!
+                case Group =:= reverse orelse (Group =:= conditional andalso false) of
+                    true ->
+                        unwrap(OperationID, lim_liminator:commit(OperationIDForGroup, Changes, LimitContext));
+                    false ->
+                        unwrap(OperationID, lim_liminator:rollback(OperationIDForGroup, Changes, LimitContext))
+                end
+            end),
+        ok
     end).
 
 operation_id_for_group(OperationID, normal) -> OperationID;
 operation_id_for_group(OperationID, reverse) -> <<OperationID, "/reverse">>;
-operation_id_for_group(OperationID, conditional) -> <<OperationID, "/conditional">>.
+operation_id_for_group(OperationID, {conditional, Hash}) -> <<OperationID, "/conditional/", Hash/binary>>.
 
-with_grouped_changes(#{normal := _, reverse := _, conditional := _} = GroupedChanges, F) when
+with_grouped_changes(GroupedChanges, F) when
     is_function(F, 2)
 ->
     maps:map(F, GroupedChanges).
 
-flatten_grouped(#{normal := N, reverse := R, conditional := C}) ->
-    lists:flatten([N, R, C]).
+flatten_grouped(Grouped) ->
+    lists:flatten(maps:values(Grouped)).
 
 collect_grouped_changes(Stage, LimitChanges, LimitContext) ->
-    collect_grouped_changes(Stage, LimitChanges, LimitContext, #{normal => [], reverse => [], conditional => []}).
+    collect_grouped_changes(Stage, LimitChanges, LimitContext, #{}).
 
 collect_grouped_changes(_, [], _, Acc) ->
     {ok, Acc};
@@ -243,11 +259,16 @@ collect_grouped_changes(Stage, [LimitChange | Other], LimitContext, Acc0) ->
         Operation = unwrap(lim_context:get_operation(ContextType, LimitContext)),
         Group =
             case maps:get(finalization_behaviour, Config) of
-                #{Operation := F} when is_function(F, 1) -> conditional;
-                #{Operation := V} when V =:= normal orelse V =:= reverse -> V;
-                _ -> normal
+                #{Operation := {decision, _} = C} ->
+                    %% NOTE Distinct condition and use it as a suffix for operations
+                    Hash = base64:encode(crypto:hash(sha384, term_to_binary(C))),
+                    {conditional, Hash};
+                #{Operation := {value, reverse}} ->
+                    reverse;
+                _ ->
+                    normal
             end,
-        Acc1 = maps:update_with(Group, fun(Changes) -> [Change | Changes] end, Acc0),
+        Acc1 = maps:update_with(Group, fun(Changes) -> [Change | Changes] end, [Change], Acc0),
         unwrap(collect_grouped_changes(Stage, Other, LimitContext, Acc1))
     end).
 
@@ -558,85 +579,51 @@ unmarshal_limit_config(#domain_LimitConfigObject{
         finalization_behaviour = FinalizationBehaviour
     }
 }) ->
-    ContextType1 = unmarshal_context_type(ContextType),
     genlib_map:compact(#{
         id => ID,
         processor_type => ProcessorType,
         started_at => StartedAt,
         shard_size => ShardSize,
         time_range_type => unmarshal_time_range_type(TimeRangeType),
-        context_type => ContextType1,
+        context_type => unmarshal_context_type(ContextType),
         type => maybe_apply(Type, fun unmarshal_type/1),
         scope => maybe_apply(Scopes, fun unmarshal_scope/1),
         description => Description,
         op_behaviour => maybe_apply(OpBehaviour, fun unmarshal_op_behaviour/1),
         currency_conversion => CurrencyConversion =/= undefined,
-        finalization_behaviour => unmarshal_finalization_behaviour(FinalizationBehaviour, ContextType1)
+        finalization_behaviour => unmarshal_finalization_behaviour(FinalizationBehaviour)
     }).
 
-unmarshal_finalization_behaviour(undefined, _) ->
+unmarshal_finalization_behaviour(undefined) ->
     #{
-        invoice_payment => normal
+        invoice_payment => {value, normal}
     };
-unmarshal_finalization_behaviour(#limiter_config_LimitFinalizationBehaviour{invoice_payment = Selector}, ContextType) ->
+unmarshal_finalization_behaviour(#limiter_config_LimitFinalizationBehaviour{invoice_payment = Selector}) ->
     #{
-        invoice_payment => fun(LimitContext) ->
-            reduce_selector({ContextType, LimitContext}, Selector, normal)
-        end
+        invoice_payment => unmarshal_selector(Selector)
     }.
+
+unmarshal_selector({decision, #limiter_config_FinalizationBehaviourDecision{if_ = Predicate, then_ = Selector}}) ->
+    {decision, {finalization_behaviour_decision, unmarshal_predicate(Predicate), unmarshal_selector(Selector)}};
+unmarshal_selector({value, V}) ->
+    {value, unmarshal_finalization_behaviour_value(V)}.
 
 unmarshal_finalization_behaviour_value({reverse, #limiter_config_Reverse{}}) -> reverse;
 unmarshal_finalization_behaviour_value({normal, #limiter_config_Normal{}}) -> normal.
 
-reduce_selector(Ctx, {decision, Decision}, Default) ->
-    reduce_decision(Ctx, Decision, Default);
-reduce_selector(_, {value, Value}, _) ->
-    {ok, unmarshal_finalization_behaviour_value(Value)}.
+unmarshal_predicate({constant, Value}) ->
+    {constant, unmarshal_finalization_behaviour_value(Value)};
+unmarshal_predicate({is_not, Predicate}) ->
+    {is_not, unmarshal_predicate(Predicate)};
+unmarshal_predicate({Type, Predicates}) when Type =:= all_of orelse Type =:= any_of ->
+    {Type, lists:map(fun unmarshal_predicate/1, Predicates)};
+unmarshal_predicate({condition, Condition}) ->
+    {condition, unmarshal_finalization_behaviour_condition(Condition)}.
 
-reduce_decision(
-    Ctx,
-    #limiter_config_FinalizationBehaviourDecision{if_ = Predicate, then_ = Selector},
-    Default
+unmarshal_finalization_behaviour_condition(
+    {payment_session, #limiter_config_PaymentSessionRouteCondition{route_used = RouteUsed}}
 ) ->
-    case eval_predicate(Ctx, Predicate) of
-        {ok, true} -> reduce_selector(Ctx, Selector, Default);
-        {ok, false} -> {ok, Default};
-        {error, _} = Error -> Error
-    end.
-
-eval_predicate(_, {constant, V}) when is_boolean(V) ->
-    {ok, V};
-eval_predicate(Ctx, {condition, Condition}) ->
-    test_condition(Ctx, Condition);
-eval_predicate(Ctx, {is_not, Predicate}) ->
-    eval_predicate(Ctx, Predicate);
-eval_predicate(Ctx, {all_of, Predicates}) ->
-    eval_predicates(Ctx, Predicates, false);
-eval_predicate(Ctx, {any_of, Predicates}) ->
-    eval_predicates(Ctx, Predicates, true).
-
-eval_predicates(_, [], Fix) ->
-    {ok, not Fix};
-eval_predicates(Ctx, [Predicate | Predicates], Fix) ->
-    case eval_predicate(Ctx, Predicate) of
-        {ok, Fix} -> {ok, Fix};
-        {ok, _} -> eval_predicates(Ctx, Predicates, Fix);
-        {error, _} = Error -> Error
-    end.
-
-test_condition({ContextType, LimitContext}, #limiter_config_PaymentSessionRouteCondition{route_used = RouteUsed}) ->
-    do(fun() ->
-        SameProvider =
-            lim_context:get_value(ContextType, provider_id, LimitContext) =:=
-                lim_context:get_value(ContextType, session_provider_id, LimitContext),
-        SameTerminal =
-            lim_context:get_value(ContextType, terminal_id, LimitContext) =:=
-                lim_context:get_value(ContextType, session_terminal_id, LimitContext),
-        case RouteUsed of
-            true -> SameProvider andalso SameTerminal;
-            false -> not (SameProvider andalso SameTerminal)
-        end
-    end).
+    {payment_session_route, RouteUsed}.
 
 unmarshal_time_range_type({calendar, CalendarType}) ->
     {calendar, unmarshal_calendar_time_range_type(CalendarType)};
@@ -737,7 +724,13 @@ unmarshal_config_object_test() ->
         type => {turnover, number},
         scope => ordsets:from_list([party, shop, {destination_field, [<<"path">>, <<"to">>, <<"field">>]}]),
         description => <<"description">>,
-        currency_conversion => true
+        currency_conversion => true,
+        finalization_behaviour => #{
+            invoice_payment =>
+                {decision,
+                    {finalization_behaviour_decision, {is_not, {any_of, [{condition, {payment_session_route, false}}]}},
+                        {value, reverse}}}
+        }
     },
     Object = #domain_LimitConfigObject{
         ref = #domain_LimitConfigRef{id = <<"id">>},
@@ -757,7 +750,21 @@ unmarshal_config_object_test() ->
                 }}
             ]),
             description = <<"description">>,
-            currency_conversion = #limiter_config_CurrencyConversion{}
+            currency_conversion = #limiter_config_CurrencyConversion{},
+            finalization_behaviour = #limiter_config_LimitFinalizationBehaviour{
+                invoice_payment =
+                    {decision, #limiter_config_FinalizationBehaviourDecision{
+                        if_ =
+                            {is_not,
+                                {any_of, [
+                                    {condition,
+                                        {payment_session, #limiter_config_PaymentSessionRouteCondition{
+                                            route_used = false
+                                        }}}
+                                ]}},
+                        then_ = {value, {reverse, #limiter_config_Reverse{}}}
+                    }}
+            }
         }
     },
     ?assertEqual(Config, unmarshal_limit_config(Object)).
