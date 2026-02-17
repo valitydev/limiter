@@ -1,5 +1,8 @@
 -module(lim_turnover_processor).
 
+%% NOTE This disables elp's eqwalizer for this module
+-eqwalizer(ignore).
+
 -include_lib("limiter_proto/include/limproto_limiter_thrift.hrl").
 
 -behaviour(lim_config_machine).

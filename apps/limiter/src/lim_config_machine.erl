@@ -1,5 +1,8 @@
 -module(lim_config_machine).
 
+%% NOTE This disables elp's eqwalizer for this module
+-eqwalizer(ignore).
+
 -include_lib("limiter_proto/include/limproto_limiter_thrift.hrl").
 -include_lib("damsel/include/dmsl_domain_thrift.hrl").
 -include_lib("damsel/include/dmsl_limiter_config_thrift.hrl").
@@ -60,12 +63,17 @@
     scope => limit_scope(),
     description => description(),
     op_behaviour => op_behaviour(),
-    currency_conversion => currency_conversion()
+    currency_conversion => currency_conversion(),
+    finalization_behaviour => finalization_behaviour()
 }.
 
 -type op_behaviour() :: #{operation_type() := addition | subtraction}.
 -type operation_type() :: invoice_payment_refund.
 -type currency_conversion() :: boolean().
+-type finalization_behaviour_value() :: normal | reverse.
+-type finalization_behaviour() :: #{
+    invoice_payment := finalization_behaviour_value() | fun((lim_context()) -> finalization_behaviour_value())
+}.
 
 -type lim_id() :: limproto_limiter_thrift:'LimitID'().
 -type lim_version() :: dmsl_domain_thrift:'DataRevision'().
@@ -146,7 +154,8 @@ currency_conversion(_) ->
     {ok, [lim_liminator:limit_response()]} | {error, config_error() | {processor(), get_limit_error()}}.
 get_values(LimitChanges, LimitContext) ->
     do(fun() ->
-        Changes = unwrap(collect_changes(hold, LimitChanges, LimitContext)),
+        GroupedChanges = unwrap(collect_grouped_changes(hold, LimitChanges, LimitContext)),
+        Changes = flatten_grouped(GroupedChanges),
         Names = lists:map(fun lim_liminator:get_name/1, Changes),
         unwrap(lim_liminator:get_values(Names, LimitContext))
     end).
@@ -155,30 +164,45 @@ get_values(LimitChanges, LimitContext) ->
     {ok, [lim_liminator:limit_response()]} | {error, config_error() | {processor(), get_limit_error()}}.
 get_batch(OperationID, LimitChanges, LimitContext) ->
     do(fun() ->
-        unwrap(
-            OperationID,
-            lim_liminator:get(OperationID, unwrap(collect_changes(hold, LimitChanges, LimitContext)), LimitContext)
-        )
+        GroupedChanges = unwrap(collect_grouped_changes(hold, LimitChanges, LimitContext)),
+        GroupedResponses =
+            with_grouped_changes(GroupedChanges, fun(Group, Changes) ->
+                OperationIDForGroup = operation_id_for_group(OperationID, Group),
+                unwrap(lim_liminator:get(OperationIDForGroup, Changes, LimitContext))
+            end),
+        flatten_grouped(GroupedResponses)
     end).
 
 -spec hold_batch(operation_id(), lim_changes(), lim_context()) ->
     {ok, [lim_liminator:limit_response()]} | {error, config_error() | {processor(), hold_error()}}.
 hold_batch(OperationID, LimitChanges, LimitContext) ->
     do(fun() ->
-        unwrap(
-            OperationID,
-            lim_liminator:hold(OperationID, unwrap(collect_changes(hold, LimitChanges, LimitContext)), LimitContext)
-        )
+        GroupedChanges = unwrap(collect_grouped_changes(hold, LimitChanges, LimitContext)),
+        GroupedResponses =
+            with_grouped_changes(GroupedChanges, fun(Group, Changes) ->
+                OperationIDForGroup = operation_id_for_group(OperationID, Group),
+                unwrap(lim_liminator:hold(OperationIDForGroup, Changes, LimitContext))
+            end),
+        flatten_grouped(GroupedResponses)
     end).
 
 -spec commit_batch(operation_id(), lim_changes(), lim_context()) ->
     ok | {error, config_error() | {processor(), commit_error()}}.
 commit_batch(OperationID, LimitChanges, LimitContext) ->
     do(fun() ->
-        unwrap(
-            OperationID,
-            lim_liminator:commit(OperationID, unwrap(collect_changes(commit, LimitChanges, LimitContext)), LimitContext)
-        )
+        GroupedChanges = unwrap(collect_grouped_changes(hold, LimitChanges, LimitContext)),
+        _ =
+            with_grouped_changes(GroupedChanges, fun(Group, Changes) ->
+                OperationIDForGroup = operation_id_for_group(OperationID, Group),
+                %% FIXME Conditions for conditional must be same for it to be of same group!
+                case Group =:= reverse orelse (Group =:= conditional andalso false) of
+                    true ->
+                        unwrap(lim_liminator:rollback(OperationIDForGroup, Changes, LimitContext));
+                    false ->
+                        unwrap(lim_liminator:commit(OperationIDForGroup, Changes, LimitContext))
+                end
+            end),
+        ok
     end).
 
 -spec rollback_batch(operation_id(), lim_changes(), lim_context()) ->
@@ -187,17 +211,44 @@ rollback_batch(OperationID, LimitChanges, LimitContext) ->
     do(fun() ->
         unwrap(
             OperationID,
-            lim_liminator:rollback(OperationID, unwrap(collect_changes(hold, LimitChanges, LimitContext)), LimitContext)
+            lim_liminator:rollback(
+                OperationID, unwrap(collect_grouped_changes(hold, LimitChanges, LimitContext)), LimitContext
+            )
         )
     end).
 
-collect_changes(_Stage, [], _LimitContext) ->
-    {ok, []};
-collect_changes(Stage, [LimitChange = #limiter_LimitChange{id = ID, version = Version} | Other], LimitContext) ->
+operation_id_for_group(OperationID, normal) -> OperationID;
+operation_id_for_group(OperationID, reverse) -> <<OperationID, "/reverse">>;
+operation_id_for_group(OperationID, conditional) -> <<OperationID, "/conditional">>.
+
+with_grouped_changes(#{normal := _, reverse := _, conditional := _} = GroupedChanges, F) when
+    is_function(F, 2)
+->
+    maps:map(F, GroupedChanges).
+
+flatten_grouped(#{normal := N, reverse := R, conditional := C}) ->
+    lists:flatten([N, R, C]).
+
+collect_grouped_changes(Stage, LimitChanges, LimitContext) ->
+    collect_grouped_changes(Stage, LimitChanges, LimitContext, #{normal => [], reverse => [], conditional => []}).
+
+collect_grouped_changes(_, [], _, Acc) ->
+    {ok, Acc};
+collect_grouped_changes(Stage, [LimitChange | Other], LimitContext, Acc0) ->
     do(fun() ->
+        #limiter_LimitChange{id = ID, version = Version} = LimitChange,
         {Handler, Config} = unwrap(get_handler(ID, Version, LimitContext)),
         Change = unwrap(Handler, Handler:make_change(Stage, LimitChange, Config, LimitContext)),
-        [Change | unwrap(collect_changes(Stage, Other, LimitContext))]
+        ContextType = maps:get(context_type, Config),
+        Operation = unwrap(lim_context:get_operation(ContextType, LimitContext)),
+        Group =
+            case maps:get(finalization_behaviour, Config) of
+                #{Operation := F} when is_function(F, 1) -> conditional;
+                #{Operation := V} when V =:= normal orelse V =:= reverse -> V;
+                _ -> normal
+            end,
+        Acc1 = maps:update_with(Group, fun(Changes) -> [Change | Changes] end, Acc0),
+        unwrap(collect_grouped_changes(Stage, Other, LimitContext, Acc1))
     end).
 
 get_handler(ID, Version, LimitContext) ->
@@ -503,22 +554,89 @@ unmarshal_limit_config(#domain_LimitConfigObject{
         scopes = Scopes,
         description = Description,
         op_behaviour = OpBehaviour,
-        currency_conversion = CurrencyConversion
+        currency_conversion = CurrencyConversion,
+        finalization_behaviour = FinalizationBehaviour
     }
 }) ->
+    ContextType1 = unmarshal_context_type(ContextType),
     genlib_map:compact(#{
         id => ID,
         processor_type => ProcessorType,
         started_at => StartedAt,
         shard_size => ShardSize,
         time_range_type => unmarshal_time_range_type(TimeRangeType),
-        context_type => unmarshal_context_type(ContextType),
+        context_type => ContextType1,
         type => maybe_apply(Type, fun unmarshal_type/1),
         scope => maybe_apply(Scopes, fun unmarshal_scope/1),
         description => Description,
         op_behaviour => maybe_apply(OpBehaviour, fun unmarshal_op_behaviour/1),
-        currency_conversion => CurrencyConversion =/= undefined
+        currency_conversion => CurrencyConversion =/= undefined,
+        finalization_behaviour => unmarshal_finalization_behaviour(FinalizationBehaviour, ContextType1)
     }).
+
+unmarshal_finalization_behaviour(undefined, _) ->
+    #{
+        invoice_payment => normal
+    };
+unmarshal_finalization_behaviour(#limiter_config_LimitFinalizationBehaviour{invoice_payment = Selector}, ContextType) ->
+    #{
+        invoice_payment => fun(LimitContext) ->
+            reduce_selector({ContextType, LimitContext}, Selector, normal)
+        end
+    }.
+
+unmarshal_finalization_behaviour_value({reverse, #limiter_config_Reverse{}}) -> reverse;
+unmarshal_finalization_behaviour_value({normal, #limiter_config_Normal{}}) -> normal.
+
+reduce_selector(Ctx, {decision, Decision}, Default) ->
+    reduce_decision(Ctx, Decision, Default);
+reduce_selector(_, {value, Value}, _) ->
+    {ok, unmarshal_finalization_behaviour_value(Value)}.
+
+reduce_decision(
+    Ctx,
+    #limiter_config_FinalizationBehaviourDecision{if_ = Predicate, then_ = Selector},
+    Default
+) ->
+    case eval_predicate(Ctx, Predicate) of
+        {ok, true} -> reduce_selector(Ctx, Selector, Default);
+        {ok, false} -> {ok, Default};
+        {error, _} = Error -> Error
+    end.
+
+eval_predicate(_, {constant, V}) when is_boolean(V) ->
+    {ok, V};
+eval_predicate(Ctx, {condition, Condition}) ->
+    test_condition(Ctx, Condition);
+eval_predicate(Ctx, {is_not, Predicate}) ->
+    eval_predicate(Ctx, Predicate);
+eval_predicate(Ctx, {all_of, Predicates}) ->
+    eval_predicates(Ctx, Predicates, false);
+eval_predicate(Ctx, {any_of, Predicates}) ->
+    eval_predicates(Ctx, Predicates, true).
+
+eval_predicates(_, [], Fix) ->
+    {ok, not Fix};
+eval_predicates(Ctx, [Predicate | Predicates], Fix) ->
+    case eval_predicate(Ctx, Predicate) of
+        {ok, Fix} -> {ok, Fix};
+        {ok, _} -> eval_predicates(Ctx, Predicates, Fix);
+        {error, _} = Error -> Error
+    end.
+
+test_condition({ContextType, LimitContext}, #limiter_config_PaymentSessionRouteCondition{route_used = RouteUsed}) ->
+    do(fun() ->
+        SameProvider =
+            lim_context:get_value(ContextType, provider_id, LimitContext) =:=
+                lim_context:get_value(ContextType, session_provider_id, LimitContext),
+        SameTerminal =
+            lim_context:get_value(ContextType, terminal_id, LimitContext) =:=
+                lim_context:get_value(ContextType, session_terminal_id, LimitContext),
+        case RouteUsed of
+            true -> SameProvider andalso SameTerminal;
+            false -> not (SameProvider andalso SameTerminal)
+        end
+    end).
 
 unmarshal_time_range_type({calendar, CalendarType}) ->
     {calendar, unmarshal_calendar_time_range_type(CalendarType)};
