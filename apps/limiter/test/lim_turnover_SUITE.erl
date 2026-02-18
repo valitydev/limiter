@@ -173,8 +173,8 @@ groups() ->
         {finalization_behaviour, [], [
             batch_with_invertable_rollback_ok,
             batch_with_invertable_rollback_with_session_ok,
-batch_with_invertable_commit_ok,
-batch_with_invertable_commit_with_session_ok
+            batch_with_invertable_commit_ok,
+            batch_with_invertable_commit_with_session_ok
         ]}
     ].
 
