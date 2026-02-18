@@ -20,7 +20,8 @@ services:
         condition: service_healthy
 
   dmt:
-    image: ghcr.io/valitydev/dominant-v2:sha-90f5fa2
+    # TODO Upgrade to new image in registry
+    image: dominant-v2
     command: /opt/dmt/bin/dmt foreground
     healthcheck:
       test: "/opt/dmt/bin/dmt ping"

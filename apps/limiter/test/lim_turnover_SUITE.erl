@@ -76,6 +76,11 @@
 -export([batch_commit_negative_less_ok/1]).
 -export([batch_commit_negative_more_ok/1]).
 
+-export([batch_with_invertable_rollback_ok/1]).
+-export([batch_with_invertable_rollback_with_session_ok/1]).
+-export([batch_with_invertable_commit_ok/1]).
+-export([batch_with_invertable_commit_with_session_ok/1]).
+
 -type group_name() :: atom().
 -type test_case_name() :: atom().
 
@@ -87,7 +92,8 @@ all() ->
         {group, default},
         {group, withdrawals},
         {group, cashless},
-        {group, idempotency}
+        {group, idempotency},
+        {group, finalization_behaviour}
     ].
 
 -spec groups() -> [{atom(), list(), [test_case_name()]}].
@@ -163,6 +169,12 @@ groups() ->
             full_commit_processes_idempotently,
             partial_commit_processes_idempotently,
             rollback_processes_idempotently
+        ]},
+        {finalization_behaviour, [], [
+            batch_with_invertable_rollback_ok,
+            batch_with_invertable_rollback_with_session_ok,
+batch_with_invertable_commit_ok,
+batch_with_invertable_commit_with_session_ok
         ]}
     ].
 
@@ -985,6 +997,96 @@ batch_commit_negative_more_ok(C) ->
         Request, Context, ?config(client, C)
     ).
 
+%% Finalization behaviour group
+
+-spec batch_with_invertable_rollback_ok(config()) -> _.
+batch_with_invertable_rollback_ok(C) ->
+    Context0 = ?payproc_ctx_payment(?string, ?string, ?cash(10), ?cash(10), undefined),
+    ?LIMIT_REQUEST(_RequestID, _Changes) = Request0 = construct_request_with_invertable(C),
+    ok = hold_and_assert_batch_with_invertable({1, 1, 10}, Request0, Context0, C),
+    Context1 = ?payproc_ctx_payment(?string, ?string, ?cash(10), ?cash(10), undefined),
+    ok = lim_client:rollback_batch(Request0, Context1, ?config(client, C)),
+    ok = assert_values_with_invertable({0, 0, 0}, Request0, Context1, C).
+
+-spec batch_with_invertable_rollback_with_session_ok(config()) -> _.
+batch_with_invertable_rollback_with_session_ok(C) ->
+    Context0 = ?payproc_ctx_payment(?string, ?string, ?cash(10), ?cash(10), undefined),
+    ?LIMIT_REQUEST(_RequestID, _Changes) = Request0 = construct_request_with_invertable(C),
+    ok = hold_and_assert_batch_with_invertable({1, 1, 10}, Request0, Context0, C),
+    Context1 = ?payproc_ctx_payment(?string, ?string, ?cash(10), ?cash(10), ?payproc_ctx_session),
+    ok = lim_client:rollback_batch(Request0, Context1, ?config(client, C)),
+    ok = assert_values_with_invertable({1, 0, 0}, Request0, Context1, C).
+
+-spec batch_with_invertable_commit_ok(config()) -> _.
+batch_with_invertable_commit_ok(C) ->
+    Context0 = ?payproc_ctx_payment(?string, ?string, ?cash(10), ?cash(10), undefined),
+    ?LIMIT_REQUEST(_RequestID, _Changes) = Request0 = construct_request_with_invertable(C),
+    ok = hold_and_assert_batch_with_invertable({1, 1, 10}, Request0, Context0, C),
+    Context1 = ?payproc_ctx_payment(?string, ?string, ?cash(10), ?cash(10), undefined),
+    ok = lim_client:commit_batch(Request0, Context1, ?config(client, C)),
+    ok = assert_values_with_invertable({1, 1, 10}, Request0, Context1, C).
+
+-spec batch_with_invertable_commit_with_session_ok(config()) -> _.
+batch_with_invertable_commit_with_session_ok(C) ->
+    Context0 = ?payproc_ctx_payment(?string, ?string, ?cash(10), ?cash(10), undefined),
+    ?LIMIT_REQUEST(_RequestID, _Changes) = Request0 = construct_request_with_invertable(C),
+    ok = hold_and_assert_batch_with_invertable({1, 1, 10}, Request0, Context0, C),
+    Context1 = ?payproc_ctx_payment(?string, ?string, ?cash(10), ?cash(10), ?payproc_ctx_session),
+    ok = lim_client:commit_batch(Request0, Context1, ?config(client, C)),
+    ok = assert_values_with_invertable({0, 1, 10}, Request0, Context1, C).
+
+construct_request_with_invertable(C) ->
+    ID = ?config(id, C),
+    {ID0, Version0} = configure_limit(
+        ?time_range_month(),
+        ?scopes([?scope_provider(), ?scope_payment_tool()]),
+        ?turnover_metric_number(),
+        undefined,
+        genlib:format("~s/~B", [ID, 0]),
+        {invertable, {session_presence, #limiter_config_Inversed{}}},
+        C
+    ),
+    {ID1, Version1} = configure_limit(
+        ?time_range_month(),
+        ?scopes([?scope_provider(), ?scope_payment_tool()]),
+        ?turnover_metric_number(),
+        undefined,
+        genlib:format("~s/~B", [ID, 1]),
+        C
+    ),
+    {ID2, Version2} = configure_limit(
+        ?time_range_month(),
+        ?scopes([?scope_provider(), ?scope_payment_tool()]),
+        ?turnover_metric_amount(<<"RUB">>),
+        undefined,
+        genlib:format("~s/~B", [ID, 2]),
+        C
+    ),
+    ?LIMIT_REQUEST(ID, [
+        ?LIMIT_CHANGE(ID0, Version0),
+        ?LIMIT_CHANGE(ID1, Version1),
+        ?LIMIT_CHANGE(ID2, Version2)
+    ]).
+
+hold_and_assert_batch_with_invertable({Value0, Value1, Value2}, Request0, Context, C) ->
+    {ok, LimitStats} = lim_client:hold_batch(Request0, Context, ?config(client, C)),
+    %% NOTE Split operations for invertablity can break order of items in
+    %% response and mismatch it for limit changes provided in request.
+    [LimitState0, LimitState1, LimitState2] = lists:sort(LimitStats),
+    ?assertEqual(Value0, LimitState0#limiter_Limit.amount),
+    ?assertEqual(Value1, LimitState1#limiter_Limit.amount),
+    ?assertEqual(Value2, LimitState2#limiter_Limit.amount),
+    {ok, [LimitState0 | [LimitState1 | [LimitState2]]]} = lim_client:get_values(Request0, Context, ?config(client, C)),
+    ok.
+
+assert_values_with_invertable({Value0, Value1, Value2}, Request0, Context, C) ->
+    {ok, LimitStats} = lim_client:get_values(Request0, Context, ?config(client, C)),
+    [LimitState0, LimitState1, LimitState2] = lists:sort(LimitStats),
+    ?assertEqual(Value0, LimitState0#limiter_Limit.amount),
+    ?assertEqual(Value1, LimitState1#limiter_Limit.amount),
+    ?assertEqual(Value2, LimitState2#limiter_Limit.amount),
+    ok.
+
 %%
 
 hold_and_assert_batch(Value, Request0, Context, C) ->
@@ -1029,7 +1131,10 @@ configure_limit(TimeRange, Scopes, Metric, C) ->
 configure_limit(TimeRange, Scopes, Metric, CurrencyConversion, C) ->
     configure_limit(TimeRange, Scopes, Metric, CurrencyConversion, ?config(id, C), C).
 
-configure_limit(TimeRange, Scopes, Metric, CurrencyConversion, ID, C) when is_list(Scopes) ->
+configure_limit(TimeRange, Scopes, Metric, CurrencyConversion, ID, C) ->
+    configure_limit(TimeRange, Scopes, Metric, CurrencyConversion, ID, {normal, #limiter_config_Normal{}}, C).
+
+configure_limit(TimeRange, Scopes, Metric, CurrencyConversion, ID, FinalizationBehaviour, C) when is_list(Scopes) ->
     ContextType =
         case get_group_name(C) of
             withdrawals -> ?ctx_type_wthdproc();
@@ -1045,7 +1150,8 @@ configure_limit(TimeRange, Scopes, Metric, CurrencyConversion, ID, C) when is_li
         scopes = Scopes,
         description = <<"Description">>,
         op_behaviour = ?op_behaviour(?op_subtraction()),
-        currency_conversion = CurrencyConversion
+        currency_conversion = CurrencyConversion,
+        finalization_behaviour = FinalizationBehaviour
     }).
 
 create_limit_config(ID, #limiter_config_LimitConfig{} = LimitConfig) ->

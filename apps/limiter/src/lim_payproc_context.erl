@@ -218,7 +218,7 @@ get_terminal_id(_, _CtxInvoice) ->
     {error, notfound}.
 
 get_session(invoice_payment, ?INVOICE_PAYMENT_SESSION(Session)) ->
-    Session;
+    {ok, Session};
 get_session(_, _CtxInvoice) ->
     {error, notfound}.
 

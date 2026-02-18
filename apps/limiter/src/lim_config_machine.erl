@@ -67,7 +67,7 @@
 -type op_behaviour() :: #{operation_type() := addition | subtraction}.
 -type operation_type() :: invoice_payment_refund.
 -type currency_conversion() :: boolean().
--type finalization_behaviour() :: normal | {invertable, {session_presence, inversed}}.
+-type finalization_behaviour() :: normal | {invertable, session_presence}.
 
 -type lim_id() :: limproto_limiter_thrift:'LimitID'().
 -type lim_version() :: dmsl_domain_thrift:'DataRevision'().
@@ -149,7 +149,7 @@ currency_conversion(_) ->
 get_values(LimitChanges, LimitContext) ->
     do(fun() ->
         GroupedChanges = unwrap(collect_grouped_changes(hold, LimitChanges, LimitContext)),
-        Changes = flatten_grouped(GroupedChanges),
+        Changes = lists:flatten(maps:values(GroupedChanges)),
         Names = lists:map(fun lim_liminator:get_name/1, Changes),
         unwrap(lim_liminator:get_values(Names, LimitContext))
     end).
@@ -160,11 +160,14 @@ get_batch(OperationID, LimitChanges, LimitContext) ->
     do(fun() ->
         GroupedChanges = unwrap(collect_grouped_changes(hold, LimitChanges, LimitContext)),
         GroupedResponses =
-            with_grouped_changes(GroupedChanges, fun(Group, Changes) ->
-                OperationIDForGroup = operation_id_for_group(OperationID, Group),
-                unwrap(OperationID, lim_liminator:get(OperationIDForGroup, Changes, LimitContext))
-            end),
-        flatten_grouped(GroupedResponses)
+            maps:map(
+                fun(Group, Changes) ->
+                    OperationIDForGroup = operation_id_for_group(OperationID, Group),
+                    unwrap(OperationID, lim_liminator:get(OperationIDForGroup, Changes, LimitContext))
+                end,
+                GroupedChanges
+            ),
+        lists:flatten(maps:values(GroupedResponses))
     end).
 
 -spec hold_batch(operation_id(), lim_changes(), lim_context()) ->
@@ -174,11 +177,14 @@ hold_batch(OperationID, LimitChanges, LimitContext) ->
     do(fun() ->
         GroupedChanges = unwrap(collect_grouped_changes(hold, LimitChanges, LimitContext)),
         GroupedResponses =
-            with_grouped_changes(GroupedChanges, fun(Group, Changes) ->
-                OperationIDForGroup = operation_id_for_group(OperationID, Group),
-                unwrap(OperationID, lim_liminator:hold(OperationIDForGroup, Changes, LimitContext))
-            end),
-        flatten_grouped(GroupedResponses)
+            maps:map(
+                fun(Group, Changes) ->
+                    OperationIDForGroup = operation_id_for_group(OperationID, Group),
+                    unwrap(OperationID, lim_liminator:hold(OperationIDForGroup, Changes, LimitContext))
+                end,
+                GroupedChanges
+            ),
+        lists:flatten(maps:values(GroupedResponses))
     end).
 
 -spec commit_batch(operation_id(), lim_changes(), lim_context()) ->
@@ -188,19 +194,22 @@ commit_batch(OperationID, LimitChanges, LimitContext) ->
     do(fun() ->
         GroupedChanges = unwrap(collect_grouped_changes(commit, LimitChanges, LimitContext)),
         _ =
-            with_grouped_changes(GroupedChanges, fun(Group, Changes) ->
-                unwrap(
-                    OperationID,
-                    finalize(
+            maps:map(
+                fun(Group, Changes) ->
+                    unwrap(
                         OperationID,
-                        Group,
-                        Changes,
-                        LimitContext,
-                        fun lim_liminator:commit/3,
-                        fun lim_liminator:rollback/3
+                        finalize(
+                            OperationID,
+                            Group,
+                            Changes,
+                            LimitContext,
+                            fun lim_liminator:commit/3,
+                            fun lim_liminator:rollback/3
+                        )
                     )
-                )
-            end),
+                end,
+                GroupedChanges
+            ),
         ok
     end).
 
@@ -212,19 +221,22 @@ rollback_batch(OperationID, LimitChanges, LimitContext) ->
     do(fun() ->
         GroupedChanges = unwrap(collect_grouped_changes(hold, LimitChanges, LimitContext)),
         _ =
-            with_grouped_changes(GroupedChanges, fun(Group, Changes) ->
-                unwrap(
-                    OperationID,
-                    finalize(
+            maps:map(
+                fun(Group, Changes) ->
+                    unwrap(
                         OperationID,
-                        Group,
-                        Changes,
-                        LimitContext,
-                        fun lim_liminator:rollback/3,
-                        fun lim_liminator:commit/3
+                        finalize(
+                            OperationID,
+                            Group,
+                            Changes,
+                            LimitContext,
+                            fun lim_liminator:rollback/3,
+                            fun lim_liminator:commit/3
+                        )
                     )
-                )
-            end),
+                end,
+                GroupedChanges
+            ),
         ok
     end).
 
@@ -255,15 +267,7 @@ resolve_group_finalization_behaviour({ContextType, {invertable, session_presence
 operation_id_for_group(OperationID, {_, normal}) ->
     OperationID;
 operation_id_for_group(OperationID, {_, {invertable, session_presence}}) ->
-    <<OperationID, "/invertable/session-presence">>.
-
-with_grouped_changes(GroupedChanges, F) when
-    is_function(F, 2)
-->
-    maps:map(F, GroupedChanges).
-
-flatten_grouped(Grouped) ->
-    lists:flatten(maps:values(Grouped)).
+    <<OperationID/binary, "/inverted/session-presence">>.
 
 collect_grouped_changes(Stage, LimitChanges, LimitContext) ->
     collect_grouped_changes(Stage, LimitChanges, LimitContext, #{}).
