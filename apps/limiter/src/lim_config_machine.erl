@@ -1,8 +1,5 @@
 -module(lim_config_machine).
 
-%% NOTE This disables elp's eqwalizer for this module
--eqwalizer(ignore).
-
 -include_lib("limiter_proto/include/limproto_limiter_thrift.hrl").
 -include_lib("damsel/include/dmsl_domain_thrift.hrl").
 -include_lib("damsel/include/dmsl_limiter_config_thrift.hrl").
@@ -70,19 +67,7 @@
 -type op_behaviour() :: #{operation_type() := addition | subtraction}.
 -type operation_type() :: invoice_payment_refund.
 -type currency_conversion() :: boolean().
--type finalization_behaviour_condition() :: {payment_session_route, RouteUsed :: boolean()}.
--type finalization_behaviour_predicate() ::
-    {constant, finalization_behaviour_predicate()}
-    | {condition, finalization_behaviour_condition()}
-    | {is_not, finalization_behaviour_predicate()}
-    | {all_of, finalization_behaviour_predicate()}
-    | {any_of, finalization_behaviour_predicate()}.
--type finalization_behaviour_decision() ::
-    {finalization_behaviour_decision, finalization_behaviour_predicate(), finalization_behaviour_selector()}.
--type finalization_behaviour_selector() :: {value, normal | reverse} | {decision, finalization_behaviour_decision()}.
--type finalization_behaviour() :: #{
-    invoice_payment := finalization_behaviour_selector()
-}.
+-type finalization_behaviour() :: normal | {invertable, {session_presence, inversed}}.
 
 -type lim_id() :: limproto_limiter_thrift:'LimitID'().
 -type lim_version() :: dmsl_domain_thrift:'DataRevision'().
@@ -183,7 +168,8 @@ get_batch(OperationID, LimitChanges, LimitContext) ->
     end).
 
 -spec hold_batch(operation_id(), lim_changes(), lim_context()) ->
-    {ok, [lim_liminator:limit_response()]} | {error, config_error() | {processor(), hold_error()}}.
+    {ok, [lim_liminator:limit_response()]}
+    | {error, config_error() | {processor(), hold_error()} | {operation_id(), lim_liminator:invalid_request_error()}}.
 hold_batch(OperationID, LimitChanges, LimitContext) ->
     do(fun() ->
         GroupedChanges = unwrap(collect_grouped_changes(hold, LimitChanges, LimitContext)),
@@ -196,46 +182,80 @@ hold_batch(OperationID, LimitChanges, LimitContext) ->
     end).
 
 -spec commit_batch(operation_id(), lim_changes(), lim_context()) ->
-    ok | {error, config_error() | {processor(), commit_error()}}.
+    ok
+    | {error, config_error() | {processor(), commit_error()} | {operation_id(), lim_liminator:invalid_request_error()}}.
 commit_batch(OperationID, LimitChanges, LimitContext) ->
     do(fun() ->
         GroupedChanges = unwrap(collect_grouped_changes(commit, LimitChanges, LimitContext)),
         _ =
             with_grouped_changes(GroupedChanges, fun(Group, Changes) ->
-                OperationIDForGroup = operation_id_for_group(OperationID, Group),
-                %% FIXME Conditions for conditional must be same for it to be of same group!
-                case Group =:= reverse orelse (Group =:= conditional andalso false) of
-                    true ->
-                        unwrap(OperationID, lim_liminator:rollback(OperationIDForGroup, Changes, LimitContext));
-                    false ->
-                        unwrap(OperationID, lim_liminator:commit(OperationIDForGroup, Changes, LimitContext))
-                end
+                unwrap(
+                    OperationID,
+                    finalize(
+                        OperationID,
+                        Group,
+                        Changes,
+                        LimitContext,
+                        fun lim_liminator:commit/3,
+                        fun lim_liminator:rollback/3
+                    )
+                )
             end),
         ok
     end).
 
 -spec rollback_batch(operation_id(), lim_changes(), lim_context()) ->
-    ok | {error, config_error() | {processor(), rollback_error()}}.
+    ok
+    | {error,
+        config_error() | {processor(), rollback_error()} | {operation_id(), lim_liminator:invalid_request_error()}}.
 rollback_batch(OperationID, LimitChanges, LimitContext) ->
     do(fun() ->
         GroupedChanges = unwrap(collect_grouped_changes(hold, LimitChanges, LimitContext)),
         _ =
             with_grouped_changes(GroupedChanges, fun(Group, Changes) ->
-                OperationIDForGroup = operation_id_for_group(OperationID, Group),
-                %% FIXME Conditions for conditional must be same for it to be of same group!
-                case Group =:= reverse orelse (Group =:= conditional andalso false) of
-                    true ->
-                        unwrap(OperationID, lim_liminator:commit(OperationIDForGroup, Changes, LimitContext));
-                    false ->
-                        unwrap(OperationID, lim_liminator:rollback(OperationIDForGroup, Changes, LimitContext))
-                end
+                unwrap(
+                    OperationID,
+                    finalize(
+                        OperationID,
+                        Group,
+                        Changes,
+                        LimitContext,
+                        fun lim_liminator:rollback/3,
+                        fun lim_liminator:commit/3
+                    )
+                )
             end),
         ok
     end).
 
-operation_id_for_group(OperationID, normal) -> OperationID;
-operation_id_for_group(OperationID, reverse) -> <<OperationID, "/reverse">>;
-operation_id_for_group(OperationID, {conditional, Hash}) -> <<OperationID, "/conditional/", Hash/binary>>.
+finalize(OperationID, Group, Changes, LimitContext, NormalFun, InvertedFun) ->
+    OperationIDForGroup = operation_id_for_group(OperationID, Group),
+    case resolve_group_finalization_behaviour(Group, LimitContext) of
+        normal ->
+            NormalFun(OperationIDForGroup, Changes, LimitContext);
+        inverted ->
+            InvertedFun(OperationIDForGroup, Changes, LimitContext)
+    end.
+
+resolve_group_finalization_behaviour({_, normal}, _) ->
+    normal;
+resolve_group_finalization_behaviour({ContextType, {invertable, session_presence}}, LimitContext) ->
+    case lim_context:get_value(ContextType, session, LimitContext) of
+        {ok, undefined} ->
+            normal;
+        {ok, _Some} ->
+            inverted;
+        {error, {unsupported, _}} ->
+            %% If context doesn't support session value then we treat it as normal finalization
+            normal;
+        {error, notfound} ->
+            normal
+    end.
+
+operation_id_for_group(OperationID, {_, normal}) ->
+    OperationID;
+operation_id_for_group(OperationID, {_, {invertable, session_presence}}) ->
+    <<OperationID, "/invertable/session-presence">>.
 
 with_grouped_changes(GroupedChanges, F) when
     is_function(F, 2)
@@ -255,19 +275,8 @@ collect_grouped_changes(Stage, [LimitChange | Other], LimitContext, Acc0) ->
         #limiter_LimitChange{id = ID, version = Version} = LimitChange,
         {Handler, Config} = unwrap(get_handler(ID, Version, LimitContext)),
         Change = unwrap(Handler, Handler:make_change(Stage, LimitChange, Config, LimitContext)),
-        ContextType = maps:get(context_type, Config),
-        Operation = unwrap(lim_context:get_operation(ContextType, LimitContext)),
-        Group =
-            case maps:get(finalization_behaviour, Config) of
-                #{Operation := {decision, _} = C} ->
-                    %% NOTE Distinct condition and use it as a suffix for operations
-                    Hash = base64:encode(crypto:hash(sha384, term_to_binary(C))),
-                    {conditional, Hash};
-                #{Operation := {value, reverse}} ->
-                    reverse;
-                _ ->
-                    normal
-            end,
+        #{context_type := ContextType, finalization_behaviour := FinalizationBehaviour} = Config,
+        Group = {ContextType, FinalizationBehaviour},
         Acc1 = maps:update_with(Group, fun(Changes) -> [Change | Changes] end, [Change], Acc0),
         unwrap(collect_grouped_changes(Stage, Other, LimitContext, Acc1))
     end).
@@ -595,35 +604,11 @@ unmarshal_limit_config(#domain_LimitConfigObject{
     }).
 
 unmarshal_finalization_behaviour(undefined) ->
-    #{
-        invoice_payment => {value, normal}
-    };
-unmarshal_finalization_behaviour(#limiter_config_LimitFinalizationBehaviour{invoice_payment = Selector}) ->
-    #{
-        invoice_payment => unmarshal_selector(Selector)
-    }.
-
-unmarshal_selector({decision, #limiter_config_FinalizationBehaviourDecision{if_ = Predicate, then_ = Selector}}) ->
-    {decision, {finalization_behaviour_decision, unmarshal_predicate(Predicate), unmarshal_selector(Selector)}};
-unmarshal_selector({value, V}) ->
-    {value, unmarshal_finalization_behaviour_value(V)}.
-
-unmarshal_finalization_behaviour_value({reverse, #limiter_config_Reverse{}}) -> reverse;
-unmarshal_finalization_behaviour_value({normal, #limiter_config_Normal{}}) -> normal.
-
-unmarshal_predicate({constant, Value}) ->
-    {constant, unmarshal_finalization_behaviour_value(Value)};
-unmarshal_predicate({is_not, Predicate}) ->
-    {is_not, unmarshal_predicate(Predicate)};
-unmarshal_predicate({Type, Predicates}) when Type =:= all_of orelse Type =:= any_of ->
-    {Type, lists:map(fun unmarshal_predicate/1, Predicates)};
-unmarshal_predicate({condition, Condition}) ->
-    {condition, unmarshal_finalization_behaviour_condition(Condition)}.
-
-unmarshal_finalization_behaviour_condition(
-    {payment_session, #limiter_config_PaymentSessionRouteCondition{route_used = RouteUsed}}
-) ->
-    {payment_session_route, RouteUsed}.
+    normal;
+unmarshal_finalization_behaviour({normal, #limiter_config_Normal{}}) ->
+    normal;
+unmarshal_finalization_behaviour({invertable, {session_presence, #limiter_config_Inversed{}}}) ->
+    {invertable, session_presence}.
 
 unmarshal_time_range_type({calendar, CalendarType}) ->
     {calendar, unmarshal_calendar_time_range_type(CalendarType)};
@@ -751,20 +736,7 @@ unmarshal_config_object_test() ->
             ]),
             description = <<"description">>,
             currency_conversion = #limiter_config_CurrencyConversion{},
-            finalization_behaviour = #limiter_config_LimitFinalizationBehaviour{
-                invoice_payment =
-                    {decision, #limiter_config_FinalizationBehaviourDecision{
-                        if_ =
-                            {is_not,
-                                {any_of, [
-                                    {condition,
-                                        {payment_session, #limiter_config_PaymentSessionRouteCondition{
-                                            route_used = false
-                                        }}}
-                                ]}},
-                        then_ = {value, {reverse, #limiter_config_Reverse{}}}
-                    }}
-            }
+            finalization_behaviour = {invertable, {session_presence, #limiter_config_Inversed{}}}
         }
     },
     ?assertEqual(Config, unmarshal_limit_config(Object)).

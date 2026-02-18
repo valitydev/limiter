@@ -82,10 +82,8 @@ get_value(provider_id, Operation, Context) ->
     get_provider_id(Operation, Context);
 get_value(terminal_id, Operation, Context) ->
     get_terminal_id(Operation, Context);
-get_value(session_provider_id, Operation, Context) ->
-    get_session_provider_id(Operation, Context);
-get_value(session_terminal_id, Operation, Context) ->
-    get_session_terminal_id(Operation, Context);
+get_value(session, Operation, Context) ->
+    get_session(Operation, Context);
 get_value(payer_contact_email, Operation, Context) ->
     get_payer_contact_email(Operation, Context);
 get_value(sender, Operation, Context) ->
@@ -133,9 +131,9 @@ get_value(ValueName, _Operation, _Context) ->
     }
 }).
 
--define(INVOICE_PAYMENT_SESSION_ROUTE(V), #context_payproc_Context{
+-define(INVOICE_PAYMENT_SESSION(V), #context_payproc_Context{
     invoice = #context_payproc_Invoice{
-        session = #context_payproc_InvoicePaymentSession{route = V = #base_Route{}}
+        session = V
     }
 }).
 
@@ -219,14 +217,9 @@ get_terminal_id(Operation, ?INVOICE_PAYMENT_ROUTE(Route)) when
 get_terminal_id(_, _CtxInvoice) ->
     {error, notfound}.
 
-get_session_provider_id(invoice_payment, ?INVOICE_PAYMENT_SESSION_ROUTE(Route)) ->
-    lim_context_utils:route_provider_id(Route);
-get_session_provider_id(_, _CtxInvoice) ->
-    {error, notfound}.
-
-get_session_terminal_id(invoice_payment, ?INVOICE_PAYMENT_SESSION_ROUTE(Route)) ->
-    lim_context_utils:route_terminal_id(Route);
-get_session_terminal_id(_, _CtxInvoice) ->
+get_session(invoice_payment, ?INVOICE_PAYMENT_SESSION(Session)) ->
+    Session;
+get_session(_, _CtxInvoice) ->
     {error, notfound}.
 
 get_payer_contact_email(Operation, ?INVOICE_PAYMENT(Payment)) when
