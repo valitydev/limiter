@@ -710,12 +710,7 @@ unmarshal_config_object_test() ->
         scope => ordsets:from_list([party, shop, {destination_field, [<<"path">>, <<"to">>, <<"field">>]}]),
         description => <<"description">>,
         currency_conversion => true,
-        finalization_behaviour => #{
-            invoice_payment =>
-                {decision,
-                    {finalization_behaviour_decision, {is_not, {any_of, [{condition, {payment_session_route, false}}]}},
-                        {value, reverse}}}
-        }
+        finalization_behaviour => {invertable, session_presence}
     },
     Object = #domain_LimitConfigObject{
         ref = #domain_LimitConfigRef{id = <<"id">>},
