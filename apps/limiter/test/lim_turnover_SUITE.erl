@@ -789,34 +789,10 @@ commit_with_destination_field_scope_ok(C) ->
 
 construct_request(C) ->
     ID = ?config(id, C),
-    {ID0, Version0} = configure_limit(
-        ?time_range_month(),
-        ?scopes([?scope_provider(), ?scope_payment_tool()]),
-        ?turnover_metric_amount(<<"RUB">>),
-        undefined,
-        genlib:format("~s/~B", [ID, 0]),
-        C
-    ),
-    {ID1, Version1} = configure_limit(
-        ?time_range_month(),
-        ?scopes([?scope_provider(), ?scope_payment_tool()]),
-        ?turnover_metric_amount(<<"RUB">>),
-        undefined,
-        genlib:format("~s/~B", [ID, 1]),
-        C
-    ),
-    {ID2, Version2} = configure_limit(
-        ?time_range_month(),
-        ?scopes([?scope_provider(), ?scope_payment_tool()]),
-        ?turnover_metric_amount(<<"RUB">>),
-        undefined,
-        genlib:format("~s/~B", [ID, 2]),
-        C
-    ),
     ?LIMIT_REQUEST(ID, [
-        ?LIMIT_CHANGE(ID0, Version0),
-        ?LIMIT_CHANGE(ID1, Version1),
-        ?LIMIT_CHANGE(ID2, Version2)
+        construct_for_limit_change(ID, 0, ?turnover_metric_amount(<<"RUB">>), undefined, C),
+        construct_for_limit_change(ID, 1, ?turnover_metric_amount(<<"RUB">>), undefined, C),
+        construct_for_limit_change(ID, 2, ?turnover_metric_amount(<<"RUB">>), undefined, C)
     ]).
 
 -spec batch_hold_ok(config()) -> _.
@@ -1037,35 +1013,10 @@ batch_with_invertable_commit_with_session_ok(C) ->
 
 construct_request_with_invertable(C) ->
     ID = ?config(id, C),
-    {ID0, Version0} = configure_limit(
-        ?time_range_month(),
-        ?scopes([?scope_provider(), ?scope_payment_tool()]),
-        ?turnover_metric_number(),
-        undefined,
-        genlib:format("~s/~B", [ID, 0]),
-        {invertable, {session_presence, #limiter_config_Inversed{}}},
-        C
-    ),
-    {ID1, Version1} = configure_limit(
-        ?time_range_month(),
-        ?scopes([?scope_provider(), ?scope_payment_tool()]),
-        ?turnover_metric_number(),
-        undefined,
-        genlib:format("~s/~B", [ID, 1]),
-        C
-    ),
-    {ID2, Version2} = configure_limit(
-        ?time_range_month(),
-        ?scopes([?scope_provider(), ?scope_payment_tool()]),
-        ?turnover_metric_amount(<<"RUB">>),
-        undefined,
-        genlib:format("~s/~B", [ID, 2]),
-        C
-    ),
     ?LIMIT_REQUEST(ID, [
-        ?LIMIT_CHANGE(ID0, Version0),
-        ?LIMIT_CHANGE(ID1, Version1),
-        ?LIMIT_CHANGE(ID2, Version2)
+        construct_for_limit_change(ID, 0, ?turnover_metric_number(), ?finalization_behaviour_invertable_by_session, C),
+        construct_for_limit_change(ID, 1, ?turnover_metric_number(), ?finalization_behaviour_normal, C),
+        construct_for_limit_change(ID, 2, ?turnover_metric_amount(<<"RUB">>), undefined, C)
     ]).
 
 hold_and_assert_batch_with_invertable({Value0, Value1, Value2}, Request0, Context, C) ->
@@ -1088,6 +1039,18 @@ assert_values_with_invertable({Value0, Value1, Value2}, Request0, Context, C) ->
     ok.
 
 %%
+
+construct_for_limit_change(BaseID, Num, Metric, FinalizationBehaviour, C) ->
+    {ID, Version} = configure_limit(
+        ?time_range_month(),
+        ?scopes([?scope_provider(), ?scope_payment_tool()]),
+        Metric,
+        undefined,
+        genlib:format("~s/~B", [BaseID, Num]),
+        FinalizationBehaviour,
+        C
+    ),
+    ?LIMIT_CHANGE(ID, Version).
 
 hold_and_assert_batch(Value, Request0, Context, C) ->
     {ok, [LimitState0 | [LimitState1 | [LimitState2]]]} = lim_client:hold_batch(Request0, Context, ?config(client, C)),

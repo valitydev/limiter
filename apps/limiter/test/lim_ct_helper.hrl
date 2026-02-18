@@ -55,6 +55,9 @@
     {amount, #limiter_config_LimitTurnoverAmount{currency = Currency}}
 ).
 
+-define(finalization_behaviour_normal, {normal, #limiter_config_Normal{}}).
+-define(finalization_behaviour_invertable_by_session, {invertable, {session_presence, #limiter_config_Inversed{}}}).
+
 -define(time_range_day(),
     {calendar, {day, #limiter_config_TimeRangeTypeCalendarDay{}}}
 ).
