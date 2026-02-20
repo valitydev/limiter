@@ -76,6 +76,7 @@
 -type timestamp() :: dmsl_base_thrift:'Timestamp'().
 -type operation_id() :: limproto_limiter_thrift:'OperationID'().
 -type lim_changes() :: [lim_change()].
+-type changes_group() :: {context_type(), finalization_behaviour()}.
 
 -export_type([config/0]).
 -export_type([limit_type/0]).
@@ -136,6 +137,12 @@ scope(_) ->
 context_type(#{context_type := Value}) ->
     Value.
 
+-spec finalization_behaviour(config()) -> finalization_behaviour().
+finalization_behaviour(#{finalization_behaviour := Value}) ->
+    Value;
+finalization_behaviour(_) ->
+    normal.
+
 -spec currency_conversion(config()) -> currency_conversion().
 currency_conversion(#{currency_conversion := Value}) ->
     Value;
@@ -148,8 +155,7 @@ currency_conversion(_) ->
     {ok, [lim_liminator:limit_response()]} | {error, config_error() | {processor(), get_limit_error()}}.
 get_values(LimitChanges, LimitContext) ->
     do(fun() ->
-        GroupedChanges = unwrap(collect_grouped_changes(hold, LimitChanges, LimitContext)),
-        Changes = lists:flatten(maps:values(GroupedChanges)),
+        Changes = unwrap(collect_changes(hold, LimitChanges, LimitContext)),
         Names = lists:map(fun lim_liminator:get_name/1, Changes),
         unwrap(lim_liminator:get_values(Names, LimitContext))
     end).
@@ -186,15 +192,11 @@ commit_batch(OperationID, LimitChanges, LimitContext) ->
     do(fun() ->
         GroupedChanges = unwrap(collect_grouped_changes(commit, LimitChanges, LimitContext)),
         F = fun(Group, Changes) ->
-            unwrap(
-                OperationID,
-                finalize(
-                    OperationID, Group, Changes, LimitContext, fun lim_liminator:commit/3, fun lim_liminator:rollback/3
-                )
-            )
+            OperationIDForGroup = operation_id_for_group(OperationID, Group),
+            Behaviour = resolve_group_finalization_behaviour(Group, LimitContext),
+            unwrap(OperationID, finalize(OperationIDForGroup, Changes, LimitContext, commit, Behaviour))
         end,
-        _ = maps:map(F, GroupedChanges),
-        ok
+        maps:foreach(F, GroupedChanges)
     end).
 
 -spec rollback_batch(operation_id(), lim_changes(), lim_context()) ->
@@ -205,24 +207,23 @@ rollback_batch(OperationID, LimitChanges, LimitContext) ->
     do(fun() ->
         GroupedChanges = unwrap(collect_grouped_changes(hold, LimitChanges, LimitContext)),
         F = fun(Group, Changes) ->
-            unwrap(
-                OperationID,
-                finalize(
-                    OperationID, Group, Changes, LimitContext, fun lim_liminator:rollback/3, fun lim_liminator:commit/3
-                )
-            )
+            OperationIDForGroup = operation_id_for_group(OperationID, Group),
+            Behaviour = resolve_group_finalization_behaviour(Group, LimitContext),
+            unwrap(OperationID, finalize(OperationIDForGroup, Changes, LimitContext, rollback, Behaviour))
         end,
-        _ = maps:map(F, GroupedChanges),
-        ok
+        maps:foreach(F, GroupedChanges)
     end).
 
-finalize(OperationID, Group, Changes, LimitContext, NormalFun, InvertedFun) ->
-    OperationIDForGroup = operation_id_for_group(OperationID, Group),
-    case resolve_group_finalization_behaviour(Group, LimitContext) of
-        normal -> NormalFun(OperationIDForGroup, Changes, LimitContext);
-        inverted -> InvertedFun(OperationIDForGroup, Changes, LimitContext)
-    end.
+finalize(OperationIDForGroup, Changes, LimitContext, commit, normal) ->
+    lim_liminator:commit(OperationIDForGroup, Changes, LimitContext);
+finalize(OperationIDForGroup, Changes, LimitContext, commit, inverted) ->
+    lim_liminator:rollback(OperationIDForGroup, Changes, LimitContext);
+finalize(OperationIDForGroup, Changes, LimitContext, rollback, normal) ->
+    lim_liminator:rollback(OperationIDForGroup, Changes, LimitContext);
+finalize(OperationIDForGroup, Changes, LimitContext, rollback, inverted) ->
+    lim_liminator:commit(OperationIDForGroup, Changes, LimitContext).
 
+-spec resolve_group_finalization_behaviour(changes_group(), lim_context()) -> normal | inverted.
 resolve_group_finalization_behaviour({_, normal}, _) ->
     normal;
 resolve_group_finalization_behaviour({ContextType, {invertable, session_presence}}, LimitContext) ->
@@ -244,6 +245,8 @@ operation_id_for_group(OperationID, {_, normal}) ->
 operation_id_for_group(OperationID, {_, {invertable, session_presence}}) ->
     <<OperationID/binary, "/inverted/session-presence">>.
 
+-spec collect_grouped_changes(hold | commit, lim_changes(), lim_context()) ->
+    {ok, #{changes_group() => lim_changes()}} | {error, config_error() | {processor(), get_limit_error()}}.
 collect_grouped_changes(Stage, LimitChanges, LimitContext) ->
     collect_grouped_changes(Stage, LimitChanges, LimitContext, #{}).
 
@@ -252,12 +255,32 @@ collect_grouped_changes(_, [], _, Acc) ->
 collect_grouped_changes(Stage, [LimitChange | Other], LimitContext, Acc0) ->
     do(fun() ->
         #limiter_LimitChange{id = ID, version = Version} = LimitChange,
+        %% NOTE We use only "woody_context" of given limit context to get
+        %% handler.
         {Handler, Config} = unwrap(get_handler(ID, Version, LimitContext)),
         Change = unwrap(Handler, Handler:make_change(Stage, LimitChange, Config, LimitContext)),
-        #{context_type := ContextType, finalization_behaviour := FinalizationBehaviour} = Config,
+        %% NOTE Because rules to resolve change's finalization behaviour can be
+        %% dependent on operation's context ("context" key of given limit
+        %% context map), each group is discriminated by bothe context type and
+        %% finalization behaviour values.
+        %% Thus, we must ensure changes are in appropriate group before we
+        %% evalute groups behaviour against operation's limit context.
+        ContextType = context_type(Config),
+        FinalizationBehaviour = finalization_behaviour(Config),
         Group = {ContextType, FinalizationBehaviour},
         Acc1 = maps:update_with(Group, fun(Changes) -> [Change | Changes] end, [Change], Acc0),
         unwrap(collect_grouped_changes(Stage, Other, LimitContext, Acc1))
+    end).
+
+%% NOTE Used only for `get_values/2' function that doesn't care about groups of
+%% changes, nor resulting list's order.
+collect_changes(_Stage, [], _LimitContext) ->
+    {ok, []};
+collect_changes(Stage, [LimitChange = #limiter_LimitChange{id = ID, version = Version} | Other], LimitContext) ->
+    do(fun() ->
+        {Handler, Config} = unwrap(get_handler(ID, Version, LimitContext)),
+        Change = unwrap(Handler, Handler:make_change(Stage, LimitChange, Config, LimitContext)),
+        [Change | unwrap(collect_changes(Stage, Other, LimitContext))]
     end).
 
 get_handler(ID, Version, LimitContext) ->
