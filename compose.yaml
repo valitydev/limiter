@@ -20,7 +20,7 @@ services:
         condition: service_healthy
 
   dmt:
-    image: ghcr.io/valitydev/dominant-v2:sha-90f5fa2
+    image: ghcr.io/valitydev/dominant-v2:sha-815385c
     command: /opt/dmt/bin/dmt foreground
     healthcheck:
       test: "/opt/dmt/bin/dmt ping"

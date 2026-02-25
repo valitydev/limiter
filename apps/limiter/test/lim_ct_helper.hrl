@@ -55,6 +55,9 @@
     {amount, #limiter_config_LimitTurnoverAmount{currency = Currency}}
 ).
 
+-define(finalization_behaviour_normal, {normal, #limiter_config_Normal{}}).
+-define(finalization_behaviour_invertable_by_session, {invertable, {session_presence, #limiter_config_Inversed{}}}).
+
 -define(time_range_day(),
     {calendar, {day, #limiter_config_TimeRangeTypeCalendarDay{}}}
 ).
@@ -183,7 +186,11 @@
     ?payproc_ctx_payment(?string, ?string, Cost, CaptureCost)
 ).
 
--define(payproc_ctx_payment(OwnerID, ShopID, Cost, CaptureCost), #limiter_LimitContext{
+-define(payproc_ctx_payment(OwnerID, ShopID, Cost, CaptureCost),
+    ?payproc_ctx_payment(OwnerID, ShopID, Cost, CaptureCost, undefined)
+).
+
+-define(payproc_ctx_payment(OwnerID, ShopID, Cost, CaptureCost, Session), #limiter_LimitContext{
     payment_processing = #context_payproc_Context{
         op = ?op_payment,
         invoice = #context_payproc_Invoice{
@@ -191,7 +198,8 @@
             payment = #context_payproc_InvoicePayment{
                 payment = ?invoice_payment(Cost, CaptureCost),
                 route = ?route()
-            }
+            },
+            session = Session
         }
     }
 }).
@@ -227,6 +235,8 @@
         }
     }
 }).
+
+-define(payproc_ctx_session, #context_payproc_InvoicePaymentSession{}).
 
 %% Wthdproc
 
