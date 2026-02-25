@@ -16,7 +16,8 @@
         dmt_client,
         opentelemetry_api,
         opentelemetry_exporter,
-        opentelemetry
+        opentelemetry,
+        opentelemetry_experimental
     ]},
     {mod, {limiter, []}},
     {env, []}
