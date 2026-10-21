@@ -40,6 +40,7 @@
 -define(scope_wallet(), {wallet, #limiter_config_LimitScopeEmptyDetails{}}).
 -define(scope_sender(), {sender, #limiter_config_LimitScopeEmptyDetails{}}).
 -define(scope_receiver(), {receiver, #limiter_config_LimitScopeEmptyDetails{}}).
+-define(scope_user(), {user, #limiter_config_LimitScopeEmptyDetails{}}).
 -define(scope_destination_field(FieldPath),
     {destination_field, #limiter_config_LimitScopeDestinationFieldDetails{field_path = FieldPath}}
 ).
@@ -139,7 +140,8 @@
     status = {unpaid, #domain_InvoiceUnpaid{}},
     details = #domain_InvoiceDetails{product = ?string},
     due = ?timestamp,
-    cost = Cost
+    cost = Cost,
+    client_identity = #domain_ClientIdentity{customer_id = ?string, user_id = ?string}
 }).
 
 -define(invoice_payment(Cost, CaptureCost),
@@ -253,7 +255,8 @@
     created_at = ?timestamp,
     destination = Destination,
     sender = #domain_PartyConfigRef{id = OwnerID},
-    auth_data = AuthData
+    auth_data = AuthData,
+    client_identity = #domain_ClientIdentity{customer_id = ?string, user_id = ?string}
 }).
 
 -define(op_withdrawal, {withdrawal, #context_withdrawal_OperationWithdrawal{}}).
