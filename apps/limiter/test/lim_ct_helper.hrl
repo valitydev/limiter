@@ -131,7 +131,11 @@
     }}
 ).
 
--define(invoice(OwnerID, ShopID, Cost), #domain_Invoice{
+-define(invoice(OwnerID, ShopID, Cost),
+    ?invoice(OwnerID, ShopID, Cost, #domain_ClientIdentity{customer_id = ?string, user_id = ?string})
+).
+
+-define(invoice(OwnerID, ShopID, Cost, ClientIdentity), #domain_Invoice{
     id = ?string,
     party_ref = #domain_PartyConfigRef{id = OwnerID},
     shop_ref = #domain_ShopConfigRef{id = ShopID},
@@ -141,7 +145,7 @@
     details = #domain_InvoiceDetails{product = ?string},
     due = ?timestamp,
     cost = Cost,
-    client_identity = #domain_ClientIdentity{customer_id = ?string, user_id = ?string}
+    client_identity = ClientIdentity
 }).
 
 -define(invoice_payment(Cost, CaptureCost),
@@ -250,13 +254,17 @@
 
 -define(withdrawal(Body, Destination, OwnerID), ?withdrawal(Body, Destination, OwnerID, undefined)).
 
--define(withdrawal(Body, Destination, OwnerID, AuthData), #wthd_domain_Withdrawal{
+-define(withdrawal(Body, Destination, OwnerID, AuthData),
+    ?withdrawal(Body, Destination, OwnerID, AuthData, #domain_ClientIdentity{customer_id = ?string, user_id = ?string})
+).
+
+-define(withdrawal(Body, Destination, OwnerID, AuthData, ClientIdentity), #wthd_domain_Withdrawal{
     body = Body,
     created_at = ?timestamp,
     destination = Destination,
     sender = #domain_PartyConfigRef{id = OwnerID},
     auth_data = AuthData,
-    client_identity = #domain_ClientIdentity{customer_id = ?string, user_id = ?string}
+    client_identity = ClientIdentity
 }).
 
 -define(op_withdrawal, {withdrawal, #context_withdrawal_OperationWithdrawal{}}).
